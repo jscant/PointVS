@@ -55,14 +55,16 @@ class Timer:
         self.interval = self.end - self.start
 
 
-def print_with_overwrite(*s):
+def print_with_overwrite(*s, spacer=' '):
     """Prints to console, but overwrites previous output, rather than creating
     a newline.
 
     Arguments:
         s: string (possibly with multiple lines) to print
+        spacer: whitespace character to use between words on each line
     """
-    s = ' '.join([str(s) for s in s])
+    s = '\n'.join(
+        [spacer.join([str(word) for word in substring]) for substring in s])
     ERASE = '\x1b[2K'
     UP_ONE = '\x1b[1A'
     lines = s.split('\n')
