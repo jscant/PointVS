@@ -155,7 +155,7 @@ class Session:
         )
 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.criterion = nn.BCELoss().to(device)
+        self.criterion = nn.BCEWithLogitsLoss().to(device)
         self.optimiser = torch.optim.Adam(self.network.parameters(), lr=0.01)
         self.device = device
 
@@ -192,11 +192,14 @@ class Session:
                 v = v.to(self.device)
                 m = m.to(self.device)
                 y_true = y_true.to(self.device)
+
                 self.optimiser.zero_grad()
                 y_pred = self.network((p, v, m))
                 loss = self.criterion(y_pred, y_true)
+
                 loss.backward()
                 self.optimiser.step()
+
                 eta = get_eta(start_time,
                               self.batch + len(self.dataset) * epoch,
                               total_iters + 1)
@@ -205,10 +208,13 @@ class Session:
                 y_pred_np = y_pred.cpu().detach().numpy()
                 active_idx = np.where(y_true_np > 0.5)
                 decoy_idx = np.where(y_true_np < 0.5)
+
                 if len(active_idx[0]):
-                    active_mean_pred = np.mean(y_pred_np[active_idx])
+                    active_mean_pred = np.mean(
+                        self.sigmoid(y_pred_np[active_idx]))
                 if len(decoy_idx[0]):
-                    decoy_mean_pred = np.mean(y_pred_np[decoy_idx])
+                    decoy_mean_pred = np.mean(
+                        self.sigmoid(y_pred_np[decoy_idx]))
 
                 print_with_overwrite(
                     ('Epoch:', '{0}/{1}'.format(epoch, epochs),
@@ -224,6 +230,7 @@ class Session:
                 self.losses.append(float(loss))
                 if not (self.batch + 1) % log_interval:
                     self.save_loss(log_interval)
+
         plot_with_smoothing(self.losses, self.save_path / 'loss.png', gap=50)
 
     def save_loss(self, save_interval):
@@ -265,12 +272,12 @@ class Session:
         p_batch = torch.zeros(batch_size, max_len, 3)
         v_batch = torch.zeros(batch_size, max_len, 22)
         m_batch = torch.zeros(batch_size, max_len)
-        label_batch = torch.zeros(batch_size, 1)
+        label_batch = torch.zeros(batch_size, 2)
         for batch_index, ((p, v, m, _), label) in enumerate(batch):
             p_batch[batch_index, :p.shape[1], :] = p
             v_batch[batch_index, :v.shape[1], :] = v
             m_batch[batch_index, :m.shape[1]] = m
-            label_batch[batch_index] = label
+            label_batch[batch_index, label] = 1
         return (p_batch.float(), v_batch.float(),
                 m_batch.bool()), label_batch.float()
 
@@ -279,6 +286,11 @@ class Session:
         """Initialise weights of network using xavier initialisation."""
         if isinstance(m, nn.Conv3d) or isinstance(m, nn.Linear):
             nn.init.xavier_uniform_(m.weight.data)
+
+    @staticmethod
+    def sigmoid(x):
+        """Sigmoid function for reporting."""
+        return 1 / (1 + np.exp(-x))
 
 
 if __name__ == '__main__':
@@ -309,7 +321,7 @@ if __name__ == '__main__':
         'gnina': models.GninaNet
     }
     network = models_dict[args.model](
-        22, ds_frac=1., num_outputs=1, k=1536, nbhd=20, act='relu', bn=True,
+        22, ds_frac=1., num_outputs=2, k=1536, nbhd=20, act='relu', bn=True,
         num_layers=6, mean=True, pool=True, liftsamples=1,
         fill=1.0, group=SE3(), knn=False, cache=False
     )
