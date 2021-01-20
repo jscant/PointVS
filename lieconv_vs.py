@@ -527,7 +527,8 @@ if __name__ == '__main__':
         'gnina': models.GninaNet
     }
     network = models_dict[args.model](
-        22, ds_frac=1., num_outputs=2, k=200, nbhd=20, act='relu', bn=True,
+        22, ds_frac=1., num_outputs=2, k=[200, 200, 200, 400, 400, 400, 800],
+        nbhd=20, act='relu', bn=True,
         num_layers=6, mean=True, pool=True, liftsamples=1, fill=1.0,
         group=SE3(), knn=False, cache=False
     )
