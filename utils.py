@@ -1,16 +1,33 @@
 import math
 import shutil
 import time
-from pathlib import Path
 
-from jack.utilities import condense
+import numpy as np
 from matplotlib import pyplot as plt
 
 
+def condense(arr, gap=100):
+    """Condense large arrays into averages over a given window size.
+
+    Arguments:
+        arr: numpy array or list of numbers
+        gap: size of window over which to average array
+
+    Returns:
+        Tuple with new condensed counts (x) and smaller array (y) which is the
+        mean of every <gap> values.
+    """
+    arr = np.array(arr)
+    x = np.arange(0, len(arr), step=gap)
+    y = np.array([np.mean(arr[n:n + gap]) for n in range(0, len(arr), gap)])
+    return x, y
+
+
 def get_eta(start_time, iters_completed, total_iters):
+    """Format time in seconds to hh:mm:ss."""
     time_elapsed = time.time() - start_time
     time_per_iter = time_elapsed / (iters_completed + 1)
-    time_remaining = time_per_iter * (total_iters - iters_completed - 1)
+    time_remaining = max(0, time_per_iter * (total_iters - iters_completed - 1))
     formatted_eta = format_time(time_remaining)
     return formatted_eta
 
@@ -75,8 +92,10 @@ def print_with_overwrite(*s, spacer=' '):
     print((ERASE + UP_ONE) * (n_lines - 1) + s, end='\r', flush=True)
 
 
-def plot_with_smoothing(y, gap=100, figsize=(12, 7.5)):
+def plot_with_smoothing(y, gap=100, figsize=(12, 7.5), ax=None):
+    if ax is None:
+        _, ax = plt.subplots(1, 1, figsize=figsize)
+    plt.cla()
     x, y = condense(y, gap=gap)
-    fig, ax = plt.subplots(1, 1, figsize=figsize)
     ax.plot(x, y, 'k-')
-    return fig, ax
+    return ax

@@ -56,7 +56,7 @@ class MolLoader(torch.utils.data.Dataset):
         self.base_path = Path(base_path).expanduser()
 
         if receptors is None:
-            print('Loading all receptors from', self.base_path)
+            print('Loading all structures in', self.base_path)
             filenames = list((self.base_path / 'ligands').rglob('**/*.parquet'))
         else:
             print('Loading receptors:')
@@ -177,16 +177,25 @@ class Session:
                 self.test_dataset, batch_size=batch_size, shuffle=False,
                 num_workers=0, collate_fn=self.collate
             )
-            self.predictions_file = self.save_path / 'predictions_{}.txt'.format(
-                self.test_data_root.name
-            )
+            self.predictions_file = Path(
+                self.save_path, 'predictions_{}.txt'.format(
+                    self.test_data_root.name))
         else:
             self.test_dataset = None
             self.test_data_loader = None
 
+        self.last_train_batch_small = int(bool(
+            len(self.train_dataset) % self.batch_size))
+        self.last_test_batch_small = int(bool(
+            len(self.train_dataset) % self.batch_size))
+        self.epoch_size_train = self.last_train_batch_small + (
+                len(self.train_dataset) // self.batch_size)
+        self.epoch_size_test = self.last_test_batch_small + (
+                len(self.test_dataset) // self.batch_size)
+
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.criterion = nn.BCEWithLogitsLoss().to(device)
-        self.optimiser = torch.optim.Adam(self.network.parameters(), lr=0.01)
+        self.optimiser = torch.optim.Adam(self.network.parameters(), lr=0.001)
         self.device = device
 
     def _setup_training_session(self):
@@ -213,15 +222,18 @@ class Session:
             epochs: number of times to iterate through the dataset
         """
         start_time = self._setup_training_session()
-        total_iters = epochs * (len(self.train_dataset) // self.batch_size) + 1
+        total_iters = epochs * (len(self.train_dataset) // self.batch_size) + \
+                      self.last_train_batch_small
         log_interval = 10
+        graph_interval = max(1, total_iters // 30)
         global_iter = 0
         self.network.train()
+        ax = None
         for self.epoch in range(epochs):
             decoy_mean_pred, active_mean_pred = -1, -1
             for self.batch, ((p, v, m), y_true, _, _) in enumerate(
                     self.train_data_loader):
-                global_iter += 1
+
                 p = p.to(self.device)
                 v = v.to(self.device)
                 m = m.to(self.device)
@@ -234,7 +246,7 @@ class Session:
                 loss.backward()
                 self.optimiser.step()
 
-                eta = get_eta(start_time, global_iter, total_iters + 1)
+                eta = get_eta(start_time, global_iter, total_iters)
                 time_elapsed = format_time(time.time() - start_time)
                 y_true_np = y_true.cpu().detach().numpy()
                 y_pred_np = y_pred.cpu().detach().numpy()
@@ -251,7 +263,7 @@ class Session:
                 print_with_overwrite(
                     ('Epoch:', '{0}/{1}'.format(self.epoch + 1, epochs), '|',
                      'Iteration:', '{0}/{1}'.format(
-                        self.batch + 1, total_iters)),
+                        self.batch + 1, self.epoch_size_train)),
                     ('Time elapsed:', time_elapsed, '|',
                      'Time remaining:', eta),
                     ('Loss: {0:.4f}'.format(loss), '|',
@@ -260,16 +272,32 @@ class Session:
                 )
 
                 self.losses.append(float(loss))
-                if not (self.batch + 1) % log_interval or self.batch == len(
-                        self.test_data_loader) - 1:
+                if not (self.batch + 1) % log_interval or \
+                        self.batch == total_iters - 1:
                     self.save_loss(log_interval)
+
+                if not (self.batch + 1) % graph_interval or \
+                        self.batch == total_iters - 1:
+                    ax = plot_with_smoothing(
+                        self.losses, gap=max(1, self.batch // 15), ax=ax)
+                    ax.set_title(
+                        'Binary crossentropy training loss for {}'.format(
+                            self.train_data_root
+                        ))
+                    ax.set_xlabel('Batch')
+                    ax.set_ylabel('Binary crossentropy loss')
+                    ax.set_ylim(bottom=-0.05)
+                    plt.savefig(self.loss_plot_file)
 
                 if (self.save_interval > 0 and
                     not global_iter % self.save_interval) or \
                         global_iter == total_iters - 1:
                     self.save()
 
-        _, ax = plot_with_smoothing(self.losses, gap=self.batch // 100)
+                global_iter += 1
+
+        ax = plot_with_smoothing(self.losses, gap=max(1, self.batch // 15),
+                                 ax=ax)
         ax.set_title('Binary crossentropy training loss for {}'.format(
             self.train_data_root
         ))
@@ -286,7 +314,6 @@ class Session:
         to <save_path>/predictions_<test_data_root.name>.txt.
         """
         start_time = time.time()
-        total_iters = len(self.test_dataset) // self.batch_size + 1
         log_interval = 10
         decoy_mean_pred, active_mean_pred = -1, -1
         predictions = ''
@@ -302,7 +329,7 @@ class Session:
                 y_pred = self.network((p, v, m))
                 loss = self.criterion(y_pred, y_true)
 
-                eta = get_eta(start_time, self.batch, total_iters + 1)
+                eta = get_eta(start_time, self.batch, self.epoch_size_test)
                 time_elapsed = format_time(time.time() - start_time)
                 y_true_np = y_true.cpu().detach().numpy()
                 y_pred_np = y_pred.cpu().detach().numpy()
@@ -319,7 +346,7 @@ class Session:
                 print_with_overwrite(
                     ('Inference on: {}'.format(self.test_data_root), '|',
                      'Iteration:', '{0}/{1}'.format(
-                        self.batch + 1, total_iters)),
+                        self.batch + 1, self.epoch_size_test)),
                     ('Time elapsed:', time_elapsed, '|',
                      'Time remaining:', eta),
                     ('Loss: {0:.4f}'.format(loss), '|',
@@ -500,9 +527,9 @@ if __name__ == '__main__':
         'gnina': models.GninaNet
     }
     network = models_dict[args.model](
-        22, ds_frac=1., num_outputs=2, k=1536, nbhd=20, act='relu', bn=True,
-        num_layers=6, mean=True, pool=True, liftsamples=1,
-        fill=1.0, group=SE3(), knn=False, cache=False
+        22, ds_frac=1., num_outputs=2, k=200, nbhd=20, act='relu', bn=True,
+        num_layers=6, mean=True, pool=True, liftsamples=1, fill=1.0,
+        group=SE3(), knn=False, cache=False
     )
 
     sess = Session(network, Path(args.train_data_root).expanduser(),
