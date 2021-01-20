@@ -75,8 +75,8 @@ def print_with_overwrite(*s, spacer=' '):
     print((ERASE + UP_ONE) * (n_lines - 1) + s, end='\r', flush=True)
 
 
-def plot_with_smoothing(y, fname, gap=100):
+def plot_with_smoothing(y, gap=100, figsize=(12, 7.5)):
     x, y = condense(y, gap=gap)
-    fig, ax = plt.subplots(111)
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
     ax.plot(x, y, 'k-')
-    plt.savefig(Path(fname).expanduser())
+    return fig, ax
