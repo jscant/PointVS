@@ -125,7 +125,7 @@ class Session:
 
     def __init__(self, network, train_root, save_path, batch_size,
                  test_root=None, train_receptors=None, test_receptors=None,
-                 save_interval=-1):
+                 save_interval=-1, learning_rate=0.01):
         """Initialise session.
 
         Arguments:
@@ -155,6 +155,7 @@ class Session:
         self.epoch = 0
         self.batch = 0
         self.save_interval = save_interval
+        self.lr = learning_rate
 
         if isinstance(train_receptors, str):
             train_receptors = tuple([train_receptors])
@@ -162,7 +163,7 @@ class Session:
             test_receptors = tuple([test_receptors])
 
         self.train_dataset = MolLoader(
-            self.train_data_root, receptors=train_receptors)
+            self.train_data_root, receptors=train_receptors, radius=14)
         self.train_data_loader = torch.utils.data.DataLoader(
             self.train_dataset, batch_size=batch_size, shuffle=False,
             num_workers=0, sampler=self.train_dataset.sampler,
@@ -172,7 +173,7 @@ class Session:
 
         if self.test_data_root is not None:
             self.test_dataset = MolLoader(
-                self.test_data_root, receptors=test_receptors)
+                self.test_data_root, receptors=test_receptors, radius=14)
             self.test_data_loader = torch.utils.data.DataLoader(
                 self.test_dataset, batch_size=batch_size, shuffle=False,
                 num_workers=0, collate_fn=self.collate
@@ -195,7 +196,7 @@ class Session:
 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.criterion = nn.BCEWithLogitsLoss().to(device)
-        self.optimiser = torch.optim.Adam(self.network.parameters(), lr=0.001)
+        self.optimiser = torch.optim.Adam(self.network.parameters(), lr=lr)
         self.device = device
 
     def _setup_training_session(self):
@@ -408,16 +409,16 @@ class Session:
             key: value for key, value in
             load_dict.items() if not key.endswith('_state_dict')}
 
+        for attr_name, value in attributes.items():
+            setattr(self, attr_name, value)
+
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.device = device
         self.network.load_state_dict(states['network'])
         self.network.net.load_state_dict(states['net'])
         self.network.to(device)
-        self.optimiser = torch.optim.Adam(self.network.parameters(), lr=0.01)
+        self.optimiser = torch.optim.Adam(self.network.parameters(), lr=self.lr)
         self.optimiser.load_state_dict(states['optimiser'])
-
-        for attr_name, value in attributes.items():
-            setattr(self, attr_name, value)
 
     def save_loss(self, save_interval):
         """Save the loss information to disk.
@@ -520,6 +521,8 @@ if __name__ == '__main__':
     parser.add_argument('--save_interval', '-s', type=int, default=-1,
                         help='Save checkpoints after every <save_interval> '
                              'batches.')
+    parser.add_argument('--learning_rate', '-lr', type=float, default=0.01,
+                        help='Learning rate for gradient descent')
     args = parser.parse_args()
 
     models_dict = {
@@ -527,8 +530,8 @@ if __name__ == '__main__':
         'gnina': models.GninaNet
     }
     network = models_dict[args.model](
-        22, ds_frac=1., num_outputs=2, k=[200, 200, 200, 400, 400, 400, 800],
-        nbhd=20, act='relu', bn=True,
+        22, ds_frac=1., num_outputs=2, k=300,
+        nbhd=20, act='swish', bn=True,
         num_layers=6, mean=True, pool=True, liftsamples=1, fill=1.0,
         group=SE3(), knn=False, cache=False
     )
@@ -538,7 +541,8 @@ if __name__ == '__main__':
                    test_root=args.test_data_root,
                    train_receptors=args.train_receptors,
                    test_receptors=args.test_receptors,
-                   save_interval=args.save_interval)
+                   save_interval=args.save_interval,
+                   learning_rate=args.learning_rate)
     print('Built network with {} params'.format(sess.param_count))
     if args.load is not None:
         sess.load(args.load)
