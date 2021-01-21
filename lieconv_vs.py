@@ -541,7 +541,8 @@ if __name__ == '__main__':
             args.session_conf, save_path / 'session.yaml') as settings:
         for arg, value in vars(args).items():
             if value is not None:
-                setattr(settings, arg, value)
+                if hasattr(settings, arg):
+                    setattr(settings, arg, value)
         print(settings.settings)
         sess = Session(network, **settings.settings)
         print('Built network with {} params'.format(sess.param_count))
