@@ -116,4 +116,5 @@ class SessionSettings(Settings):
         'test_receptors': None,
         'save_interval': -1,
         'learning_rate': 0.01
+        'epochs': 1
     }
