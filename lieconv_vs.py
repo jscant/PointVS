@@ -145,7 +145,10 @@ class Session:
             save_interval: save model checkpoint every <save_interval> batches.
         """
         self.train_data_root = Path(train_data_root).expanduser()
-        self.test_data_root = Path(test_data_root).expanduser()
+        if test_data_root is not None:
+            self.test_data_root = Path(test_data_root).expanduser()
+        else:
+            self.test_data_root = None
         self.save_path = Path(save_path).expanduser()
         self.loss_plot_file = self.save_path / 'loss.png'
         self.network = network
@@ -541,11 +544,10 @@ if __name__ == '__main__':
                 setattr(settings, arg, value)
         print(settings.settings)
         sess = Session(network, **settings.settings)
+        print('Built network with {} params'.format(sess.param_count))
 
-    print('Built network with {} params'.format(sess.param_count))
     if args.load is not None:
         sess.load(args.load)
-    if args.epochs > 0:
-        sess.train()
-    if args.test_data_root is not None:
+    sess.train()
+    if sess.test_data_root is not None:
         sess.test()
