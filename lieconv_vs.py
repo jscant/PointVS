@@ -163,7 +163,7 @@ class Session:
             test_receptors = tuple([test_receptors])
 
         self.train_dataset = MolLoader(
-            self.train_data_root, receptors=train_receptors, radius=14)
+            self.train_data_root, receptors=train_receptors, radius=12)
         self.train_data_loader = torch.utils.data.DataLoader(
             self.train_dataset, batch_size=batch_size, shuffle=False,
             num_workers=0, sampler=self.train_dataset.sampler,
@@ -173,7 +173,7 @@ class Session:
 
         if self.test_data_root is not None:
             self.test_dataset = MolLoader(
-                self.test_data_root, receptors=test_receptors, radius=14)
+                self.test_data_root, receptors=test_receptors, radius=12)
             self.test_data_loader = torch.utils.data.DataLoader(
                 self.test_dataset, batch_size=batch_size, shuffle=False,
                 num_workers=0, collate_fn=self.collate
