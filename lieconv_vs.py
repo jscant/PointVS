@@ -17,7 +17,6 @@ python3 lieconv_vs.py resnet data/small_chembl_test ~/test_output -r 20014 28
 import argparse
 import time
 from pathlib import Path
-from matplotlib import pyplot as plt
 
 import numpy as np
 import torch
@@ -25,9 +24,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from lie_conv import lieConv
 from lie_conv.lieGroups import SE3
+from matplotlib import pyplot as plt
 
 import models
-from preprocessing import centre_on_ligand, make_box, concat_structs
+from preprocessing import centre_on_ligand, make_box, concat_structs, \
+    make_bit_vector
 from utils import format_time, print_with_overwrite, get_eta, \
     plot_with_smoothing
 
@@ -114,8 +115,9 @@ class MolLoader(torch.utils.data.Dataset):
         p = torch.from_numpy(
             np.expand_dims(struct[struct.columns[:3]].to_numpy(),
                            0)).float()
-        v = nn.functional.one_hot(torch.from_numpy(
-            np.expand_dims(struct.types.to_numpy(), 0))).float()
+        v = torch.unsqueeze(make_bit_vector(struct.types.to_numpy(), 11), 0)
+        # v = nn.functional.one_hot(torch.from_numpy(
+        #    np.expand_dims(struct.types.to_numpy(), 0))).float()
         m = torch.from_numpy(np.ones((1, len(struct)))).float()
         return (p, v, m, len(struct)), lig_fname, rec_fname, label
 
@@ -454,7 +456,7 @@ class Session:
         max_len = max([b[0][-1] for b in batch])
         batch_size = len(batch)
         p_batch = torch.zeros(batch_size, max_len, 3)
-        v_batch = torch.zeros(batch_size, max_len, 22)
+        v_batch = torch.zeros(batch_size, max_len, 12)
         m_batch = torch.zeros(batch_size, max_len)
         label_batch = torch.zeros(batch_size, 2)
         ligands, receptors = [], []
@@ -530,7 +532,7 @@ if __name__ == '__main__':
         'gnina': models.GninaNet
     }
     network = models_dict[args.model](
-        22, ds_frac=1., num_outputs=2, k=300,
+        12, ds_frac=1., num_outputs=2, k=300,
         nbhd=20, act='swish', bn=True,
         num_layers=6, mean=True, pool=True, liftsamples=1, fill=1.0,
         group=SE3(), knn=False, cache=False
