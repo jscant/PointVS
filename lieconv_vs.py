@@ -196,7 +196,7 @@ class Session:
 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.criterion = nn.BCEWithLogitsLoss().to(device)
-        self.optimiser = torch.optim.Adam(self.network.parameters(), lr=lr)
+        self.optimiser = torch.optim.Adam(self.network.parameters(), lr=self.lr)
         self.device = device
 
     def _setup_training_session(self):
