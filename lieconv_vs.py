@@ -21,14 +21,12 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from lie_conv import lieConv
-from lie_conv.lieGroups import SE3
 from matplotlib import pyplot as plt
 
-import models
 from preprocessing import centre_on_ligand, make_box, concat_structs, \
     make_bit_vector
+from settings import ModelSettings, SessionSettings
 from utils import format_time, print_with_overwrite, get_eta, \
     plot_with_smoothing
 
@@ -125,29 +123,29 @@ class MolLoader(torch.utils.data.Dataset):
 class Session:
     """Handles training of LieConv-based models."""
 
-    def __init__(self, network, train_root, save_path, batch_size,
-                 test_root=None, train_receptors=None, test_receptors=None,
-                 save_interval=-1, learning_rate=0.01):
+    def __init__(self, network, train_data_root, save_path, batch_size,
+                 test_data_root=None, train_receptors=None, test_receptors=None,
+                 save_interval=-1, learning_rate=0.01, epochs=1):
         """Initialise session.
 
         Arguments:
             network: pytorch object inheriting from torch.nn.Module.
-            train_root: path containing the 'receptors' and 'ligands' training
+            train_data_root: path containing the 'receptors' and 'ligands' training
                 directories, which in turn contain <rec_name>.parquets files
                 and folders called <rec_name>_[active|decoy] which in turn
                 contain <ligand_name>.parquets files. All parquets files from
                 this directory are recursively loaded into the dataset.
             save_path: directory in which experiment outputs are stored.
             batch_size: number of training examples in each batch
-            test_root: like train_root, but for the test set.
+            test_data_root: like train_root, but for the test set.
             train_receptors: iterable of strings denoting receptors to include
                 in the dataset. if None, all receptors found in base_path are
                 included.
             test_receptors: like train_receptors, but for the test set.
             save_interval: save model checkpoint every <save_interval> batches.
         """
-        self.train_data_root = Path(train_root).expanduser()
-        self.test_data_root = Path(test_root).expanduser()
+        self.train_data_root = Path(train_data_root).expanduser()
+        self.test_data_root = Path(test_data_root).expanduser()
         self.save_path = Path(save_path).expanduser()
         self.loss_plot_file = self.save_path / 'loss.png'
         self.network = network
@@ -158,6 +156,7 @@ class Session:
         self.batch = 0
         self.save_interval = save_interval
         self.lr = learning_rate
+        self.epochs = epochs
 
         if isinstance(train_receptors, str):
             train_receptors = tuple([train_receptors])
@@ -214,7 +213,7 @@ class Session:
         print('Using device:', self.device, '\n\n')
         return time.time()
 
-    def train(self, epochs=1):
+    def train(self):
         """Train the network.
 
         Trains the neural network (in Session.network), displays training
@@ -225,14 +224,14 @@ class Session:
             epochs: number of times to iterate through the dataset
         """
         start_time = self._setup_training_session()
-        total_iters = epochs * (len(self.train_dataset) // self.batch_size) + \
-                      self.last_train_batch_small
+        total_iters = self.epochs * (len(
+            self.train_dataset) // self.batch_size) + self.last_train_batch_small
         log_interval = 10
         graph_interval = max(1, total_iters // 30)
         global_iter = 0
         self.network.train()
         ax = None
-        for self.epoch in range(epochs):
+        for self.epoch in range(self.epochs):
             decoy_mean_pred, active_mean_pred = -1, -1
             for self.batch, ((p, v, m), y_true, _, _) in enumerate(
                     self.train_data_loader):
@@ -264,8 +263,8 @@ class Session:
                         self.sigmoid(y_pred_np[decoy_idx]))
 
                 print_with_overwrite(
-                    ('Epoch:', '{0}/{1}'.format(self.epoch + 1, epochs), '|',
-                     'Iteration:', '{0}/{1}'.format(
+                    ('Epoch:', '{0}/{1}'.format(self.epoch + 1, self.epochs),
+                     '|', 'Iteration:', '{0}/{1}'.format(
                         self.batch + 1, self.epoch_size_train)),
                     ('Time elapsed:', time_elapsed, '|',
                      'Time remaining:', eta),
@@ -489,8 +488,6 @@ class Session:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('model', type=str,
-                        help='Model architecture; either gnina or resnet.')
     parser.add_argument('train_data_root', type=str,
                         help='Location of structure training *.parquets files. '
                              'Receptors should be in a directory named '
@@ -509,46 +506,46 @@ if __name__ == '__main__':
                              'specific receptor subdirectory under the '
                              'ligands directory.')
     parser.add_argument('--batch_size', '-b', type=int, required=False,
-                        default=8, help='Number of examples to include in '
-                                        'each batch for training.')
+                        help='Number of examples to include in each batch for '
+                             'training.')
     parser.add_argument('--epochs', '-e', type=int, required=False,
-                        default=1, help='Number of times to iterate through '
-                                        'training set.')
+                        help='Number of times to iterate through training set.')
     parser.add_argument('--train_receptors', '-r', type=str, nargs='*',
                         help='Names of specific receptors for training. If '
                              'specified, other structures will be ignored.')
     parser.add_argument('--test_receptors', '-q', type=str, nargs='*',
                         help='Names of specific receptors for testing. If '
                              'specified, other structures will be ignored.')
-    parser.add_argument('--save_interval', '-s', type=int, default=-1,
+    parser.add_argument('--save_interval', '-s', type=int, default=None,
                         help='Save checkpoints after every <save_interval> '
                              'batches.')
-    parser.add_argument('--learning_rate', '-lr', type=float, default=0.01,
+    parser.add_argument('--learning_rate', '-lr', type=float, default=None,
                         help='Learning rate for gradient descent')
+    parser.add_argument('--model_conf', '-m', type=str,
+                        help='Config file for model parameters. If unspecified,'
+                             'certain defaults are used.')
+    parser.add_argument('--session_conf', type=str,
+                        help='Config file for session parameters.')
     args = parser.parse_args()
 
-    models_dict = {
-        'resnet': lieConv.LieResNet,
-        'gnina': models.GninaNet
-    }
-    network = models_dict[args.model](
-        12, ds_frac=1., num_outputs=2, k=300,
-        nbhd=20, act='swish', bn=True,
-        num_layers=6, mean=True, pool=True, liftsamples=1, fill=1.0,
-        group=SE3(), knn=False, cache=False
-    )
+    save_path = Path(args.save_path).expanduser()
 
-    sess = Session(network, Path(args.train_data_root).expanduser(),
-                   Path(args.save_path).expanduser(), args.batch_size,
-                   test_root=args.test_data_root,
-                   train_receptors=args.train_receptors,
-                   test_receptors=args.test_receptors,
-                   save_interval=args.save_interval,
-                   learning_rate=args.learning_rate)
+    # Load model settings either from conf or defaults
+    with ModelSettings(args.model_conf, save_path / 'model.yaml') as settings:
+        network = lieConv.LieResNet(**settings.settings)
+
+    with SessionSettings(
+            args.session_conf, save_path / 'session.yaml') as settings:
+        for arg, value in vars(args).items():
+            if value is not None:
+                setattr(settings, arg, value)
+        print(settings.settings)
+        sess = Session(network, **settings.settings)
+
     print('Built network with {} params'.format(sess.param_count))
     if args.load is not None:
         sess.load(args.load)
     if args.epochs > 0:
-        sess.train(args.epochs)
+        sess.train()
     if args.test_data_root is not None:
         sess.test()
