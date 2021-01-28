@@ -64,7 +64,7 @@ class Session:
     def __init__(self, network, train_data_root, save_path, batch_size,
                  test_data_root=None, train_receptors=None, test_receptors=None,
                  save_interval=-1, learning_rate=0.01, epochs=1, radius=12,
-                 wandb=None):
+                 wandb=None, run=None):
         """Initialise session.
 
         Arguments:
@@ -179,6 +179,8 @@ class Session:
 
         self.wandb = wandb
         self.wandb_path = self.save_path / 'wandb_{}'.format(wandb)
+        if run is not None:
+            self.run_name = run
 
     def _setup_training_session(self):
         """Puts network on GPU and sets up directory structure."""
@@ -212,6 +214,8 @@ class Session:
         if self.wandb is not None:
             self.wandb_path.mkdir(parents=True, exist_ok=True)
             wandb.init(project=self.wandb)
+            if hasattr(self, 'run_name'):
+                wandb.run.name = self.run_name
             wandb.watch(self.network)
         ax = None
         for self.epoch in range(self.epochs):
@@ -484,8 +488,10 @@ if __name__ == '__main__':
     parser.add_argument('--session_conf', type=str,
                         help='Config file for session parameters.')
     parser.add_argument('--wandb', type=str,
-                        help='Name of wandb project. If t blank, wandb logging '
-                             'will not be used.')
+                        help='Name of wandb project. If left blank, wandb '
+                             'logging will not be used.')
+    parser.add_argument('--run', type=str,
+                        help='Name of run for wandb logging.')
     args = parser.parse_args()
 
     save_path = Path(args.save_path).expanduser()
