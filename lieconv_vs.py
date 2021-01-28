@@ -483,7 +483,7 @@ if __name__ == '__main__':
                              'certain defaults are used.')
     parser.add_argument('--session_conf', type=str,
                         help='Config file for session parameters.')
-    parser.add_argument('--wandb', action='str',
+    parser.add_argument('--wandb', type=str,
                         help='Name of wandb project. If t blank, wandb logging '
                              'will not be used.')
     args = parser.parse_args()
