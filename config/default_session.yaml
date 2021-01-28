@@ -4,7 +4,7 @@ learning_rate: 0.001
 radius: 6
 save_interval: 10000
 save_path: scratch
-test_data_root: data/dude
+test_data_root: null
 test_receptors: null
 train_data_root: data/small_chembl_test/
 train_receptors: null

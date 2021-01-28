@@ -197,10 +197,9 @@ class SE3TransformerLoader(torch.utils.data.Dataset):
 
     @staticmethod
     def get_files_and_labels(base_path, receptors=None):
-
         if receptors is None:
             print('Loading all structures in', base_path)
-            filenames = list((base_path / 'ligands').rglob('**/*.parquet'))
+            filenames = list((base_path / 'ligands').rglob('*/*.parquet'))
         else:
             print('Loading receptors:')
             filenames = []
