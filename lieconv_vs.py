@@ -493,7 +493,7 @@ if __name__ == '__main__':
     conf_base_name = args.model + '_conf.yaml'
 
     if args.model == 'se3trans':
-        network_class = SE3Transformer
+        network_class = SE3TransformerSigmoid
         model_settings_class = SE3TransformerSettings
     elif args.model == 'lieconv':
         network_class = LieResNetSigmoid
