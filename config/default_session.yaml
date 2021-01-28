@@ -8,4 +8,4 @@ test_data_root: data/dude
 test_receptors: null
 train_data_root: data/small_chembl_test/
 train_receptors: null
-wandb: true
+wandb: null

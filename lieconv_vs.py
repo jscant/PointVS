@@ -64,7 +64,7 @@ class Session:
     def __init__(self, network, train_data_root, save_path, batch_size,
                  test_data_root=None, train_receptors=None, test_receptors=None,
                  save_interval=-1, learning_rate=0.01, epochs=1, radius=12,
-                 wandb=False):
+                 wandb=None):
         """Initialise session.
 
         Arguments:
@@ -82,8 +82,8 @@ class Session:
                 included.
             test_receptors: like train_receptors, but for the test set.
             save_interval: save model checkpoint every <save_interval> batches.
-            radius: radius of bounding box (receptor atoms to include)
-            wandb: log data wo wandb account
+            radius: radius of bounding box (receptor atoms to include).
+            wandb: name of wandb project (None = no logging).
         """
         self.train_data_root = Path(train_data_root).expanduser()
         if test_data_root is not None:
@@ -178,7 +178,7 @@ class Session:
         self.device = device
 
         self.wandb = wandb
-        self.wandb_path = self.save_path / 'wandb'
+        self.wandb_path = self.save_path / 'wandb_{}'.format(wandb)
 
     def _setup_training_session(self):
         """Puts network on GPU and sets up directory structure."""
@@ -209,9 +209,9 @@ class Session:
         graph_interval = max(1, total_iters // 30)
         global_iter = 0
         self.network.train()
-        if self.wandb:
+        if self.wandb is not None:
             self.wandb_path.mkdir(parents=True, exist_ok=True)
-            wandb.init(project=self.save_path.name)
+            wandb.init(project=self.wandb)
             wandb.watch(self.network)
         ax = None
         for self.epoch in range(self.epochs):
@@ -483,7 +483,9 @@ if __name__ == '__main__':
                              'certain defaults are used.')
     parser.add_argument('--session_conf', type=str,
                         help='Config file for session parameters.')
-    parser.add_argument('--wandb', action='store_true', help='Log using wandb')
+    parser.add_argument('--wandb', action='str',
+                        help='Name of wandb project. If t blank, wandb logging '
+                             'will not be used.')
     args = parser.parse_args()
 
     save_path = Path(args.save_path).expanduser()
