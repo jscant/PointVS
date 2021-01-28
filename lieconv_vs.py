@@ -21,103 +21,41 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
-from lie_conv import lieConv
+import wandb
+from equivariant_attention.modules import get_basis_and_r
+from experiments.qm9.models import SE3Transformer
+from lie_conv.lieConv import LieResNet
 from matplotlib import pyplot as plt
 
-from preprocessing import centre_on_ligand, make_box, concat_structs, \
-    make_bit_vector
-from settings import ModelSettings, SessionSettings
-from utils import format_time, print_with_overwrite, get_eta, \
+from data_loaders import SE3TransformerLoader, LieConvLoader
+from lieconv_utils import format_time, print_with_overwrite, get_eta, \
     plot_with_smoothing
+from settings import LieConvSettings, SessionSettings, SE3TransformerSettings
 
 
-class MolLoader(torch.utils.data.Dataset):
-    """Class for feeding structure parquets into network."""
+class LieResNetSigmoid(LieResNet):
 
-    def __init__(self, base_path, radius=12, receptors=None, **kwargs):
-        """Initialise dataset.
+    def forward(self, x):
+        lifted_x = self.group.lift(x, self.liftsamples)
+        return torch.sigmoid(self.net(lifted_x))
 
-        Arguments:
-            base_path: path containing the 'receptors' and 'ligands'
-                directories, which in turn contain <rec_name>.parquets files
-                and folders called <rec_name>_[active|decoy] which in turn
-                contain <ligand_name>.parquets files. All parquets files from
-                this directory are recursively loaded into the dataset.
-            radius: size of the bounding box; all atoms further than <radius>
-                Angstroms from the mean ligand atom position are discarded.
-            receptors: iterable of strings denoting receptors to include in
-                the dataset. if None, all receptors found in base_path are
-                included.
-            kwargs: keyword arguments passed to the parent class (Dataset).
-        """
-        super().__init__(**kwargs)
-        self.radius = radius
-        self.base_path = Path(base_path).expanduser()
 
-        if receptors is None:
-            print('Loading all structures in', self.base_path)
-            filenames = list((self.base_path / 'ligands').rglob('**/*.parquet'))
+class SE3TransformerSigmoid(SE3Transformer):
+
+    def forward(self, g):
+        basis, r = get_basis_and_r(g, self.num_degrees - 1)
+        h = {'0': g.ndata['f']}
+        for layer in self.Gblock:
+            h = layer(h, G=g, r=r, basis=basis)
+
+        for layer in self.FCblock:
+            h = layer(h)
+
+        if np.prod(h.shape) == 1:
+            x = torch.reshape(h, (1,))
         else:
-            print('Loading receptors:')
-            filenames = []
-            for receptor in receptors:
-                print(receptor)
-                filenames += list((self.base_path / 'ligands').rglob(
-                    '{}*/*.parquet'.format(receptor)))
-
-        self.filenames = filenames
-
-        labels = []
-        for fname in self.filenames:
-            if str(fname).find('active') == -1:
-                labels.append(0)
-            else:
-                labels.append(1)
-        labels = np.array(labels)
-        class_sample_count = np.array(
-            [len(labels) - np.sum(labels), np.sum(labels)])
-        weights = 1. / class_sample_count
-        self.sample_weights = torch.from_numpy(
-            np.array([weights[i] for i in labels])).float()
-        self.labels = labels
-
-        self.sampler = torch.utils.data.WeightedRandomSampler(
-            self.sample_weights, len(self.sample_weights)
-        )
-
-    def __len__(self):
-        """Returns the total size of the dataset."""
-        return len(self.filenames)
-
-    def __getitem__(self, item):
-        """Given an index, locate and preprocess relevant parquets files.
-
-        Arguments:
-            item: index in the list of filenames denoting which ligand and
-                receptor to fetch
-
-        Returns:
-            Tuple containing (a) a tuple with a list of tensors: cartesian
-            coordinates, feature vectors and masks for each point, as well as
-            the number of points in the structure and (b) the label \in \{0, 1\}
-            denoting whether the structure is an active or a decoy.
-        """
-        lig_fname = self.filenames[item]
-        label = self.labels[item]
-        rec_name = lig_fname.parent.name.split('_')[0]
-        rec_fname = next((self.base_path / 'receptors').glob(
-            '{}*.parquet'.format(rec_name)))
-
-        struct = centre_on_ligand(make_box(centre_on_ligand(
-            concat_structs(rec_fname, lig_fname)), radius=self.radius))
-        p = torch.from_numpy(
-            np.expand_dims(struct[struct.columns[:3]].to_numpy(),
-                           0)).float()
-        v = torch.unsqueeze(make_bit_vector(struct.types.to_numpy(), 11), 0)
-        # v = nn.functional.one_hot(torch.from_numpy(
-        #    np.expand_dims(struct.types.to_numpy(), 0))).float()
-        m = torch.from_numpy(np.ones((1, len(struct)))).float()
-        return (p, v, m, len(struct)), lig_fname, rec_fname, label
+            x = torch.squeeze(h)
+        return torch.sigmoid(x)
 
 
 class Session:
@@ -125,14 +63,15 @@ class Session:
 
     def __init__(self, network, train_data_root, save_path, batch_size,
                  test_data_root=None, train_receptors=None, test_receptors=None,
-                 save_interval=-1, learning_rate=0.01, epochs=1):
+                 save_interval=-1, learning_rate=0.01, epochs=1, radius=12,
+                 wandb=False):
         """Initialise session.
 
         Arguments:
             network: pytorch object inheriting from torch.nn.Module.
-            train_data_root: path containing the 'receptors' and 'ligands' training
-                directories, which in turn contain <rec_name>.parquets files
-                and folders called <rec_name>_[active|decoy] which in turn
+            train_data_root: path containing the 'receptors' and 'ligands'
+                training directories, which in turn contain <rec_name>.parquets
+                files and folders called <rec_name>_[active|decoy] which in turn
                 contain <ligand_name>.parquets files. All parquets files from
                 this directory are recursively loaded into the dataset.
             save_path: directory in which experiment outputs are stored.
@@ -143,6 +82,8 @@ class Session:
                 included.
             test_receptors: like train_receptors, but for the test set.
             save_interval: save model checkpoint every <save_interval> batches.
+            radius: radius of bounding box (receptor atoms to include)
+            wandb: log data wo wandb account
         """
         self.train_data_root = Path(train_data_root).expanduser()
         if test_data_root is not None:
@@ -160,27 +101,55 @@ class Session:
         self.save_interval = save_interval
         self.lr = learning_rate
         self.epochs = epochs
+        self.radius = radius
 
         if isinstance(train_receptors, str):
             train_receptors = tuple([train_receptors])
         if isinstance(test_receptors, str):
             test_receptors = tuple([test_receptors])
 
-        self.train_dataset = MolLoader(
-            self.train_data_root, receptors=train_receptors, radius=12)
+        dataset_kwargs = {
+            'receptors': train_receptors,
+            'radius': self.radius,
+        }
+
+        if isinstance(self.network, SE3Transformer):
+            dataset_class = SE3TransformerLoader
+            dataset_kwargs.update({
+                'mode': 'interaction_edges',
+                'interaction_dist': 4
+            })
+        elif isinstance(self.network, LieResNet):
+            dataset_class = LieConvLoader
+        else:
+            raise NotImplementedError(
+                'Unrecognised network class {}'.format(self.network.__class__))
+
+        self.train_dataset = dataset_class(
+            self.train_data_root, **dataset_kwargs)
+
+        data_loader_kwargs = {
+            'batch_size': batch_size,
+            'shuffle': False,
+            'num_workers': 0,
+            'sampler': self.train_dataset.sampler,
+            'collate_fn': self.train_dataset.collate
+        }
+
         self.train_data_loader = torch.utils.data.DataLoader(
-            self.train_dataset, batch_size=batch_size, shuffle=False,
-            num_workers=0, sampler=self.train_dataset.sampler,
-            collate_fn=self.collate
+            self.train_dataset, **data_loader_kwargs
         )
+
         self.loss_log_file = self.save_path / 'loss.log'
 
         if self.test_data_root is not None:
-            self.test_dataset = MolLoader(
-                self.test_data_root, receptors=test_receptors, radius=12)
+            del data_loader_kwargs['sampler']
+            dataset_kwargs.update({'receptors': test_receptors})
+            self.test_dataset = dataset_class(
+                self.test_data_root, **dataset_kwargs
+            )
             self.test_data_loader = torch.utils.data.DataLoader(
-                self.test_dataset, batch_size=batch_size, shuffle=False,
-                num_workers=0, collate_fn=self.collate
+                self.test_dataset, **data_loader_kwargs
             )
             self.predictions_file = Path(
                 self.save_path, 'predictions_{}.txt'.format(
@@ -188,20 +157,28 @@ class Session:
         else:
             self.test_dataset = None
             self.test_data_loader = None
+            self.predictions_file = None
 
         self.last_train_batch_small = int(bool(
             len(self.train_dataset) % self.batch_size))
-        self.last_test_batch_small = int(bool(
-            len(self.train_dataset) % self.batch_size))
+
         self.epoch_size_train = self.last_train_batch_small + (
                 len(self.train_dataset) // self.batch_size)
-        self.epoch_size_test = self.last_test_batch_small + (
-                len(self.test_dataset) // self.batch_size)
+
+        if self.test_data_root is not None:
+            self.last_test_batch_small = int(bool(
+                len(self.train_dataset) % self.batch_size))
+            self.epoch_size_test = self.last_test_batch_small + (
+                    len(self.test_dataset) // self.batch_size)
 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.criterion = nn.BCEWithLogitsLoss().to(device)
+
+        self.criterion = nn.BCELoss().to(device)
         self.optimiser = torch.optim.Adam(self.network.parameters(), lr=self.lr)
         self.device = device
+
+        self.wandb = wandb
+        self.wandb_path = self.save_path / 'wandb'
 
     def _setup_training_session(self):
         """Puts network on GPU and sets up directory structure."""
@@ -211,6 +188,8 @@ class Session:
             try:
                 output_file.unlink()
             except FileNotFoundError:
+                pass
+            except AttributeError:
                 pass
         torch.cuda.empty_cache()
         print('Using device:', self.device, '\n\n')
@@ -222,32 +201,32 @@ class Session:
         Trains the neural network (in Session.network), displays training
         information and plots the loss. All figures and logs are saved to
         <Session.save_path>.
-
-        Arguments:
-            epochs: number of times to iterate through the dataset
         """
         start_time = self._setup_training_session()
-        total_iters = self.epochs * (len(
-            self.train_dataset) // self.batch_size) + self.last_train_batch_small
+        total_iters = ((len(self.train_dataset) // self.batch_size) *
+                       self.epochs + self.last_train_batch_small)
         log_interval = 10
         graph_interval = max(1, total_iters // 30)
         global_iter = 0
         self.network.train()
+        if self.wandb:
+            self.wandb_path.mkdir(parents=True, exist_ok=True)
+            wandb.init(project=self.save_path.name)
+            wandb.watch(self.network)
         ax = None
         for self.epoch in range(self.epochs):
             decoy_mean_pred, active_mean_pred = -1, -1
-            for self.batch, ((p, v, m), y_true, _, _) in enumerate(
+            for self.batch, (x, y_true, _, _) in enumerate(
                     self.train_data_loader):
-
-                p = p.to(self.device)
-                v = v.to(self.device)
-                m = m.to(self.device)
-                y_true = y_true.to(self.device)
-
                 self.optimiser.zero_grad()
-                y_pred = self.network((p, v, m))
-                loss = self.criterion(y_pred, y_true)
+                if len(x) > 1:
+                    x = tuple([inp.to(self.device) for inp in x])
+                else:
+                    x = x[0].to(self.device)
 
+                y_true = y_true.to(self.device).squeeze()
+                y_pred = self.network(x).squeeze()
+                loss = self.criterion(y_pred.float(), y_true.float())
                 loss.backward()
                 self.optimiser.step()
 
@@ -259,16 +238,23 @@ class Session:
                 decoy_idx = np.where(y_true_np < 0.5)
 
                 if len(active_idx[0]):
-                    active_mean_pred = np.mean(
-                        self.sigmoid(y_pred_np[active_idx]))
+                    active_mean_pred = np.mean(y_pred_np[active_idx])
                 if len(decoy_idx[0]):
-                    decoy_mean_pred = np.mean(
-                        self.sigmoid(y_pred_np[decoy_idx]))
+                    decoy_mean_pred = np.mean(y_pred_np[decoy_idx])
+
+                if self.wandb:
+                    wandb.log({
+                        'Binary crossentropy': loss,
+                        'Mean active prediction': active_mean_pred,
+                        'Mean decoy prediction': decoy_mean_pred
+                    })
 
                 print_with_overwrite(
-                    ('Epoch:', '{0}/{1}'.format(self.epoch + 1, self.epochs),
-                     '|', 'Iteration:', '{0}/{1}'.format(
-                        self.batch + 1, self.epoch_size_train)),
+                    (
+                        'Epoch:',
+                        '{0}/{1}'.format(self.epoch + 1, self.epochs),
+                        '|', 'Iteration:', '{0}/{1}'.format(
+                            self.batch + 1, self.epoch_size_train)),
                     ('Time elapsed:', time_elapsed, '|',
                      'Time remaining:', eta),
                     ('Loss: {0:.4f}'.format(loss), '|',
@@ -295,7 +281,7 @@ class Session:
                     plt.savefig(self.loss_plot_file)
 
                 if (self.save_interval > 0 and
-                    not global_iter % self.save_interval) or \
+                    not (global_iter + 1) % self.save_interval) or \
                         global_iter == total_iters - 1:
                     self.save()
 
@@ -324,15 +310,17 @@ class Session:
         predictions = ''
         self.network.eval()
         with torch.no_grad():
-            for self.batch, ((p, v, m), y_true, ligands, receptors) in \
-                    enumerate(self.test_data_loader):
-                p = p.to(self.device)
-                v = v.to(self.device)
-                m = m.to(self.device)
-                y_true = y_true.to(self.device)
+            for self.batch, (x, y_true, ligands, receptors) in enumerate(
+                    self.train_data_loader):
+                if len(x) > 1:
+                    x = tuple([inp.to(self.device) for inp in x])
+                else:
+                    x = x[0].to(self.device)
 
-                y_pred = self.network((p, v, m))
-                loss = self.criterion(y_pred, y_true)
+                y_true = y_true.to(self.device).squeeze()
+                y_pred = self.network(x).squeeze()
+
+                loss = self.criterion(y_pred.float(), y_true.float())
 
                 eta = get_eta(start_time, self.batch, self.epoch_size_test)
                 time_elapsed = format_time(time.time() - start_time)
@@ -360,8 +348,8 @@ class Session:
                 )
 
                 predictions += '\n'.join(['{0} | {1:.7f} {2} {3}'.format(
-                    int(y_true_np[i, 1]),
-                    self.sigmoid(y_pred_np[i, 1]),
+                    int(y_true_np[i]),
+                    y_pred_np[i],
                     receptors[i],
                     ligands[i]) for i in range(len(receptors))]) + '\n'
 
@@ -396,7 +384,7 @@ class Session:
         Path(self.save_path, 'checkpoints').mkdir(exist_ok=True, parents=True)
         torch.save(attributes, Path(
             self.save_path, 'checkpoints',
-            'ckpt_epoch_{}_batch_{}.pt'.format(self.epoch + 1, self.batch + 1)))
+            'ckpt_epoch_{}_batch_{}.pt'.format(self.epoch + 1, self.batch)))
 
     def load(self, checkpoint_path):
         """Fully automatic loading of models saved with self.save.
@@ -438,42 +426,6 @@ class Session:
                  enumerate(self.losses[-save_interval:])]) + '\n')
 
     @staticmethod
-    def collate(batch):
-        """Processing of inputs which takes place after batch is selected.
-
-        LieConv networks take tuples of torch tensors (p, v, m), which are:
-            p, (batch_size, n_atoms, 3): coordinates of each atom
-            v, (batch_size, n_atoms, n_features): features for each atom
-            m, (batch_size, n_atoms): mask for each coordinate slot
-
-        Note that n_atoms is the largest number of atoms in a structure in
-        each batch.
-
-        Arguments:
-            batch: iterable of individual inputs.
-
-        Returns:
-            Tuple of feature vectors ready for input into a LieConv network.
-        """
-        max_len = max([b[0][-1] for b in batch])
-        batch_size = len(batch)
-        p_batch = torch.zeros(batch_size, max_len, 3)
-        v_batch = torch.zeros(batch_size, max_len, 12)
-        m_batch = torch.zeros(batch_size, max_len)
-        label_batch = torch.zeros(batch_size, 2)
-        ligands, receptors = [], []
-        for batch_index, ((p, v, m, _), ligand, receptor, label) in enumerate(
-                batch):
-            p_batch[batch_index, :p.shape[1], :] = p
-            v_batch[batch_index, :v.shape[1], :] = v
-            m_batch[batch_index, :m.shape[1]] = m
-            label_batch[batch_index, label] = 1
-            ligands.append(ligand)
-            receptors.append(receptor)
-        return (p_batch.float(), v_batch.float(),
-                m_batch.bool()), label_batch.float(), ligands, receptors
-
-    @staticmethod
     def weights_init(m):
         """Initialise weights of network using xavier initialisation."""
         if isinstance(m, nn.Conv3d) or isinstance(m, nn.Linear):
@@ -491,6 +443,8 @@ class Session:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('model', type=str, help='Type of point cloud network to'
+                                                ' use: se3trans or lieconv')
     parser.add_argument('train_data_root', type=str,
                         help='Location of structure training *.parquets files. '
                              'Receptors should be in a directory named '
@@ -529,23 +483,44 @@ if __name__ == '__main__':
                              'certain defaults are used.')
     parser.add_argument('--session_conf', type=str,
                         help='Config file for session parameters.')
+    parser.add_argument('--wandb', action='store_true', help='Log using wandb')
     args = parser.parse_args()
 
     save_path = Path(args.save_path).expanduser()
 
-    # Load model settings either from conf or defaults
-    with ModelSettings(args.model_conf, save_path / 'model.yaml') as settings:
-        network = lieConv.LieResNet(**settings.settings)
+    conf_base_name = args.model + '_conf.yaml'
 
-    with SessionSettings(
-            args.session_conf, save_path / 'session.yaml') as settings:
+    if args.model == 'se3trans':
+        network_class = SE3Transformer
+        model_settings_class = SE3TransformerSettings
+    elif args.model == 'lieconv':
+        network_class = LieResNetSigmoid
+        model_settings_class = LieConvSettings
+    else:
+        raise AssertionError('model must be one of se3trans or lieconv.')
+
+    # Load model settings either from custom yaml or defaults. Command line args
+    # will take presidence over yaml args
+    with model_settings_class(
+            args.model_conf, save_path / conf_base_name) as model_settings:
         for arg, value in vars(args).items():
             if value is not None:
-                if hasattr(settings, arg):
-                    setattr(settings, arg, value)
-        print(settings.settings)
-        sess = Session(network, **settings.settings)
-        print('Built network with {} params'.format(sess.param_count))
+                if hasattr(model_settings, arg):
+                    setattr(model_settings, arg, value)
+        print(model_settings.settings)
+        network = network_class(**model_settings.settings)
+
+    # Load session settings either from custom yaml or defaults. Command line
+    # args will take presidence over yaml args
+    with SessionSettings(
+            args.session_conf, save_path / 'session.yaml') as session_settings:
+        for arg, value in vars(args).items():
+            if value is not None:
+                if hasattr(session_settings, arg):
+                    setattr(session_settings, arg, value)
+        sess = Session(network, **session_settings.settings)
+
+    print('Built network with {} params'.format(sess.param_count))
 
     if args.load is not None:
         sess.load(args.load)

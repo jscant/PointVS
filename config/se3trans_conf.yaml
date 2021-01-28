@@ -1,0 +1,9 @@
+edge_dim: 1
+atom_feature_size: 12
+num_layers: 4
+num_degrees: 2
+num_channels: 16
+num_nlayers: 0
+div: 2
+pooling: 'max'
+n_heads: 4

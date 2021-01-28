@@ -1,3 +1,8 @@
+"""
+Some basic helper functions for formatting time and sticking dataframes
+together.
+"""
+
 import math
 import shutil
 import time
@@ -93,6 +98,7 @@ def print_with_overwrite(*s, spacer=' '):
 
 
 def plot_with_smoothing(y, gap=100, figsize=(12, 7.5), ax=None):
+    """Plot averages with a window given by <gap>."""
     if ax is None:
         _, ax = plt.subplots(1, 1, figsize=figsize)
     plt.cla()

@@ -1,6 +1,3 @@
-import struct
-
-
 # saves info about specific atom type
 class Info:
     def __init__(

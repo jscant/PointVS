@@ -1,6 +1,7 @@
 """Handy settings class, useful for on-the-fly modification of config files."""
 
 from pathlib import Path
+
 import yaml
 from lie_conv.lieGroups import T, SE3, SO3
 
@@ -75,26 +76,11 @@ class Settings:
                 key not in self._ignore_on_report + ['_save_loc', 'load_loc']}
 
 
-class ModelSettings(Settings):
+class LieConvSettings(Settings):
     _group_map = {'T': T, 'SE3': SE3, 'SO3': SO3}
 
-    _default_settings = {
-        'chin': 12,
-        'num_outputs': 2,
-        'num_layers': 6,
-        'act': 'swish',
-        'k': 300,
-        'nbhd': 20,
-        'liftsamples': 1,
-        'fill': 1.0,
-        'ds_frac': 1.0,
-        'group': 'SE3',
-        'bn': True,
-        'mean': True,
-        'pool': True,
-        'knn': False,
-        'cache': False,
-    }
+    with open('config/lieconv_conf.yaml') as f:
+        _default_settings = yaml.full_load(f)
 
     _remap_on_save = {'group': 'group_name'}
     _ignore_on_save = ['group', 'group_name']
@@ -106,15 +92,15 @@ class ModelSettings(Settings):
         self.group = self._group_map[self.group]()
 
 
+class SE3TransformerSettings(Settings):
+    with open('config/se3trans_conf.yaml') as f:
+        _default_settings = yaml.full_load(f)
+
+    _remap_on_save = {}
+    _ignore_on_save = []
+    _ignore_on_report = []
+
+
 class SessionSettings(Settings):
-    _default_settings = {
-        'train_data_root': 'data/small_chembl_test',
-        'save_path': 'output',
-        'batch_size': 4,
-        'test_data_root': None,
-        'train_receptors': None,
-        'test_receptors': None,
-        'save_interval': -1,
-        'learning_rate': 0.01,
-        'epochs': 1
-    }
+    with open('config/default_session.yaml') as f:
+        _default_settings = yaml.full_load(f)
