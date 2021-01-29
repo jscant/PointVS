@@ -18,6 +18,47 @@ from preprocessing import centre_on_ligand, make_box, concat_structs, \
     make_bit_vector
 
 
+def multiple_source_dataset(loader_class, *base_paths, receptors=None,
+                            **kwargs):
+    """Concatenate mulitple datasets into one, preserving balanced sampling.
+
+    Arguments:
+        loader_class: one of either LieConvLoader or SE3TransformerLoader,
+            inheriting from Datset. This class should have in its constructor a
+            list of binary labels associated with each item, stored in
+            <class>.labels.
+        base_paths: locations of parquets files, one for each dataset.
+        receptors: receptors to include. If None, all receptors found are used.
+        kwargs: other keyword arguments for loader_class.
+
+    Returns:
+        Concatenated dataset including balanced sampler.
+    """
+    datasets = []
+    labels = []
+    for base_path in base_paths:
+        if base_path is not None:
+            dataset = loader_class(base_path, receptors=receptors, **kwargs)
+            labels += list(dataset.labels)
+            datasets.append(dataset)
+    labels = np.array(labels)
+    class_sample_count = np.array(
+        [len(labels) - np.sum(labels), np.sum(labels)])
+    if np.sum(labels) == len(labels) or np.sum(labels) == 0:
+        sampler = None
+    else:
+        weights = 1. / class_sample_count
+        sample_weights = torch.from_numpy(
+            np.array([weights[i] for i in labels])).float()
+        sampler = torch.utils.data.WeightedRandomSampler(
+            sample_weights, len(sample_weights)
+        )
+    multi_source_dataset = torch.utils.data.ConcatDataset(datasets)
+    multi_source_dataset.sampler = sampler
+    multi_source_dataset.collate = loader_class.collate
+    return multi_source_dataset
+
+
 class LieConvLoader(torch.utils.data.Dataset):
     """Class for feeding structure parquets into network."""
 
@@ -53,24 +94,25 @@ class LieConvLoader(torch.utils.data.Dataset):
                     '{}*/*.parquet'.format(receptor)))
 
         self.filenames = filenames
-
         labels = []
         for fname in self.filenames:
-            if str(fname).find('active') == -1:
+            if str(fname.parent.name).find('active') == -1:
                 labels.append(0)
             else:
                 labels.append(1)
         labels = np.array(labels)
         class_sample_count = np.array(
             [len(labels) - np.sum(labels), np.sum(labels)])
-        weights = 1. / class_sample_count
-        self.sample_weights = torch.from_numpy(
-            np.array([weights[i] for i in labels])).float()
+        if np.sum(labels) == len(labels) or np.sum(labels) == 0:
+            self.sampler = None
+        else:
+            weights = 1. / class_sample_count
+            self.sample_weights = torch.from_numpy(
+                np.array([weights[i] for i in labels])).float()
+            self.sampler = torch.utils.data.WeightedRandomSampler(
+                self.sample_weights, len(self.sample_weights)
+            )
         self.labels = labels
-
-        self.sampler = torch.utils.data.WeightedRandomSampler(
-            self.sample_weights, len(self.sample_weights)
-        )
 
     def __len__(self):
         """Returns the total size of the dataset."""
@@ -101,8 +143,6 @@ class LieConvLoader(torch.utils.data.Dataset):
             np.expand_dims(struct[struct.columns[:3]].to_numpy(),
                            0)).float()
         v = torch.unsqueeze(make_bit_vector(struct.types.to_numpy(), 11), 0)
-        # v = F.one_hot(torch.from_numpy(
-        #    np.expand_dims(struct.types.to_numpy(), 0)), num_classes=22).float()
         m = torch.from_numpy(np.ones((1, len(struct)))).float()
         return (p, v, m, len(struct)), lig_fname, rec_fname, label
 
@@ -210,19 +250,22 @@ class SE3TransformerLoader(torch.utils.data.Dataset):
 
         labels = []
         for fname in filenames:
-            if str(fname).find('active') == -1:
+            if str(fname.parent.name).find('active') == -1:
                 labels.append(0)
             else:
                 labels.append(1)
         labels = np.array(labels)
         class_sample_count = np.array(
             [len(labels) - np.sum(labels), np.sum(labels)])
-        weights = 1. / class_sample_count
-        sample_weights = torch.from_numpy(
-            np.array([weights[i] for i in labels])).float()
-        sampler = torch.utils.data.WeightedRandomSampler(
-            sample_weights, len(sample_weights)
-        )
+        if np.sum(labels) == len(labels) or np.sum(labels) == 0:
+            sampler = None
+        else:
+            weights = 1. / class_sample_count
+            sample_weights = torch.from_numpy(
+                np.array([weights[i] for i in labels])).float()
+            sampler = torch.utils.data.WeightedRandomSampler(
+                sample_weights, len(sample_weights)
+            )
         return filenames, labels, sampler
 
     def populate_graph(self, rec_fname, lig_fname):

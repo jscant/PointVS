@@ -16,6 +16,7 @@ python3 lieconv_vs.py resnet data/small_chembl_test ~/test_output -r 20014 28
 
 import argparse
 import time
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -27,13 +28,17 @@ from experiments.qm9.models import SE3Transformer
 from lie_conv.lieConv import LieResNet
 from matplotlib import pyplot as plt
 
-from data_loaders import SE3TransformerLoader, LieConvLoader
+from data_loaders import SE3TransformerLoader, LieConvLoader, \
+    multiple_source_dataset
 from lieconv_utils import format_time, print_with_overwrite, get_eta, \
     plot_with_smoothing
 from settings import LieConvSettings, SessionSettings, SE3TransformerSettings
 
+warnings.filterwarnings("ignore", category=UserWarning)
+
 
 class LieResNetSigmoid(LieResNet):
+    """We need all of our networks to finish with a sigmoid activation."""
 
     def forward(self, x):
         lifted_x = self.group.lift(x, self.liftsamples)
@@ -41,6 +46,7 @@ class LieResNetSigmoid(LieResNet):
 
 
 class SE3TransformerSigmoid(SE3Transformer):
+    """We need all of our networks to finish with a sigmoid activation."""
 
     def forward(self, g):
         basis, r = get_basis_and_r(g, self.num_degrees - 1)
@@ -59,12 +65,12 @@ class SE3TransformerSigmoid(SE3Transformer):
 
 
 class Session:
-    """Handles training of LieConv-based models."""
+    """Handles training of point cloud-based models."""
 
     def __init__(self, network, train_data_root, save_path, batch_size,
                  test_data_root=None, train_receptors=None, test_receptors=None,
                  save_interval=-1, learning_rate=0.01, epochs=1, radius=12,
-                 wandb=None, run=None):
+                 wandb=None, run=None, **kwargs):
         """Initialise session.
 
         Arguments:
@@ -84,6 +90,8 @@ class Session:
             save_interval: save model checkpoint every <save_interval> batches.
             radius: radius of bounding box (receptor atoms to include).
             wandb: name of wandb project (None = no logging).
+            run: name of wandb project run (None = default)
+            kwargs: translated actives keyword arguments
         """
         self.train_data_root = Path(train_data_root).expanduser()
         if test_data_root is not None:
@@ -102,6 +110,8 @@ class Session:
         self.lr = learning_rate
         self.epochs = epochs
         self.radius = radius
+        self.translated_actives = kwargs.get('translated_actives', None)
+        self.n_translated_actives = kwargs.get('n_translated_actives', 0)
 
         if isinstance(train_receptors, str):
             train_receptors = tuple([train_receptors])
@@ -125,8 +135,9 @@ class Session:
             raise NotImplementedError(
                 'Unrecognised network class {}'.format(self.network.__class__))
 
-        self.train_dataset = dataset_class(
-            self.train_data_root, **dataset_kwargs)
+        self.train_dataset = multiple_source_dataset(
+            dataset_class, self.train_data_root, self.translated_actives,
+            **dataset_kwargs)
 
         data_loader_kwargs = {
             'batch_size': batch_size,
@@ -220,7 +231,7 @@ class Session:
         ax = None
         for self.epoch in range(self.epochs):
             decoy_mean_pred, active_mean_pred = -1, -1
-            for self.batch, (x, y_true, _, _) in enumerate(
+            for self.batch, (x, y_true, ligands, receptors) in enumerate(
                     self.train_data_loader):
                 self.optimiser.zero_grad()
                 if len(x) > 1:
@@ -290,7 +301,7 @@ class Session:
                     self.save()
 
                 global_iter += 1
-
+        print('Final batch:', self.batch)
         ax = plot_with_smoothing(self.losses, gap=max(1, self.batch // 15),
                                  ax=ax)
         ax.set_title('Binary crossentropy training loss for {}'.format(
@@ -466,6 +477,15 @@ if __name__ == '__main__':
                              'receptors, with ligands located in their '
                              'specific receptor subdirectory under the '
                              'ligands directory.')
+    parser.add_argument('--translated_actives', type=str,
+                        help='Directory in which translated actives are stored.'
+                             ' If unspecified, no translated actives will be '
+                             'used. The use of translated actives are is '
+                             'discussed in https://pubs.acs.org/doi/10.1021/ac'
+                             's.jcim.0c00263')
+    parser.add_argument('--n_translated_actives', type=int,
+                        help='Maximum number of translated actives to be '
+                             'included')
     parser.add_argument('--batch_size', '-b', type=int, required=False,
                         help='Number of examples to include in each batch for '
                              'training.')
@@ -526,6 +546,7 @@ if __name__ == '__main__':
             if value is not None:
                 if hasattr(session_settings, arg):
                     setattr(session_settings, arg, value)
+        print(session_settings.settings)
         sess = Session(network, **session_settings.settings)
 
     print('Built network with {} params'.format(sess.param_count))
@@ -533,5 +554,6 @@ if __name__ == '__main__':
     if args.load is not None:
         sess.load(args.load)
     sess.train()
+    print('TRAINING COMPLETE')
     if sess.test_data_root is not None:
         sess.test()
