@@ -178,7 +178,7 @@ class Session:
 
         if self.test_data_root is not None:
             self.last_test_batch_small = int(bool(
-                len(self.train_dataset) % self.batch_size))
+                len(self.test_dataset) % self.batch_size))
             self.epoch_size_test = self.last_test_batch_small + (
                     len(self.test_dataset) // self.batch_size)
 
@@ -226,7 +226,6 @@ class Session:
             if hasattr(self, 'run_name'):
                 wandb.run.name = self.run_name
             wandb.watch(self.network)
-        ax = None
         for self.epoch in range(self.epochs):
             decoy_mean_pred, active_mean_pred = -1, -1
             for self.batch, (x, y_true, ligands, receptors) in enumerate(
@@ -239,6 +238,7 @@ class Session:
 
                 y_true = y_true.to(self.device).squeeze()
                 y_pred = self.network(x).squeeze()
+
                 loss = self.criterion(y_pred.float(), y_true.float())
                 loss.backward()
                 self.optimiser.step()
@@ -299,16 +299,6 @@ class Session:
                     self.save()
 
                 global_iter += 1
-        print('Final batch:', self.batch)
-        ax = plot_with_smoothing(self.losses, gap=max(1, self.batch // 15),
-                                 ax=ax)
-        ax.set_title('Binary crossentropy training loss for {}'.format(
-            self.train_data_root
-        ))
-        ax.set_xlabel('Batch')
-        ax.set_ylabel('Binary crossentropy loss')
-        ax.set_ylim(bottom=-0.05)
-        plt.savefig(self.loss_plot_file)
 
     def test(self):
         """Use trained network to perform inference on the test set.
@@ -324,7 +314,7 @@ class Session:
         self.network.eval()
         with torch.no_grad():
             for self.batch, (x, y_true, ligands, receptors) in enumerate(
-                    self.train_data_loader):
+                    self.test_data_loader):
                 if len(x) > 1:
                     x = tuple([inp.to(self.device) for inp in x])
                 else:
@@ -538,7 +528,8 @@ if __name__ == '__main__':
             if value is not None:
                 if hasattr(model_settings, arg):
                     setattr(model_settings, arg, value)
-        wandb.config.update(model_settings.settings)
+        if args.wandb is not None:
+            wandb.config.update(model_settings.settings)
         network = network_class(**model_settings.settings)
 
     # Load session settings either from custom yaml or defaults. Command line
@@ -549,7 +540,8 @@ if __name__ == '__main__':
             if value is not None:
                 if hasattr(session_settings, arg):
                     setattr(session_settings, arg, value)
-        wandb.config.update(session_settings.settings)
+        if args.wandb is not None:
+            wandb.config.update(session_settings.settings)
         sess = Session(network, **session_settings.settings)
 
     print('Built network with {} params'.format(sess.param_count))

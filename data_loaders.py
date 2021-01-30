@@ -59,6 +59,16 @@ def multiple_source_dataset(loader_class, *base_paths, receptors=None,
     return multi_source_dataset
 
 
+def one_hot(numerical_category, num_classes):
+    """Make one-hot vector from category and total categories."""
+    one_hot_array = np.zeros((len(numerical_category), num_classes))
+
+    for i, cat in enumerate(numerical_category):
+        one_hot_array[i, int(cat)] = 1
+
+    return one_hot_array
+
+
 class LieConvLoader(torch.utils.data.Dataset):
     """Class for feeding structure parquets into network."""
 
@@ -181,15 +191,6 @@ class LieConvLoader(torch.utils.data.Dataset):
             receptors.append(receptor)
         return (p_batch.float(), v_batch.float(),
                 m_batch.bool()), label_batch.long(), ligands, receptors
-
-
-def one_hot(numerical_category, num_classes):
-    one_hot_array = np.zeros((len(numerical_category), num_classes))
-
-    for i, cat in enumerate(numerical_category):
-        one_hot_array[i, int(cat)] = 1
-
-    return one_hot_array
 
 
 class SE3TransformerLoader(torch.utils.data.Dataset):
