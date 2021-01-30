@@ -543,6 +543,7 @@ if __name__ == '__main__':
 
     if args.wandb is None:
         sess.wandb = None
-    sess.train()
+    if sess.epochs > 0:
+        sess.train()
     if sess.test_data_root is not None:
         sess.test()
