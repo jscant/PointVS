@@ -219,7 +219,6 @@ class Session:
         total_iters = ((len(self.train_dataset) // self.batch_size) *
                        self.epochs + self.last_train_batch_small)
         log_interval = 10
-        graph_interval = max(1, total_iters // 30)
         global_iter = 0
         self.network.train()
         if self.wandb is not None:
@@ -279,19 +278,6 @@ class Session:
                 if not (self.batch + 1) % log_interval or \
                         self.batch == total_iters - 1:
                     self.save_loss(log_interval)
-
-                if not (self.batch + 1) % graph_interval or \
-                        self.batch == total_iters - 1:
-                    ax = plot_with_smoothing(
-                        self.losses, gap=max(1, self.batch // 15), ax=ax)
-                    ax.set_title(
-                        'Binary crossentropy training loss for {}'.format(
-                            self.train_data_root
-                        ))
-                    ax.set_xlabel('Batch')
-                    ax.set_ylabel('Binary crossentropy loss')
-                    ax.set_ylim(bottom=-0.05)
-                    plt.savefig(self.loss_plot_file)
 
                 if (self.save_interval > 0 and
                     not (global_iter + 1) % self.save_interval) or \
