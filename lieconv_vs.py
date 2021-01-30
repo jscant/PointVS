@@ -320,10 +320,10 @@ class Session:
 
                 if len(active_idx[0]):
                     active_mean_pred = float(
-                        np.mean(self.sigmoid(y_pred_np[active_idx])))
+                        np.mean(y_pred_np[active_idx]))
                 if len(decoy_idx[0]):
                     decoy_mean_pred = float(
-                        np.mean(self.sigmoid(y_pred_np[decoy_idx])))
+                        np.mean(y_pred_np[decoy_idx]))
 
                 print_with_overwrite(
                     ('Inference on: {}'.format(self.test_data_root), '|',
