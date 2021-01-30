@@ -17,7 +17,7 @@ python3 lieconv_vs.py resnet data/small_chembl_test ~/test_output -r 20014 28
 import argparse
 import time
 import warnings
-from pathlib import Path
+from pathlib import Path, PosixPath
 
 import numpy as np
 import torch
@@ -391,12 +391,14 @@ class Session:
             load_dict.items() if not key.endswith('_state_dict')}
 
         for attr_name, value in attributes.items():
-            setattr(self, attr_name, value)
+            if not isinstance(value, PosixPath):
+                setattr(self, attr_name, value)
 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.device = device
         self.network.load_state_dict(states['network'])
-        self.network.net.load_state_dict(states['net'])
+        if isinstance(self.network, LieResNet):
+            self.network.net.load_state_dict(states['net'])
         self.network.to(device)
         self.optimiser = torch.optim.Adam(self.network.parameters(), lr=self.lr)
         self.optimiser.load_state_dict(states['optimiser'])
@@ -434,24 +436,25 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('model', type=str, help='Type of point cloud network to'
                                                 ' use: se3trans or lieconv')
-    parser.add_argument('train_data_root', type=str,
+    parser.add_argument('train_data_root', type=PosixPath,
                         help='Location of structure training *.parquets files. '
                              'Receptors should be in a directory named '
                              'receptors, with ligands located in their '
                              'specific receptor subdirectory under the '
                              'ligands directory.')
-    parser.add_argument('save_path', type=str,
+    parser.add_argument('save_path', type=PosixPath,
                         help='Directory in which experiment outputs are '
                              'stored.')
-    parser.add_argument('--load', '-l', type=str, required=False,
+    parser.add_argument('--load', '-l', type=PosixPath, required=False,
                         help='Load a session and model.')
-    parser.add_argument('--test_data_root', '-t', type=str, required=False,
+    parser.add_argument('--test_data_root', '-t', type=PosixPath,
+                        required=False,
                         help='Location of structure test *.parquets files. '
                              'Receptors should be in a directory named '
                              'receptors, with ligands located in their '
                              'specific receptor subdirectory under the '
                              'ligands directory.')
-    parser.add_argument('--translated_actives', type=str,
+    parser.add_argument('--translated_actives', type=PosixPath,
                         help='Directory in which translated actives are stored.'
                              ' If unspecified, no translated actives will be '
                              'used. The use of translated actives are is '
@@ -476,10 +479,10 @@ if __name__ == '__main__':
                              'batches.')
     parser.add_argument('--learning_rate', '-lr', type=float, default=None,
                         help='Learning rate for gradient descent')
-    parser.add_argument('--model_conf', '-m', type=str,
+    parser.add_argument('--model_conf', '-m', type=PosixPath,
                         help='Config file for model parameters. If unspecified,'
                              'certain defaults are used.')
-    parser.add_argument('--session_conf', type=str,
+    parser.add_argument('--session_conf', type=PosixPath,
                         help='Config file for session parameters.')
     parser.add_argument('--wandb', type=str,
                         help='Name of wandb project. If left blank, wandb '
@@ -488,7 +491,7 @@ if __name__ == '__main__':
                         help='Name of run for wandb logging.')
     args = parser.parse_args()
 
-    save_path = Path(args.save_path).expanduser()
+    save_path = args.save_path.expanduser()
     if args.wandb is not None:
         wandb_path = save_path / 'wandb_{}'.format(args.wandb)
         wandb_path.mkdir(parents=True, exist_ok=True)
@@ -534,7 +537,12 @@ if __name__ == '__main__':
 
     if args.load is not None:
         sess.load(args.load)
+        for arg, value in vars(args).items():
+            if value is not None:
+                setattr(sess, arg, value)
+
+    if args.wandb is None:
+        sess.wandb = None
     sess.train()
-    print('TRAINING COMPLETE')
     if sess.test_data_root is not None:
         sess.test()
