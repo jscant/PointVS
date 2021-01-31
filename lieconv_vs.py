@@ -495,8 +495,8 @@ if __name__ == '__main__':
     if args.wandb is not None:
         wandb_path = save_path / 'wandb_{}'.format(args.wandb)
         wandb_path.mkdir(parents=True, exist_ok=True)
-        wandb.init(project=args.wandb)
-        wandb.config.update(args)
+        wandb.init(project=args.wandb, allow_val_change=True)
+        wandb.config.update(args, allow_val_change=True)
 
     conf_base_name = args.model + '_conf.yaml'
 
@@ -518,7 +518,7 @@ if __name__ == '__main__':
                 if hasattr(model_settings, arg):
                     setattr(model_settings, arg, value)
         if args.wandb is not None:
-            wandb.config.update(model_settings.settings)
+            wandb.config.update(model_settings.settings, allow_val_change=True)
         network = network_class(**model_settings.settings)
 
     # Load session settings either from custom yaml or defaults. Command line
@@ -530,7 +530,8 @@ if __name__ == '__main__':
                 if hasattr(session_settings, arg):
                     setattr(session_settings, arg, value)
         if args.wandb is not None:
-            wandb.config.update(session_settings.settings)
+            wandb.config.update(
+                session_settings.settings, allow_val_change=True)
         sess = Session(network, **session_settings.settings)
 
     print('Built network with {} params'.format(sess.param_count))
