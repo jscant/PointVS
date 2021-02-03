@@ -94,16 +94,16 @@ class LieConvLoader(torch.utils.data.Dataset):
 
         if receptors is None:
             print('Loading all structures in', self.base_path)
-            filenames = list((self.base_path / 'ligands').rglob('**/*.parquet'))
+            filenames = list((self.base_path / 'ligands').glob('**/*.parquet'))
         else:
             print('Loading receptors:')
             filenames = []
             for receptor in receptors:
                 print(receptor)
-                filenames += list((self.base_path / 'ligands').rglob(
+                filenames += list((self.base_path / 'ligands').glob(
                     '{}*/*.parquet'.format(receptor)))
 
-        self.filenames = filenames
+        self.filenames = sorted(filenames)
         labels = []
         for fname in self.filenames:
             if str(fname.parent.name).find('active') == -1:
@@ -249,6 +249,8 @@ class SE3TransformerLoader(torch.utils.data.Dataset):
                 filenames += list((base_path / 'ligands').rglob(
                     '{}*/*.parquet'.format(receptor)))
 
+
+        filenames = sorted(filenames)
         labels = []
         for fname in filenames:
             if str(fname.parent.name).find('active') == -1:
