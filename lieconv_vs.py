@@ -22,16 +22,20 @@ from pathlib import Path, PosixPath
 import numpy as np
 import torch
 import torch.nn as nn
-import wandb
+
+try:
+    import wandb
+except ImportError:
+    print('Library wandb not available. --wandb and --run flags should not be '
+          'used.')
+    wandb = None
 from equivariant_attention.modules import get_basis_and_r
 from experiments.qm9.models import SE3Transformer
 from lie_conv.lieConv import LieResNet
-from matplotlib import pyplot as plt
 
 from data_loaders import SE3TransformerLoader, LieConvLoader, \
     multiple_source_dataset
-from lieconv_utils import format_time, print_with_overwrite, get_eta, \
-    plot_with_smoothing
+from lieconv_utils import format_time, print_with_overwrite, get_eta
 from settings import LieConvSettings, SessionSettings, SE3TransformerSettings
 
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -315,6 +319,7 @@ class Session:
                 time_elapsed = format_time(time.time() - start_time)
                 y_true_np = y_true.cpu().detach().numpy()
                 y_pred_np = y_pred.cpu().detach().numpy()
+
                 active_idx = np.where(y_true_np > 0.5)
                 decoy_idx = np.where(y_true_np < 0.5)
 
@@ -429,7 +434,11 @@ class Session:
 
     @property
     def param_count(self):
-        return sum([torch.numel(t) for t in self.network.parameters()])
+        if isinstance(self.network, LieResNet):
+            return sum([torch.numel(t) for t in self.network.net.parameters()
+                        if t.requires_grad])
+        return sum([torch.numel(t) for t in self.network.parameters()
+                    if t.requires_grad])
 
 
 if __name__ == '__main__':
