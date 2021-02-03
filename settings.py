@@ -92,6 +92,22 @@ class LieConvSettings(Settings):
         self.group = self._group_map[self.group]()
 
 
+class EvidentialLieConvSettings(Settings):
+    _group_map = {'T': T, 'SE3': SE3, 'SO3': SO3}
+
+    with open('config/evidential_lieconv_conf.yaml') as f:
+        _default_settings = yaml.full_load(f)
+
+    _remap_on_save = {'group': 'group_name'}
+    _ignore_on_save = ['group', 'group_name']
+    _ignore_on_report = ['group_name']
+
+    def __init__(self, load_loc=None, save_loc=None):
+        super().__init__(load_loc=load_loc, save_loc=save_loc)
+        self.group_name = self.group
+        self.group = self._group_map[self.group]()
+
+
 class SE3TransformerSettings(Settings):
     with open('config/se3trans_conf.yaml') as f:
         _default_settings = yaml.full_load(f)

@@ -18,10 +18,7 @@ import argparse
 import warnings
 from pathlib import PosixPath
 
-import numpy as np
-import torch
-
-from session import Session
+from session import Session, EvidentialLieResNet, SE3TransformerSigmoid
 
 try:
     import wandb
@@ -29,41 +26,11 @@ except ImportError:
     print('Library wandb not available. --wandb and --run flags should not be '
           'used.')
     wandb = None
-from equivariant_attention.modules import get_basis_and_r
-from experiments.qm9.models import SE3Transformer
-from lie_conv.lieConv import LieResNet
 
-from settings import LieConvSettings, SessionSettings, SE3TransformerSettings
+from settings import LieConvSettings, SessionSettings, SE3TransformerSettings, \
+    EvidentialLieConvSettings
 
 warnings.filterwarnings("ignore", category=UserWarning)
-
-
-class LieResNetSigmoid(LieResNet):
-    """We need all of our networks to finish with a sigmoid activation."""
-
-    def forward(self, x):
-        lifted_x = self.group.lift(x, self.liftsamples)
-        return torch.sigmoid(self.net(lifted_x))
-
-
-class SE3TransformerSigmoid(SE3Transformer):
-    """We need all of our networks to finish with a sigmoid activation."""
-
-    def forward(self, g):
-        basis, r = get_basis_and_r(g, self.num_degrees - 1)
-        h = {'0': g.ndata['f']}
-        for layer in self.Gblock:
-            h = layer(h, G=g, r=r, basis=basis)
-
-        for layer in self.FCblock:
-            h = layer(h)
-
-        if np.prod(h.shape) == 1:
-            x = torch.reshape(h, (1,))
-        else:
-            x = torch.squeeze(h)
-        return torch.sigmoid(x)
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -137,8 +104,11 @@ if __name__ == '__main__':
         network_class = SE3TransformerSigmoid
         model_settings_class = SE3TransformerSettings
     elif args.model == 'lieconv':
-        network_class = LieResNetSigmoid
+        network_class = LieConvSettings
         model_settings_class = LieConvSettings
+    elif args.model == 'evilieconv':
+        network_class = EvidentialLieResNet
+        model_settings_class = EvidentialLieConvSettings
     else:
         raise AssertionError('model must be one of se3trans or lieconv.')
 

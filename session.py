@@ -7,6 +7,7 @@ from pathlib import Path, PosixPath
 import numpy as np
 import torch
 import torch.nn as nn
+from equivariant_attention.modules import get_basis_and_r
 
 try:
     import wandb
@@ -20,6 +21,100 @@ from lie_conv.lieConv import LieResNet
 from data_loaders import SE3TransformerLoader, LieConvLoader, \
     multiple_source_dataset
 from lieconv_utils import format_time, print_with_overwrite, get_eta
+
+
+class LieResNetSigmoid(LieResNet):
+    """We need all of our networks to finish with a sigmoid activation."""
+
+    def forward(self, x):
+        lifted_x = self.group.lift(x, self.liftsamples)
+        return torch.sigmoid(self.net(lifted_x))
+
+
+class SE3TransformerSigmoid(SE3Transformer):
+    """We need all of our networks to finish with a sigmoid activation."""
+
+    def forward(self, g):
+        basis, r = get_basis_and_r(g, self.num_degrees - 1)
+        h = {'0': g.ndata['f']}
+        for layer in self.Gblock:
+            h = layer(h, G=g, r=r, basis=basis)
+
+        for layer in self.FCblock:
+            h = layer(h)
+
+        if np.prod(h.shape) == 1:
+            x = torch.reshape(h, (1,))
+        else:
+            x = torch.squeeze(h)
+        return torch.sigmoid(x)
+
+
+class EvidentialLieResNet(LieResNet):
+
+    def forward(self, x):
+        lifted_x = self.group.lift(x, self.liftsamples)
+        logits = self.net(lifted_x)
+        evidence = torch.exp(logits)
+        alpha = torch.add(evidence, 1.0)
+
+        uncertainties = 2 / torch.sum(alpha, dim=1, keepdim=True)
+
+        probabilities = alpha / torch.sum(alpha, dim=1, keepdim=True)
+        return probabilities, uncertainties, alpha
+
+
+def KL(alpha, device):
+    dim = 1
+    beta = torch.ones((1, 2), dtype=torch.float).to(device)
+    S_alpha = torch.sum(alpha, dim=dim, keepdim=True).to(device)
+    S_beta = torch.sum(beta, dim=dim, keepdim=True).to(device)
+    lnB = torch.lgamma(S_alpha) - torch.sum(
+        torch.lgamma(alpha), dim=dim, keepdim=True).to(device)
+    lnB_uni = torch.sum(torch.lgamma(beta), dim=dim,
+                        keepdim=True) - torch.lgamma(
+        S_beta).to(device)
+    dg0 = torch.digamma(S_alpha).to(device)
+    dg1 = torch.digamma(alpha).to(device)
+
+    kl = torch.sum(
+        (alpha - beta) * (dg1 - dg0), dim=dim, keepdim=True) + lnB + lnB_uni
+    return kl.to(device)
+
+
+def mse_loss(p, alpha, global_step, annealing_step, device):
+    dim = 1
+    S = torch.sum(alpha, dim=dim, keepdim=True)
+    E = alpha - 1
+    m = alpha / S
+
+    A = torch.sum((p - m) ** 2, dim=dim, keepdim=True)
+    B = torch.sum(alpha * (S - alpha) / (S * S * (S + 1)), dim=dim,
+                  keepdim=True)
+
+    annealing_coef = torch.min(
+        torch.tensor([1.0, global_step / annealing_step])).float()
+
+    alp = E * (1 - p) + 1
+    C = annealing_coef * KL(alp, device)
+    return (A + B) + C
+
+
+def ce_loss(p, alpha, global_step, annealing_step, device):
+    dim = 1
+    f = torch.digamma
+    S = torch.sum(alpha, dim=dim, keepdim=True)
+    E = alpha - 1
+
+    A = torch.sum(p * (f(S) - f(alpha)), dim=dim, keepdim=True)
+
+    annealing_coef = torch.min(
+        torch.tensor([1.0, global_step / annealing_step])).float()
+
+    alp = E * (1 - p) + 1
+    B = annealing_coef * KL(alp, device)
+
+    return A + B
 
 
 class Session:
@@ -181,31 +276,48 @@ class Session:
                     x = x[0].to(self.device)
 
                 y_true = y_true.to(self.device).squeeze()
-                y_pred = self.network(x).squeeze()
+                y_true_np = y_true.cpu().detach().numpy()
+                active_idx = np.where(y_true_np > 0.5)
+                decoy_idx = np.where(y_true_np < 0.5)
+                y_pred = self.network(x)
+                if isinstance(self.network, EvidentialLieResNet):
+                    y_true = torch.nn.functional.one_hot(y_true, num_classes=2)
+                    y_pred, uncertainty, alpha = y_pred
+                    y_pred = y_pred.squeeze()
+                    loss = ce_loss(y_true, alpha, global_iter, total_iters,
+                                   self.device).mean()
+                else:
+                    y_pred = y_pred.squeeze()
+                    loss = self.criterion(y_pred.float(), y_true.float())
 
-                loss = self.criterion(y_pred.float(), y_true.float())
                 loss.backward()
                 self.optimiser.step()
 
                 eta = get_eta(start_time, global_iter, total_iters)
                 time_elapsed = format_time(time.time() - start_time)
-                y_true_np = y_true.cpu().detach().numpy()
+
                 y_pred_np = y_pred.cpu().detach().numpy()
-                active_idx = np.where(y_true_np > 0.5)
-                decoy_idx = np.where(y_true_np < 0.5)
 
                 wandb_update_dict = {
                     'Binary crossentropy (train)': loss,
-                    'Batch': self.batch + 1
+                    'Batch': self.epoch * len(
+                        self.train_data_loader) + self.batch + 1
                 }
 
+                if isinstance(self.network, EvidentialLieResNet):
+                    active_idx = (active_idx, 1)
+                    decoy_idx = (decoy_idx, 1)
+                    wandb_update_dict.update(
+                        {'Mean uncertainty (train)': float(uncertainty.mean())})
                 if len(active_idx[0]):
-                    active_mean_pred = np.mean(y_pred_np[active_idx])
+                    active_mean_pred = np.mean(
+                        y_pred_np[active_idx])
                     wandb_update_dict.update({
                         'Mean active prediction (train)': active_mean_pred
                     })
                 if len(decoy_idx[0]):
-                    decoy_mean_pred = np.mean(y_pred_np[decoy_idx])
+                    decoy_mean_pred = np.mean(
+                        y_pred_np[decoy_idx])
                     wandb_update_dict.update({
                         'Mean decoy prediction (train)': decoy_mean_pred,
                     })
@@ -213,18 +325,34 @@ class Session:
                 if self.wandb:
                     wandb.log(wandb_update_dict)
 
-                print_with_overwrite(
-                    (
-                        'Epoch:',
-                        '{0}/{1}'.format(self.epoch + 1, self.epochs),
-                        '|', 'Iteration:', '{0}/{1}'.format(
-                            self.batch + 1, len(self.train_data_loader))),
-                    ('Time elapsed:', time_elapsed, '|',
-                     'Time remaining:', eta),
-                    ('Loss: {0:.4f}'.format(loss), '|',
-                     'Mean active: {0:.4f}'.format(active_mean_pred), '|',
-                     'Mean decoy: {0:.4f}'.format(decoy_mean_pred))
-                )
+                if isinstance(self.network, EvidentialLieResNet):
+                    print_with_overwrite(
+                        (
+                            'Epoch:',
+                            '{0}/{1}'.format(self.epoch + 1, self.epochs),
+                            '|', 'Iteration:', '{0}/{1}'.format(
+                                self.batch + 1, len(self.train_data_loader))),
+                        ('Time elapsed:', time_elapsed, '|',
+                         'Time remaining:', eta),
+                        ('Loss: {0:.4f}'.format(loss), '|',
+                         'Mean active: {0:.4f}'.format(active_mean_pred), '|',
+                         'Mean decoy: {0:.4f}'.format(decoy_mean_pred)),
+                        ('Mean uncertainty: {0:.4f}'.format(
+                            float(uncertainty.mean())), ' ')
+                    )
+                else:
+                    print_with_overwrite(
+                        (
+                            'Epoch:',
+                            '{0}/{1}'.format(self.epoch + 1, self.epochs),
+                            '|', 'Iteration:', '{0}/{1}'.format(
+                                self.batch + 1, len(self.train_data_loader))),
+                        ('Time elapsed:', time_elapsed, '|',
+                         'Time remaining:', eta),
+                        ('Loss: {0:.4f}'.format(loss), '|',
+                         'Mean active: {0:.4f}'.format(active_mean_pred), '|',
+                         'Mean decoy: {0:.4f}'.format(decoy_mean_pred))
+                    )
 
                 self.losses.append(float(loss))
                 if not (self.batch + 1) % log_interval or \
@@ -245,6 +373,7 @@ class Session:
         on the structures found in <test_data_root>, and saves this output
         to <save_path>/predictions_<test_data_root.name>.txt.
         """
+        self.network.to(self.device)
         start_time = time.time()
         log_interval = 10
         decoy_mean_pred, active_mean_pred = -1, -1
@@ -259,31 +388,45 @@ class Session:
                     x = x[0].to(self.device)
 
                 y_true = y_true.to(self.device).squeeze()
-                y_pred = self.network(x).squeeze()
-
-                loss = self.criterion(y_pred.float(), y_true.float())
+                y_true_np = y_true.cpu().detach().numpy()
+                active_idx = np.where(y_true_np > 0.5)
+                decoy_idx = np.where(y_true_np < 0.5)
+                y_pred = self.network(x)
+                if isinstance(self.network, EvidentialLieResNet):
+                    y_true = torch.nn.functional.one_hot(y_true, num_classes=2)
+                    y_pred, uncertainty, alpha = y_pred
+                    y_pred = y_pred.squeeze()
+                    loss = ce_loss(y_true, alpha, 1, 1, self.device).mean()
+                else:
+                    y_pred = y_pred.squeeze()
+                    loss = self.criterion(y_pred.float(), y_true.float())
 
                 eta = get_eta(
                     start_time, self.batch, len(self.test_data_loader))
                 time_elapsed = format_time(time.time() - start_time)
-                y_true_np = y_true.cpu().detach().numpy()
-                y_pred_np = y_pred.cpu().detach().numpy()
 
-                active_idx = np.where(y_true_np > 0.5)
-                decoy_idx = np.where(y_true_np < 0.5)
+                y_pred_np = y_pred.cpu().detach().numpy()
 
                 wandb_update_dict = {
                     'Binary crossentropy (validation)': loss,
                     'Batch': self.batch + 1
                 }
 
+                if isinstance(self.network, EvidentialLieResNet):
+                    active_idx = (*active_idx, 1)
+                    decoy_idx = (*decoy_idx, 1)
+                    wandb_update_dict.update({
+                        'Mean uncertainty (validation)':
+                            float(uncertainty.mean())})
                 if len(active_idx[0]):
-                    active_mean_pred = np.mean(y_pred_np[active_idx])
+                    active_mean_pred = np.mean(
+                        y_pred_np[active_idx])
                     wandb_update_dict.update({
                         'Mean active prediction (validation)': active_mean_pred
                     })
                 if len(decoy_idx[0]):
-                    decoy_mean_pred = np.mean(y_pred_np[decoy_idx])
+                    decoy_mean_pred = np.mean(
+                        y_pred_np[decoy_idx])
                     wandb_update_dict.update({
                         'Mean decoy prediction (validation)': decoy_mean_pred,
                     })
@@ -291,22 +434,47 @@ class Session:
                 if self.wandb:
                     wandb.log(wandb_update_dict)
 
-                print_with_overwrite(
-                    ('Inference on: {}'.format(self.test_data_root), '|',
-                     'Iteration:', '{0}/{1}'.format(
-                        self.batch + 1, len(self.test_data_loader))),
-                    ('Time elapsed:', time_elapsed, '|',
-                     'Time remaining:', eta),
-                    ('Loss: {0:.4f}'.format(loss), '|',
-                     'Mean active: {0:.4f}'.format(active_mean_pred), '|',
-                     'Mean decoy: {0:.4f}'.format(decoy_mean_pred))
-                )
+                if isinstance(self.network, EvidentialLieResNet):
+                    print_with_overwrite(
+                        ('Inference on: {}'.format(self.test_data_root), '|',
+                         'Iteration:', '{0}/{1}'.format(
+                            self.batch + 1, len(self.test_data_loader))),
+                        ('Time elapsed:', time_elapsed, '|',
+                         'Time remaining:', eta),
+                        ('Loss: {0:.4f}'.format(loss), '|',
+                         'Mean active: {0:.4f}'.format(active_mean_pred), '|',
+                         'Mean decoy: {0:.4f}'.format(decoy_mean_pred)),
+                        ('Mean uncertainty: {0:.4f}'.format(
+                            float(uncertainty.mean())), ' ')
+                    )
+                else:
+                    print_with_overwrite(
+                        ('Inference on: {}'.format(self.test_data_root), '|',
+                         'Iteration:', '{0}/{1}'.format(
+                            self.batch + 1, len(self.test_data_loader))),
+                        ('Time elapsed:', time_elapsed, '|',
+                         'Time remaining:', eta),
+                        ('Loss: {0:.4f}'.format(loss), '|',
+                         'Mean active: {0:.4f}'.format(active_mean_pred), '|',
+                         'Mean decoy: {0:.4f}'.format(decoy_mean_pred))
+                    )
 
-                predictions += '\n'.join(['{0} | {1:.7f} {2} {3}'.format(
-                    int(y_true_np[i]),
-                    y_pred_np[i],
-                    receptors[i],
-                    ligands[i]) for i in range(len(receptors))]) + '\n'
+                uncertainty_np = uncertainty.cpu().detach().numpy().squeeze()
+                if isinstance(self.network, EvidentialLieResNet):
+                    predictions += '\n'.join(
+                        ['{0} | {1:.7f} {2} {3} {4:.4f}'.format(
+                            int(y_true_np[i]),
+                            y_pred_np[i, 1],
+                            receptors[i],
+                            ligands[i],
+                            uncertainty_np[i])
+                            for i in range(len(receptors))]) + '\n'
+                else:
+                    predictions += '\n'.join(['{0} | {1:.7f} {2} {3}'.format(
+                        int(y_true_np[i]),
+                        y_pred_np[i],
+                        receptors[i],
+                        ligands[i]) for i in range(len(receptors))]) + '\n'
 
                 # Periodically write predictions to disk
                 if not (self.batch + 1) % log_interval or self.batch == len(
