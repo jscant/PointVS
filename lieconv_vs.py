@@ -174,18 +174,6 @@ class Session:
             self.test_data_loader = None
             self.predictions_file = None
 
-        self.last_train_batch_small = int(bool(
-            len(self.train_dataset) % self.batch_size))
-
-        self.epoch_size_train = self.last_train_batch_small + (
-                len(self.train_dataset) // self.batch_size)
-
-        if self.test_data_root is not None:
-            self.last_test_batch_small = int(bool(
-                len(self.test_dataset) % self.batch_size))
-            self.epoch_size_test = self.last_test_batch_small + (
-                    len(self.test_dataset) // self.batch_size)
-
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         self.criterion = nn.BCELoss().to(device)
@@ -220,8 +208,7 @@ class Session:
         <Session.save_path>.
         """
         start_time = self._setup_training_session()
-        total_iters = ((len(self.train_dataset) // self.batch_size) *
-                       self.epochs + self.last_train_batch_small)
+        total_iters = self.epochs * len(self.train_data_loader)
         log_interval = 10
         global_iter = 0
         self.network.train()
@@ -253,24 +240,31 @@ class Session:
                 active_idx = np.where(y_true_np > 0.5)
                 decoy_idx = np.where(y_true_np < 0.5)
 
+                wandb_update_dict = {
+                    'Binary crossentropy (train)': loss,
+                    'Batch': self.batch + 1
+                }
+
                 if len(active_idx[0]):
                     active_mean_pred = np.mean(y_pred_np[active_idx])
+                    wandb_update_dict.update({
+                        'Mean active prediction (train)': active_mean_pred
+                    })
                 if len(decoy_idx[0]):
                     decoy_mean_pred = np.mean(y_pred_np[decoy_idx])
+                    wandb_update_dict.update({
+                        'Mean decoy prediction (train)': decoy_mean_pred,
+                    })
 
                 if self.wandb:
-                    wandb.log({
-                        'Binary crossentropy': loss,
-                        'Mean active prediction': active_mean_pred,
-                        'Mean decoy prediction': decoy_mean_pred
-                    })
+                    wandb.log(wandb_update_dict)
 
                 print_with_overwrite(
                     (
                         'Epoch:',
                         '{0}/{1}'.format(self.epoch + 1, self.epochs),
                         '|', 'Iteration:', '{0}/{1}'.format(
-                            self.batch + 1, self.epoch_size_train)),
+                            self.batch + 1, len(self.train_data_loader))),
                     ('Time elapsed:', time_elapsed, '|',
                      'Time remaining:', eta),
                     ('Loss: {0:.4f}'.format(loss), '|',
@@ -315,7 +309,8 @@ class Session:
 
                 loss = self.criterion(y_pred.float(), y_true.float())
 
-                eta = get_eta(start_time, self.batch, self.epoch_size_test)
+                eta = get_eta(
+                    start_time, self.batch, len(self.test_data_loader))
                 time_elapsed = format_time(time.time() - start_time)
                 y_true_np = y_true.cpu().detach().numpy()
                 y_pred_np = y_pred.cpu().detach().numpy()
@@ -323,17 +318,29 @@ class Session:
                 active_idx = np.where(y_true_np > 0.5)
                 decoy_idx = np.where(y_true_np < 0.5)
 
+                wandb_update_dict = {
+                    'Binary crossentropy (validation)': loss,
+                    'Batch': self.batch + 1
+                }
+
                 if len(active_idx[0]):
-                    active_mean_pred = float(
-                        np.mean(y_pred_np[active_idx]))
+                    active_mean_pred = np.mean(y_pred_np[active_idx])
+                    wandb_update_dict.update({
+                        'Mean active prediction (validation)': active_mean_pred
+                    })
                 if len(decoy_idx[0]):
-                    decoy_mean_pred = float(
-                        np.mean(y_pred_np[decoy_idx]))
+                    decoy_mean_pred = np.mean(y_pred_np[decoy_idx])
+                    wandb_update_dict.update({
+                        'Mean decoy prediction (validation)': decoy_mean_pred,
+                    })
+
+                if self.wandb:
+                    wandb.log(wandb_update_dict)
 
                 print_with_overwrite(
                     ('Inference on: {}'.format(self.test_data_root), '|',
                      'Iteration:', '{0}/{1}'.format(
-                        self.batch + 1, self.epoch_size_test)),
+                        self.batch + 1, len(self.test_data_loader))),
                     ('Time elapsed:', time_elapsed, '|',
                      'Time remaining:', eta),
                     ('Loss: {0:.4f}'.format(loss), '|',
