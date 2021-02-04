@@ -52,7 +52,7 @@ def multiple_source_dataset(loader_class, *base_paths, receptors=None,
         sample_weights = torch.from_numpy(
             np.array([weights[i] for i in labels])).float()
         sampler = torch.utils.data.WeightedRandomSampler(
-            sample_weights, len(sample_weights), replacement=False
+            sample_weights, len(sample_weights)
         )
     multi_source_dataset = torch.utils.data.ConcatDataset(datasets)
     multi_source_dataset.sampler = sampler
@@ -121,7 +121,7 @@ class LieConvLoader(torch.utils.data.Dataset):
             self.sample_weights = torch.from_numpy(
                 np.array([weights[i] for i in labels])).float()
             self.sampler = torch.utils.data.WeightedRandomSampler(
-                self.sample_weights, len(self.sample_weights), replacement=False
+                self.sample_weights, len(self.sample_weights)
             )
         self.labels = labels
 
@@ -267,7 +267,7 @@ class SE3TransformerLoader(torch.utils.data.Dataset):
             sample_weights = torch.from_numpy(
                 np.array([weights[i] for i in labels])).float()
             sampler = torch.utils.data.WeightedRandomSampler(
-                sample_weights, len(sample_weights), replacement=False
+                sample_weights, len(sample_weights)
             )
         return filenames, labels, sampler
 
