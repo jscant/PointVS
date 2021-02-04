@@ -5,7 +5,7 @@ github.com/con-schneider
 
 The dataloader for LieConv is my own work.
 """
-
+import random
 from pathlib import Path
 
 import dgl
@@ -13,6 +13,7 @@ import numpy as np
 import torch
 import torch as th
 from scipy.spatial.distance import cdist
+from torch.utils.data import SubsetRandomSampler
 
 from preprocessing import centre_on_ligand, make_box, concat_structs, \
     make_bit_vector
@@ -51,7 +52,7 @@ def multiple_source_dataset(loader_class, *base_paths, receptors=None,
         sample_weights = torch.from_numpy(
             np.array([weights[i] for i in labels])).float()
         sampler = torch.utils.data.WeightedRandomSampler(
-            sample_weights, len(sample_weights)
+            sample_weights, len(sample_weights), replacement=False
         )
     multi_source_dataset = torch.utils.data.ConcatDataset(datasets)
     multi_source_dataset.sampler = sampler
@@ -120,7 +121,7 @@ class LieConvLoader(torch.utils.data.Dataset):
             self.sample_weights = torch.from_numpy(
                 np.array([weights[i] for i in labels])).float()
             self.sampler = torch.utils.data.WeightedRandomSampler(
-                self.sample_weights, len(self.sample_weights)
+                self.sample_weights, len(self.sample_weights), replacement=False
             )
         self.labels = labels
 
@@ -249,7 +250,6 @@ class SE3TransformerLoader(torch.utils.data.Dataset):
                 filenames += list((base_path / 'ligands').rglob(
                     '{}*/*.parquet'.format(receptor)))
 
-
         filenames = sorted(filenames)
         labels = []
         for fname in filenames:
@@ -267,7 +267,7 @@ class SE3TransformerLoader(torch.utils.data.Dataset):
             sample_weights = torch.from_numpy(
                 np.array([weights[i] for i in labels])).float()
             sampler = torch.utils.data.WeightedRandomSampler(
-                sample_weights, len(sample_weights)
+                sample_weights, len(sample_weights), replacement=False
             )
         return filenames, labels, sampler
 
@@ -496,3 +496,45 @@ class SE3TransformerLoader(torch.utils.data.Dataset):
         graphs, y = map(list, zip(*samples))
         batched_graph = dgl.batch(graphs)
         return (batched_graph,), th.tensor(y), ligands, receptors
+
+
+class SubsetSequentialSampler(SubsetRandomSampler):
+
+    def __iter__(self):
+        return (self.indices[i] for i in range(len(self.indices)))
+
+
+def ds(base_path, initial_size=10000, batch_size=5000):
+    loader = LieConvLoader(base_path)
+    indices = np.arange(len(loader))
+    selection = np.random.choice(indices, initial_size, replace=False)
+    data_loader_kwargs = {
+        'batch_size': batch_size,
+        'shuffle': False,
+        'num_workers': 0,
+        'sampler': SubsetRandomSampler(selection),
+        'collate_fn': loader.collate
+    }
+    training_loader = torch.utils.data.DataLoader(loader, **data_loader_kwargs)
+    # train model for 1 epoch
+    while True:
+        remaining = len(indices) - len(selection)
+        pool = np.random.choice(
+            np.setdiff1d(indices, selection), min(remaining, batch_size * 10), replace=False)
+        data_loader_kwargs['sampler'] = SubsetSequentialSampler(pool)
+        uncertainty_loader = torch.utils.data.DataLoader(
+            loader, **data_loader_kwargs)
+        uncertainties = []
+        for _ in uncertainty_loader:
+            # find uncertainties using model
+            # list of tuples: (entries in pool, uncertainty)
+            pass
+        uncertainties = sorted(
+            uncertainties,
+            key=lambda x: x[1],
+            reverse=True)[:min(remaining, batch_size)]
+        selection = np.concatenate(
+            [selection, np.array([u[0] for u in uncertainties])])
+
+        training_loader = torch.utils.data.DataLoader(loader, **data_loader_kwargs)
+        # Train model for one epoch
