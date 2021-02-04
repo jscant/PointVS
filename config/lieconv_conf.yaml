@@ -5,7 +5,7 @@ chin: 12
 ds_frac: 1.0
 fill: 1.0
 group: SE3
-k: 64
+k: 32
 knn: false
 liftsamples: 1
 mean: true
