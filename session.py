@@ -206,6 +206,8 @@ class Session:
             raise NotImplementedError(
                 'Unrecognised network class {}'.format(self.network.__class__))
 
+        self.evidential_loss = mse_loss
+
         self.train_dataset = multiple_source_dataset(
             dataset_class, self.train_data_root, self.translated_actives,
             **dataset_kwargs)
@@ -225,7 +227,7 @@ class Session:
             criterion = nn.BCELoss(reduction='none')
             print('Using weighted loss function with weights {0:.5f} and '
                   '{1:.5f}'.format(
-                    *list(self.sample_weights.cpu().detach().numpy())))
+                *list(self.sample_weights.cpu().detach().numpy())))
         data_loader_kwargs = {
             'batch_size': batch_size,
             'shuffle': shuffle,
@@ -297,6 +299,10 @@ class Session:
             if hasattr(self, 'run_name'):
                 wandb.run.name = self.run_name
             wandb.watch(self.network)
+        if isinstance(self.network, EvidentialLieResNet):
+            print('Using loss type', self.evidential_loss.__class__.__name__)
+        else:
+            print('Using BCELoss')
         for self.epoch in range(self.epochs):
             decoy_mean_pred, active_mean_pred = -1, -1
             for self.batch, (x, y_true, ligands, receptors) in enumerate(
@@ -316,8 +322,8 @@ class Session:
                     y_true = torch.nn.functional.one_hot(y_true, num_classes=2)
                     y_pred, uncertainty, alpha = y_pred
                     y_pred = y_pred.squeeze()
-                    loss = ce_loss(y_true, alpha, global_iter, total_iters,
-                                   self.device)
+                    loss = self.evidential_loss(
+                        y_true, alpha, global_iter, total_iters, self.device)
                 else:
                     y_pred = y_pred.squeeze()
                     loss = self.criterion(y_pred.float(), y_true.float())
@@ -341,6 +347,7 @@ class Session:
                 y_pred_np = y_pred.cpu().detach().numpy()
 
                 wandb_update_dict = {
+                    'Time remaining (train)': eta,
                     'Binary crossentropy (train)': loss,
                     'Batch': self.epoch * len(
                         self.train_data_loader) + self.batch + 1
@@ -438,7 +445,8 @@ class Session:
                     y_true = torch.nn.functional.one_hot(y_true, num_classes=2)
                     y_pred, uncertainty, alpha = y_pred
                     y_pred = y_pred.squeeze()
-                    loss = ce_loss(y_true, alpha, 1, 1, self.device).mean()
+                    loss = self.evidential_loss(
+                        y_true, alpha, 1, 1, self.device).mean()
                 else:
                     y_pred = y_pred.squeeze()
                     loss = self.criterion(y_pred.float(), y_true.float()).mean()
@@ -450,6 +458,7 @@ class Session:
                 y_pred_np = y_pred.cpu().detach().numpy()
 
                 wandb_update_dict = {
+                    'Time remaining (validation)': eta,
                     'Binary crossentropy (validation)': loss,
                     'Batch': self.batch + 1
                 }

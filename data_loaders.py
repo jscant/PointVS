@@ -506,8 +506,8 @@ class SubsetSequentialSampler(SubsetRandomSampler):
         return (self.indices[i] for i in range(len(self.indices)))
 
 
-def ds(base_path, initial_size=10000, batch_size=5000):
-    loader = LieConvLoader(base_path)
+def ds(session, initial_size=10000, batch_size=5000):
+    loader = LieConvLoader(session.train_data_root)
     indices = np.arange(len(loader))
     selection = np.random.choice(indices, initial_size, replace=False)
     data_loader_kwargs = {
@@ -518,7 +518,8 @@ def ds(base_path, initial_size=10000, batch_size=5000):
         'collate_fn': loader.collate
     }
     training_loader = torch.utils.data.DataLoader(loader, **data_loader_kwargs)
-    # train model for 1 epoch
+    session.train_data_loader(training_loader)
+    session.train()
     while True:
         remaining = len(indices) - len(selection)
         pool = np.random.choice(
