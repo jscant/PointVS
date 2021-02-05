@@ -18,6 +18,8 @@ import argparse
 import warnings
 from pathlib import PosixPath
 
+from lie_conv.lieConv import LieResNet
+
 from session import Session, EvidentialLieResNet, SE3TransformerSigmoid
 
 try:
@@ -105,7 +107,7 @@ if __name__ == '__main__':
         model_settings_class = SE3TransformerSettings
     elif args.model == 'lieconv':
         network_class = LieConvSettings
-        model_settings_class = LieConvSettings
+        model_settings_class = LieResNet
     elif args.model == 'evilieconv':
         network_class = EvidentialLieResNet
         model_settings_class = EvidentialLieConvSettings
