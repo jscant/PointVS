@@ -18,9 +18,8 @@ import argparse
 import warnings
 from pathlib import PosixPath
 
-from lie_conv.lieConv import LieResNet
-
-from session import Session, EvidentialLieResNet, SE3TransformerSigmoid
+from session import Session, EvidentialLieResNet, SE3TransformerSigmoid, \
+    LieResNetSigmoid
 
 try:
     import wandb
@@ -81,6 +80,11 @@ if __name__ == '__main__':
                              'batches.')
     parser.add_argument('--learning_rate', '-lr', type=float, default=None,
                         help='Learning rate for gradient descent')
+    parser.add_argument('--balancing', type=str,
+                        help='Use class balanced sampling. If not `balanced`, '
+                             'the loss function will be weighted by class '
+                             'imbalance according to the formula in '
+                             'https://arxiv.org/pdf/1901.05555.pdf')
     parser.add_argument('--model_conf', '-m', type=PosixPath,
                         help='Config file for model parameters. If unspecified,'
                              'certain defaults are used.')
@@ -106,8 +110,8 @@ if __name__ == '__main__':
         network_class = SE3TransformerSigmoid
         model_settings_class = SE3TransformerSettings
     elif args.model == 'lieconv':
-        network_class = LieConvSettings
-        model_settings_class = LieResNet
+        network_class = LieResNetSigmoid
+        model_settings_class = LieConvSettings
     elif args.model == 'evilieconv':
         network_class = EvidentialLieResNet
         model_settings_class = EvidentialLieConvSettings

@@ -117,13 +117,26 @@ def ce_loss(p, alpha, global_step, annealing_step, device):
     return A + B
 
 
+def get_class_balanced_weights(class_counts, beta=0.99999):
+    """From `Class-Balanced Loss Based on Effective Number of Samples`
+    https://arxiv.org/pdf/1901.05555.pdf"""
+    res = []
+    for count in class_counts:
+        res.append((1 - beta) / (1 - beta ** count))
+    res = np.array(res)
+    ratio = res[0] / res[1]
+    res[1] = 1 / (1 + ratio)
+    res[0] = 1 - res[1]
+    return res
+
+
 class Session:
     """Handles training of point cloud-based models."""
 
     def __init__(self, network, train_data_root, save_path, batch_size,
                  test_data_root=None, train_receptors=None, test_receptors=None,
                  save_interval=-1, learning_rate=0.01, epochs=1, radius=12,
-                 wandb=None, run=None, **kwargs):
+                 wandb=None, run=None, balancing='balanced', **kwargs):
         """Initialise session.
 
         Arguments:
@@ -144,6 +157,10 @@ class Session:
             radius: radius of bounding box (receptor atoms to include).
             wandb: name of wandb project (None = no logging).
             run: name of wandb project run (None = default)
+            balancing: either `balanced` for probabalistic sampling based on
+                class imbalance, or `weighted` to use weighted loss function
+                from `Class-Balanced Loss Based on Effective Number of Samples`
+                (https://arxiv.org/pdf/1901.05555.pdf).
             kwargs: translated actives keyword arguments
         """
         self.train_data_root = Path(train_data_root).expanduser()
@@ -165,6 +182,7 @@ class Session:
         self.radius = radius
         self.translated_actives = kwargs.get('translated_actives', None)
         self.n_translated_actives = kwargs.get('n_translated_actives', 0)
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         if isinstance(train_receptors, str):
             train_receptors = tuple([train_receptors])
@@ -192,11 +210,27 @@ class Session:
             dataset_class, self.train_data_root, self.translated_actives,
             **dataset_kwargs)
 
+        if balancing == 'balanced':
+            shuffle = False
+            sampler = self.train_dataset.sampler
+            self.sample_weights = None
+            criterion = nn.BCELoss()
+            print('Using balanced sampling')
+        else:
+            shuffle = True
+            sampler = None
+            class_sample_count = self.train_dataset.class_sample_count
+            self.sample_weights = torch.tensor(
+                get_class_balanced_weights(class_sample_count)).to(device)
+            criterion = nn.BCELoss(reduction='none')
+            print('Using weighted loss function with weights {0:.5f} and '
+                  '{1:.5f}'.format(
+                    *list(self.sample_weights.cpu().detach().numpy())))
         data_loader_kwargs = {
             'batch_size': batch_size,
-            'shuffle': False,
+            'shuffle': shuffle,
             'num_workers': 0,
-            'sampler': self.train_dataset.sampler,
+            'sampler': sampler,
             'collate_fn': self.train_dataset.collate
         }
 
@@ -223,9 +257,7 @@ class Session:
             self.test_data_loader = None
             self.predictions_file = None
 
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-        self.criterion = nn.BCELoss().to(device)
+        self.criterion = criterion.to(device)
         self.optimiser = torch.optim.Adam(self.network.parameters(), lr=self.lr)
         self.device = device
 
@@ -285,10 +317,20 @@ class Session:
                     y_pred, uncertainty, alpha = y_pred
                     y_pred = y_pred.squeeze()
                     loss = ce_loss(y_true, alpha, global_iter, total_iters,
-                                   self.device).mean()
+                                   self.device)
                 else:
                     y_pred = y_pred.squeeze()
                     loss = self.criterion(y_pred.float(), y_true.float())
+
+                if self.sample_weights is not None:
+                    weights = self.sample_weights[
+                        y_true.data.view(-1).long()].view_as(y_true)
+                    loss = loss * weights
+                    loss = loss.mean()
+                    if isinstance(self.network, EvidentialLieResNet):
+                        uncertainty = uncertainty * weights
+                elif isinstance(self.network, EvidentialLieResNet):
+                    loss = loss.mean()
 
                 loss.backward()
                 self.optimiser.step()
@@ -399,7 +441,7 @@ class Session:
                     loss = ce_loss(y_true, alpha, 1, 1, self.device).mean()
                 else:
                     y_pred = y_pred.squeeze()
-                    loss = self.criterion(y_pred.float(), y_true.float())
+                    loss = self.criterion(y_pred.float(), y_true.float()).mean()
 
                 eta = get_eta(
                     start_time, self.batch, len(self.test_data_loader))
@@ -459,8 +501,8 @@ class Session:
                          'Mean decoy: {0:.4f}'.format(decoy_mean_pred))
                     )
 
-                uncertainty_np = uncertainty.cpu().detach().numpy().squeeze()
                 if isinstance(self.network, EvidentialLieResNet):
+                    uncertainty_np = uncertainty.cpu().detach().numpy().squeeze()
                     predictions += '\n'.join(
                         ['{0} | {1:.7f} {2} {3} {4:.4f}'.format(
                             int(y_true_np[i]),

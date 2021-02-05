@@ -20,7 +20,7 @@ from preprocessing import centre_on_ligand, make_box, concat_structs, \
 
 
 def multiple_source_dataset(loader_class, *base_paths, receptors=None,
-                            **kwargs):
+                            balanced=True, **kwargs):
     """Concatenate mulitple datasets into one, preserving balanced sampling.
 
     Arguments:
@@ -30,6 +30,7 @@ def multiple_source_dataset(loader_class, *base_paths, receptors=None,
             <class>.labels.
         base_paths: locations of parquets files, one for each dataset.
         receptors: receptors to include. If None, all receptors found are used.
+        balanced: whether to sample probabailistically based on class imbalance.
         kwargs: other keyword arguments for loader_class.
 
     Returns:
@@ -45,7 +46,7 @@ def multiple_source_dataset(loader_class, *base_paths, receptors=None,
     labels = np.array(labels)
     class_sample_count = np.array(
         [len(labels) - np.sum(labels), np.sum(labels)])
-    if np.sum(labels) == len(labels) or np.sum(labels) == 0:
+    if np.sum(labels) == len(labels) or np.sum(labels) == 0 or not balanced:
         sampler = None
     else:
         weights = 1. / class_sample_count
@@ -57,6 +58,7 @@ def multiple_source_dataset(loader_class, *base_paths, receptors=None,
     multi_source_dataset = torch.utils.data.ConcatDataset(datasets)
     multi_source_dataset.sampler = sampler
     multi_source_dataset.collate = loader_class.collate
+    multi_source_dataset.class_sample_count = class_sample_count
     return multi_source_dataset
 
 
@@ -520,7 +522,8 @@ def ds(base_path, initial_size=10000, batch_size=5000):
     while True:
         remaining = len(indices) - len(selection)
         pool = np.random.choice(
-            np.setdiff1d(indices, selection), min(remaining, batch_size * 10), replace=False)
+            np.setdiff1d(indices, selection), min(remaining, batch_size * 10),
+            replace=False)
         data_loader_kwargs['sampler'] = SubsetSequentialSampler(pool)
         uncertainty_loader = torch.utils.data.DataLoader(
             loader, **data_loader_kwargs)
@@ -536,5 +539,6 @@ def ds(base_path, initial_size=10000, batch_size=5000):
         selection = np.concatenate(
             [selection, np.array([u[0] for u in uncertainties])])
 
-        training_loader = torch.utils.data.DataLoader(loader, **data_loader_kwargs)
+        training_loader = torch.utils.data.DataLoader(loader,
+                                                      **data_loader_kwargs)
         # Train model for one epoch
