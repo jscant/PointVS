@@ -331,8 +331,7 @@ class NeuralClassification(nn.Module):
                 optimizer.zero_grad()
                 x = tuple(utils.to_gpu(*x))
                 y = utils.to_gpu(y)
-                y_true_np = y.cpu().detach().numpy()
-                #y = nn.functional.one_hot(y, num_classes=2).squeeze()
+                y_true_np = y.cpu().detach().numpy()  # (bs, )
 
                 y_pred = self.forward(x)
 
@@ -352,19 +351,17 @@ class NeuralClassification(nn.Module):
                     'Batch': epoch * len(dataloader) + batch
                 }
 
-                y_pred_np = y_pred.cpu().detach().numpy()[:, 1]
-                active_idx = np.where(y_true_np[:, 1] > 0.5)
-                decoy_idx = np.where(y_true_np[:, 1] < 0.5)
+                y_pred_np = nn.Softmax(dim=1)(y_pred).cpu().detach().numpy()
+                active_idx = np.where(y_true_np > 0.5)  # (active_count, )
+                decoy_idx = np.where(y_true_np < 0.5)  # (decoy_count, )
 
                 if len(active_idx[0]):
-                    active_mean_pred = np.mean(
-                        sigmoid(y_pred_np[active_idx[1]]))
+                    active_mean_pred = np.mean(y_pred_np[active_idx, 1])
                     wandb_update_dict.update({
                         'Mean active prediction (train)': active_mean_pred
                     })
                 if len(decoy_idx[0]):
-                    decoy_mean_pred = np.mean(
-                        sigmoid(y_pred_np[decoy_idx[1]]))
+                    decoy_mean_pred = np.mean(y_pred_np[decoy_idx, 1])
                     wandb_update_dict.update({
                         'Mean decoy prediction (train)': decoy_mean_pred,
                     })

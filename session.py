@@ -32,6 +32,9 @@ from lieconv_utils import format_time, print_with_overwrite, get_eta
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
+def crossentropy(x):
+    return np.exp(-x)
+
 
 class LieFeatureExtractor(nn.Module):
     """We need all of our networks to finish with a sigmoid activation."""
@@ -505,13 +508,14 @@ class Session:
                     y_pred_samples = self.network.forward(x, num_samples=100)
                     y_pred = self.network._compute_predictive_posterior(
                         y_pred_samples)
+
                     loss = -self.network._compute_log_likelihood(
                         y_true.squeeze(), y_pred.squeeze())
                 else:
                     y_pred = self.network(x)
                     if isinstance(self.network, EvidentialLieResNet):
-                        y_true = torch.nn.functional.one_hot(y_true,
-                                                             num_classes=2)
+                        y_true = torch.nn.functional.one_hot(
+                            y_true, num_classes=2)
                         y_pred, uncertainty, alpha = y_pred
                         y_pred = y_pred.squeeze()
                         loss = self.evidential_loss(
@@ -540,16 +544,16 @@ class Session:
                         'Mean uncertainty (validation)':
                             float(uncertainty.mean())})
                 if isinstance(self.network, NeuralClassification):
-                    squash_fn = sigmoid
-                else:
-                    squash_fn = lambda x: x
+                    y_pred_np = nn.Softmax(dim=1)(y_pred).cpu().detach().numpy()
+                    active_idx = (*active_idx, 1)
+                    decoy_idx = (*decoy_idx, 1)
                 if len(active_idx[0]):
-                    active_mean_pred = np.mean(squash_fn(y_pred_np[active_idx]))
+                    active_mean_pred = np.mean(y_pred_np[active_idx])
                     wandb_update_dict.update({
                         'Mean active prediction (validation)': active_mean_pred
                     })
                 if len(decoy_idx[0]):
-                    decoy_mean_pred = np.mean(squash_fn(y_pred_np[decoy_idx]))
+                    decoy_mean_pred = np.mean(y_pred_np[decoy_idx])
                     wandb_update_dict.update({
                         'Mean decoy prediction (validation)': decoy_mean_pred,
                     })
@@ -595,7 +599,7 @@ class Session:
                 elif isinstance(self.network, NeuralClassification):
                     predictions += '\n'.join(['{0} | {1:.7f} {2} {3}'.format(
                         int(y_true_np[i]),
-                        float(torch.sigmoid(torch.as_tensor(y_pred_np[:, 1][i]))),
+                        float(y_pred_np[:, 1][i]),
                         receptors[i],
                         ligands[i]) for i in range(len(receptors))]) + '\n'
                 else:

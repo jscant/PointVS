@@ -58,7 +58,6 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
     }
     training_loader = torch.utils.data.DataLoader(
         session.train_dataset, **data_loader_kwargs)
-    print('len trainig loader', len(training_loader))
 
     print('Initial selection indices:', labelled_indices)
     print('Initial datset size:', len(labelled_indices))
