@@ -353,8 +353,8 @@ class NeuralClassification(nn.Module):
                 }
 
                 y_pred_np = y_pred.cpu().detach().numpy()[:, 1]
-                active_idx = np.where(y_true_np > 0.5)
-                decoy_idx = np.where(y_true_np < 0.5)
+                active_idx = np.where(y_true_np[:, 1] > 0.5)
+                decoy_idx = np.where(y_true_np[:, 1] < 0.5)
 
                 if len(active_idx[0]):
                     active_mean_pred = np.mean(
