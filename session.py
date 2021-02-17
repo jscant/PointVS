@@ -8,6 +8,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 from equivariant_attention.modules import get_basis_and_r
+from lie_conv.lieGroups import SE3
+from lie_conv.masked_batchnorm import MaskBatchNormNd
+from lie_conv.utils import Pass, Expression
+
+from acs import utils
+from acs.model import NeuralClassification
 
 try:
     import wandb
@@ -16,11 +22,53 @@ except ImportError:
           'used.')
     wandb = None
 from experiments.qm9.models import SE3Transformer
-from lie_conv.lieConv import LieResNet
+from lie_conv.lieConv import LieResNet, BottleBlock, Swish, LieConv, GlobalPool
 
 from data_loaders import SE3TransformerLoader, LieConvLoader, \
     multiple_source_dataset
 from lieconv_utils import format_time, print_with_overwrite, get_eta
+
+
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+
+class LieFeatureExtractor(nn.Module):
+    """We need all of our networks to finish with a sigmoid activation."""
+
+    def __init__(self, chin, ds_frac=1, k=64, nbhd=np.inf,
+                 act="swish", bn=True, num_layers=6, mean=True, per_point=True,
+                 liftsamples=1, fill=1 / 4, group=SE3, knn=False, cache=False,
+                 num_outputs=None, pool=None,
+                 **kwargs):
+        super().__init__()
+        utils.set_gpu_mode(True)
+        self.pretrained = False
+        if isinstance(fill, (float, int)):
+            fill = [fill] * num_layers
+        if isinstance(k, int):
+            k = [k] * (num_layers + 1)
+        conv = lambda ki, ko, fill: LieConv(ki, ko, mc_samples=nbhd,
+                                            ds_frac=ds_frac, bn=bn, act=act,
+                                            mean=mean,
+                                            group=group, fill=fill, cache=cache,
+                                            knn=knn, **kwargs)
+        self.net = nn.Sequential(
+            Pass(nn.Linear(chin, k[0]), dim=1),  # embedding layer
+            *[BottleBlock(k[i], k[i + 1], conv, bn=bn, act=act, fill=fill[i])
+              for i in range(num_layers)],
+            MaskBatchNormNd(k[-1]) if bn else nn.Sequential(),
+            Pass(nn.Linear(k[-1], 256), dim=1),
+            GlobalPool(mean=mean) if pool else Expression(lambda x: x[1]),
+            # Expression(lambda x: x[1]),
+        )
+        self.liftsamples = liftsamples
+        self.per_point = per_point
+        self.group = group
+
+    def forward(self, x):
+        lifted_x = self.group.lift(x, self.liftsamples)
+        return self.net(lifted_x)
 
 
 class LieResNetSigmoid(LieResNet):
@@ -200,7 +248,7 @@ class Session:
                 'mode': 'interaction_edges',
                 'interaction_dist': 4
             })
-        elif isinstance(self.network, LieResNet):
+        elif isinstance(self.network, (NeuralClassification, LieResNet)):
             dataset_class = LieConvLoader
         else:
             raise NotImplementedError(
@@ -267,6 +315,7 @@ class Session:
         self.wandb_path = self.save_path / 'wandb_{}'.format(wandb)
         if run is not None:
             self.run_name = run
+        self.network = self.network.to(device)
 
     def _setup_training_session(self):
         """Puts network on GPU and sets up directory structure."""
@@ -317,16 +366,28 @@ class Session:
                 y_true_np = y_true.cpu().detach().numpy()
                 active_idx = np.where(y_true_np > 0.5)
                 decoy_idx = np.where(y_true_np < 0.5)
-                y_pred = self.network(x)
-                if isinstance(self.network, EvidentialLieResNet):
+                if isinstance(self.network, NeuralClassification):
+                    y_pred_samples = self.network.forward(x,
+                                                          num_samples=100).squeeze()
+                    y_pred = self.network._compute_predictive_posterior(
+                        y_pred_samples)[
+                             None, :, :]
                     y_true = torch.nn.functional.one_hot(y_true, num_classes=2)
-                    y_pred, uncertainty, alpha = y_pred
-                    y_pred = y_pred.squeeze()
-                    loss = self.evidential_loss(
-                        y_true, alpha, global_iter, total_iters, self.device)
+                    loss = self.network._compute_log_likelihood(
+                        y_true.squeeze(), y_pred.squeeze())
                 else:
-                    y_pred = y_pred.squeeze()
-                    loss = self.criterion(y_pred.float(), y_true.float())
+                    y_pred = self.network(x)
+                    if isinstance(self.network, EvidentialLieResNet):
+                        y_true = torch.nn.functional.one_hot(y_true,
+                                                             num_classes=2)
+                        y_pred, uncertainty, alpha = y_pred
+                        y_pred = y_pred.squeeze()
+                        loss = self.evidential_loss(
+                            y_true, alpha, global_iter, total_iters,
+                            self.device)
+                    else:
+                        y_pred = y_pred.squeeze()
+                        loss = self.criterion(y_pred.float(), y_true.float())
 
                 if self.sample_weights is not None:
                     weights = self.sample_weights[
@@ -440,16 +501,25 @@ class Session:
                 y_true_np = y_true.cpu().detach().numpy()
                 active_idx = np.where(y_true_np > 0.5)
                 decoy_idx = np.where(y_true_np < 0.5)
-                y_pred = self.network(x)
-                if isinstance(self.network, EvidentialLieResNet):
-                    y_true = torch.nn.functional.one_hot(y_true, num_classes=2)
-                    y_pred, uncertainty, alpha = y_pred
-                    y_pred = y_pred.squeeze()
-                    loss = self.evidential_loss(
-                        y_true, alpha, 1, 1, self.device).mean()
+                if isinstance(self.network, NeuralClassification):
+                    y_pred_samples = self.network.forward(x, num_samples=100)
+                    y_pred = self.network._compute_predictive_posterior(
+                        y_pred_samples)
+                    loss = -self.network._compute_log_likelihood(
+                        y_true.squeeze(), y_pred.squeeze())
                 else:
-                    y_pred = y_pred.squeeze()
-                    loss = self.criterion(y_pred.float(), y_true.float()).mean()
+                    y_pred = self.network(x)
+                    if isinstance(self.network, EvidentialLieResNet):
+                        y_true = torch.nn.functional.one_hot(y_true,
+                                                             num_classes=2)
+                        y_pred, uncertainty, alpha = y_pred
+                        y_pred = y_pred.squeeze()
+                        loss = self.evidential_loss(
+                            y_true, alpha, 1, 1, self.device).mean()
+                    else:
+                        y_pred = y_pred.squeeze()
+                        loss = self.criterion(y_pred.float(),
+                                              y_true.float()).mean()
 
                 eta = get_eta(
                     start_time, self.batch, len(self.test_data_loader))
@@ -469,15 +539,17 @@ class Session:
                     wandb_update_dict.update({
                         'Mean uncertainty (validation)':
                             float(uncertainty.mean())})
+                if isinstance(self.network, NeuralClassification):
+                    squash_fn = sigmoid
+                else:
+                    squash_fn = lambda x: x
                 if len(active_idx[0]):
-                    active_mean_pred = np.mean(
-                        y_pred_np[active_idx])
+                    active_mean_pred = np.mean(squash_fn(y_pred_np[active_idx]))
                     wandb_update_dict.update({
                         'Mean active prediction (validation)': active_mean_pred
                     })
                 if len(decoy_idx[0]):
-                    decoy_mean_pred = np.mean(
-                        y_pred_np[decoy_idx])
+                    decoy_mean_pred = np.mean(squash_fn(y_pred_np[decoy_idx]))
                     wandb_update_dict.update({
                         'Mean decoy prediction (validation)': decoy_mean_pred,
                     })
@@ -520,6 +592,12 @@ class Session:
                             ligands[i],
                             uncertainty_np[i])
                             for i in range(len(receptors))]) + '\n'
+                elif isinstance(self.network, NeuralClassification):
+                    predictions += '\n'.join(['{0} | {1:.7f} {2} {3}'.format(
+                        int(y_true_np[i]),
+                        float(torch.sigmoid(torch.as_tensor(y_pred_np[:, 1][i]))),
+                        receptors[i],
+                        ligands[i]) for i in range(len(receptors))]) + '\n'
                 else:
                     predictions += '\n'.join(['{0} | {1:.7f} {2} {3}'.format(
                         int(y_true_np[i]),

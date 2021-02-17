@@ -18,8 +18,10 @@ import argparse
 import warnings
 from pathlib import PosixPath
 
+from acs.model import NeuralClassification
+from active_learning import active_learning
 from session import Session, EvidentialLieResNet, SE3TransformerSigmoid, \
-    LieResNetSigmoid
+    LieResNetSigmoid, LieFeatureExtractor
 
 try:
     import wandb
@@ -95,6 +97,13 @@ if __name__ == '__main__':
                              'logging will not be used.')
     parser.add_argument('--run', type=str,
                         help='Name of run for wandb logging.')
+    parser.add_argument('--al_batch_size', '-albs', type=int, default=-1,
+                        help='Number of batches to increase training pool size '
+                             'at each iteration of active learning. If '
+                             'unspecified, active learning will not be used.')
+    parser.add_argument('--al_initial_pool_size', '-alips', type=int,
+                        default=-1,
+                        help='Size of initial pool size for active learning.')
     args = parser.parse_args()
 
     save_path = args.save_path.expanduser()
@@ -106,11 +115,16 @@ if __name__ == '__main__':
 
     conf_base_name = args.model + '_conf.yaml'
 
+    al = False
     if args.model == 'se3trans':
         network_class = SE3TransformerSigmoid
         model_settings_class = SE3TransformerSettings
     elif args.model == 'lieconv':
-        network_class = LieResNetSigmoid
+        if args.al_batch_size > 0 and args.al_initial_pool_size > 0:
+            network_class = LieFeatureExtractor
+            al = True
+        else:
+            network_class = LieResNetSigmoid
         model_settings_class = LieConvSettings
     elif args.model == 'evilieconv':
         network_class = EvidentialLieResNet
@@ -126,9 +140,19 @@ if __name__ == '__main__':
             if value is not None:
                 if hasattr(model_settings, arg):
                     setattr(model_settings, arg, value)
+        print('\n============================\nModel settings\n================'
+              '============')
+        for key, value in vars(model_settings).items():
+            print(key, ':', value)
         if args.wandb is not None:
             wandb.config.update(model_settings.settings, allow_val_change=True)
-        network = network_class(**model_settings.settings)
+        if al:
+            ms = model_settings.settings.copy()
+            ms['num_outputs'] = 2
+            network = NeuralClassification(
+                network_class(**ms), num_features=256)
+        else:
+            network = network_class(**model_settings.settings)
 
     # Load session settings either from custom yaml or defaults. Command line
     # args will take presidence over yaml args
@@ -138,6 +162,11 @@ if __name__ == '__main__':
             if value is not None:
                 if hasattr(session_settings, arg):
                     setattr(session_settings, arg, value)
+        print('\n============================\nSession settings\n=============='
+              '==============')
+        for key, value in vars(session_settings).items():
+            print(key, ':', value)
+        print()
         if args.wandb is not None:
             wandb.config.update(
                 session_settings.settings, allow_val_change=True)
@@ -150,6 +179,10 @@ if __name__ == '__main__':
         for arg, value in vars(args).items():
             if value is not None:
                 setattr(sess, arg, value)
+
+    if al:
+        active_learning(sess, args.al_initial_pool_size, args.al_batch_size,
+                        wandb_project=args.wandb, wandb_run=args.run)
 
     if args.wandb is None:
         sess.wandb = None

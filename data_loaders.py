@@ -5,7 +5,6 @@ github.com/con-schneider
 
 The dataloader for LieConv is my own work.
 """
-import random
 from pathlib import Path
 
 import dgl
@@ -13,7 +12,7 @@ import numpy as np
 import torch
 import torch as th
 from scipy.spatial.distance import cdist
-from torch.utils.data import SubsetRandomSampler
+from torch.utils.data import SubsetRandomSampler, WeightedRandomSampler
 
 from preprocessing import centre_on_ligand, make_box, concat_structs, \
     make_bit_vector
@@ -52,13 +51,12 @@ def multiple_source_dataset(loader_class, *base_paths, receptors=None,
         weights = 1. / class_sample_count
         sample_weights = torch.from_numpy(
             np.array([weights[i] for i in labels])).float()
-        sampler = torch.utils.data.WeightedRandomSampler(
-            sample_weights, len(sample_weights)
-        )
+        sampler = WeightedRandomSampler(sample_weights, len(sample_weights))
     multi_source_dataset = torch.utils.data.ConcatDataset(datasets)
     multi_source_dataset.sampler = sampler
     multi_source_dataset.collate = loader_class.collate
     multi_source_dataset.class_sample_count = class_sample_count
+    multi_source_dataset.labels = labels
     return multi_source_dataset
 
 
@@ -75,7 +73,8 @@ def one_hot(numerical_category, num_classes):
 class LieConvLoader(torch.utils.data.Dataset):
     """Class for feeding structure parquets into network."""
 
-    def __init__(self, base_path, radius=12, receptors=None, **kwargs):
+    def __init__(self, base_path, radius=12, receptors=None, data_only=False,
+                 **kwargs):
         """Initialise dataset.
 
         Arguments:
@@ -126,6 +125,7 @@ class LieConvLoader(torch.utils.data.Dataset):
                 self.sample_weights, len(self.sample_weights)
             )
         self.labels = labels
+        self.data_only = data_only
 
     def __len__(self):
         """Returns the total size of the dataset."""
@@ -506,40 +506,24 @@ class SubsetSequentialSampler(SubsetRandomSampler):
         return (self.indices[i] for i in range(len(self.indices)))
 
 
-def ds(session, initial_size=10000, batch_size=5000):
-    loader = LieConvLoader(session.train_data_root)
-    indices = np.arange(len(loader))
-    selection = np.random.choice(indices, initial_size, replace=False)
-    data_loader_kwargs = {
-        'batch_size': batch_size,
-        'shuffle': False,
-        'num_workers': 0,
-        'sampler': SubsetRandomSampler(selection),
-        'collate_fn': loader.collate
-    }
-    training_loader = torch.utils.data.DataLoader(loader, **data_loader_kwargs)
-    session.train_data_loader(training_loader)
-    session.train()
-    while True:
-        remaining = len(indices) - len(selection)
-        pool = np.random.choice(
-            np.setdiff1d(indices, selection), min(remaining, batch_size * 10),
-            replace=False)
-        data_loader_kwargs['sampler'] = SubsetSequentialSampler(pool)
-        uncertainty_loader = torch.utils.data.DataLoader(
-            loader, **data_loader_kwargs)
-        uncertainties = []
-        for _ in uncertainty_loader:
-            # find uncertainties using model
-            # list of tuples: (entries in pool, uncertainty)
-            pass
-        uncertainties = sorted(
-            uncertainties,
-            key=lambda x: x[1],
-            reverse=True)[:min(remaining, batch_size)]
-        selection = np.concatenate(
-            [selection, np.array([u[0] for u in uncertainties])])
+class WeightedSubsetRandomSampler(WeightedRandomSampler):
+    def __init__(self, weights, indices, replacement=True,
+                 generator=None):
+        if not isinstance(replacement, bool):
+            raise ValueError("replacement should be a boolean value, but got "
+                             "replacement={}".format(replacement))
+        self.np_indices = np.array(indices)
+        self.np_subweights = np.array(weights)[self.np_indices]
 
-        training_loader = torch.utils.data.DataLoader(loader,
-                                                      **data_loader_kwargs)
-        # Train model for one epoch
+        self.subweights = torch.as_tensor(
+            self.np_subweights, dtype=torch.double)
+
+        self.replacement = replacement
+        self.generator = generator
+        self.num_samples = len(self.np_indices)
+
+    def __iter__(self):
+        rand_tensor = torch.multinomial(
+            self.subweights, len(self.np_subweights), self.replacement,
+            generator=self.generator).numpy()
+        return iter(list(self.np_indices[rand_tensor]))
