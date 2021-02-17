@@ -612,7 +612,7 @@ class Session:
                         f.write(predictions)
                         predictions = ''
 
-    def save(self):
+    def save(self, save_path=None):
         """Save all session attributes, including internal states."""
         attributes = {}
         accounted_for = set('network')
@@ -634,9 +634,12 @@ class Session:
             attributes.update({var: val})
 
         Path(self.save_path, 'checkpoints').mkdir(exist_ok=True, parents=True)
-        torch.save(attributes, Path(
-            self.save_path, 'checkpoints',
-            'ckpt_epoch_{}_batch_{}.pt'.format(self.epoch + 1, self.batch)))
+        if save_path is None:
+            torch.save(attributes, Path(
+                self.save_path, 'checkpoints',
+                'ckpt_epoch_{}_batch_{}.pt'.format(self.epoch + 1, self.batch)))
+        else:
+            torch.save(attributes, Path(save_path))
 
     def load(self, checkpoint_path):
         """Fully automatic loading of models saved with self.save.

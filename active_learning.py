@@ -76,6 +76,8 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
                                  wandb_run=wandb_run, opt_cycle=opt_cycle,
                                  **optim_params)
         print('Finished training')
+        session.save(
+            session.save_path / 'checkpoints' / '{}.pt'.format(opt_cycle))
         print('Testing...')
         session.predictions_file = next(test_fnames)
         session.test()
@@ -97,3 +99,4 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
         labelled_indices = np.array(
             list(labelled_indices) + list(batch_indices_global))
         data_loader_kwargs['sampler'] = generate_sampler()
+        opt_cycle += 1
