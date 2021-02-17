@@ -91,7 +91,7 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
         enumerate(session.train_dataset)
         training_loader = torch.utils.data.DataLoader(
             session.train_dataset, **data_loader_kwargs)
-        cs = coreset(session.network, training_loader, 10, **cs_kwargs)
+        cs = coreset(session.network, training_loader, 64, **cs_kwargs)
         print('Projections calculated')
         batch_indices_local = cs.build(next_pool_size)
         batch_indices_global = pool[batch_indices_local]

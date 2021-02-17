@@ -3,7 +3,6 @@ import torch
 import abc
 
 import acs.utils as utils
-from acs.baselines import kCenterGreedy, kMedoids
 
 
 class CoresetConstruction(metaclass=abc.ABCMeta):
@@ -228,68 +227,6 @@ class FrankWolfe(CoresetConstruction):
         return numerator / denominator, f1
 
 
-class KMedoids(CoresetConstruction):
-    """
-    Constructs a batch of points using the k-medoids algorithm.
-    """
-    def _init_build(self, M, **kwargs):
-        """
-        Selects unlabeled data points according to k-medoids algorithm.
-        :param M: (int) Batch size.
-        :param kwargs: (dict) Additional arguments.
-        """
-        idx = kMedoids(self.X_unlabeled, M)
-        self.counts = np.zeros_like(self.scores)
-        self.counts[idx] = 1.
-
-    def _step(self, m, w, **kwargs):
-        """
-        Adds the m-th selected data point to the batch.
-        :param m: (int) Batch iteration.
-        :param w: (numpy array) Current weight vector.
-        :param kwargs: (dict) Additional arguments.
-        :return: (numpy array) Weight vector after adding m-th data point to the batch.
-        """
-        w[np.argsort(-self.counts)[m]] = 1.
-        return w
-
-
-class KCenter(CoresetConstruction):
-    def __init__(self, acq, data, posterior, **kwargs):
-        """
-        Constructs a batch of points using the k-center algorithm.
-        :param acq: (function) Acquisition function. Unused.
-        :param data: (ActiveLearningDataset) Dataset.
-        :param posterior: (function) Function to compute posterior mean and covariance.
-        :param kwargs: (dict) Additional arguments.
-        """
-        super().__init__(acq, data, posterior, **kwargs)
-        train_idx, unlabeled_idx = data.index['train'], data.index['unlabeled']
-        self.X = data.X[np.hstack([train_idx, unlabeled_idx])]  # work on both labeled and unlabeled points
-        self.already_selected = range(len(train_idx))
-
-    def _init_build(self, M, **kwargs):
-        """
-        Selects unlabeled data points according to k-center algorithm.
-        :param M: (int) Batch size.
-        :param kwargs: (dict) Additional arguments.
-        """
-        kcg = kCenterGreedy(self.X)
-        idx = kcg.select_batch(self.already_selected, M)
-        idx = np.array(idx) - len(self.X_train)  # shift indices to unlabeled data
-        self.counts = np.zeros_like(self.scores)
-        self.counts[idx] = 1.
-
-    def _step(self, m, w, **kwargs):
-        """
-        Adds the m-th selected data point to the batch.
-        :param m: (int) Batch iteration.
-        :param w: (numpy array) Current weight vector.
-        :param kwargs: (dict) Additional arguments.
-        :return: (numpy array) Weight vector after adding m-th data point to the batch.
-        """
-        w[np.argsort(-self.counts)[m]] = 1.
-        return w
 
 
 class ProjectedFrankWolfe(object):
