@@ -382,6 +382,7 @@ class NeuralClassification(nn.Module):
                      'Mean active: {0:.4f}'.format(active_mean_pred), '|',
                      'Mean decoy: {0:.4f}'.format(decoy_mean_pred))
                 )
+                global_iter += 1
 
                 #performance = self._evaluate_performance(y, y_pred)
                 losses.append(step_loss.cpu().item())
