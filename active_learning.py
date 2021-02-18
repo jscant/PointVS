@@ -122,7 +122,7 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
         elif mode == 'control':
             print('Generating random learning batch')
             batch_indices_global = np.random.choice(
-                unlabelled_indices, next_pool_size)
+                unlabelled_indices, next_pool_size, replace=False)
         print()
         print('Newly labelled data count:', len(batch_indices_global))
         print()
