@@ -21,7 +21,7 @@ from pathlib import PosixPath
 from acs.model import NeuralClassification
 from active_learning import active_learning
 from session import Session, EvidentialLieResNet, SE3TransformerSigmoid, \
-    LieResNetSigmoid, LieFeatureExtractor, LieTransformerResNet
+    LieResNetSigmoid, LieFeatureExtractor
 
 try:
     import wandb
