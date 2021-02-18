@@ -14,6 +14,7 @@ from lie_conv.utils import Pass, Expression
 
 from acs import utils
 from acs.model import NeuralClassification
+from lie_transformer_pytorch import LieTransformer
 
 try:
     import wandb
@@ -31,6 +32,7 @@ from lieconv_utils import format_time, print_with_overwrite, get_eta
 
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
+
 
 def crossentropy(x):
     return np.exp(-x)
@@ -80,6 +82,69 @@ class LieResNetSigmoid(LieResNet):
     def forward(self, x):
         lifted_x = self.group.lift(x, self.liftsamples)
         return torch.sigmoid(self.net(lifted_x))
+
+
+class LieTransformerBottleBlock(nn.Module):
+    """ A bottleneck residual block as described in figure 5"""
+
+    def __init__(self, chin, chout, conv, bn=False, act='swish', fill=None):
+        super().__init__()
+        assert chin <= chout, f"unsupported channels chin{chin}, chout{chout}. No upsampling atm."
+        nonlinearity = Swish if act == 'swish' else nn.ReLU
+        self.conv = conv(
+            chin // 4, chout // 4, fill=fill) if fill is not None \
+            else conv(chin // 4, chout // 4)
+        self.net = nn.Sequential(
+            MaskBatchNormNd(chin) if bn else nn.Sequential(),
+            Pass(nonlinearity(), dim=1),
+            Pass(nn.Linear(chin, chin // 4), dim=1),
+            MaskBatchNormNd(chin // 4) if bn else nn.Sequential(),
+            Pass(nonlinearity(), dim=1),
+            self.conv,
+            MaskBatchNormNd(chout // 4) if bn else nn.Sequential(),
+            Pass(nonlinearity(), dim=1),
+            Pass(nn.Linear(chout // 4, chout), dim=1),
+        )
+        self.chin = chin
+
+    def forward(self, inp):
+        sub_coords, sub_values, mask = self.conv.forward(inp)
+        new_coords, new_values, mask = self.net(inp)
+        new_values[..., :self.chin] += sub_values
+        return new_coords, new_values, mask
+
+
+class LieTransformerResNet(nn.Module):
+    def __init__(self, chin, ds_frac=1, num_outputs=1, k=1536, nbhd=np.inf,
+                 act="swish", bn=True, num_layers=6, mean=True, per_point=True,
+                 pool=True,
+                 liftsamples=1, fill=1 / 4, group=SE3, knn=False, cache=False,
+                 **kwargs):
+        super().__init__()
+        if isinstance(fill, (float, int)):
+            fill = [fill] * num_layers
+        if isinstance(k, int):
+            k = [k] * (num_layers + 1)
+        conv = lambda ki, ko, fill: LieTransformer(
+            ki, dim_out=ko, nbhd=nbhd, ds_frac=ds_frac,
+            mean=mean, fill=fill, cache=cache, **kwargs)
+        self.net = nn.Sequential(
+            Pass(nn.Linear(chin, k[0]), dim=1),  # embedding layer
+            *[LieTransformerBottleBlock(k[i], k[i + 1], conv, bn=bn, act=act,
+                                        fill=fill[i])
+              for i in range(num_layers)],
+            MaskBatchNormNd(k[-1]) if bn else nn.Sequential(),
+            Pass(Swish() if act == 'swish' else nn.ReLU(), dim=1),
+            Pass(nn.Linear(k[-1], num_outputs), dim=1),
+            GlobalPool(mean=mean) if pool else Expression(lambda x: x[1]),
+        )
+        self.liftsamples = liftsamples
+        self.per_point = per_point
+        self.group = group
+
+    def forward(self, feats, coors, mask=None):
+        lifted_x = self.group.lift(x, self.liftsamples)
+        return self.net(lifted_x)
 
 
 class SE3TransformerSigmoid(SE3Transformer):
@@ -251,7 +316,8 @@ class Session:
                 'mode': 'interaction_edges',
                 'interaction_dist': 4
             })
-        elif isinstance(self.network, (NeuralClassification, LieResNet)):
+        elif isinstance(self.network, (
+                NeuralClassification, LieResNet, LieTransformerResNet)):
             dataset_class = LieConvLoader
         else:
             raise NotImplementedError(
@@ -378,6 +444,13 @@ class Session:
                     y_true = torch.nn.functional.one_hot(y_true, num_classes=2)
                     loss = self.network._compute_log_likelihood(
                         y_true.squeeze(), y_pred.squeeze())
+                elif isinstance(self.network, LieTransformerResNet):
+                    coords, features, mask = x
+                    y_pred = self.network.forward(features, coords, mask=mask)
+                    y_pred = y_pred.squeeze()
+                    print(y_pred.shape)
+                    print(y_true.shape)
+                    loss = self.criterion(y_pred.float(), y_true.float())
                 else:
                     y_pred = self.network(x)
                     if isinstance(self.network, EvidentialLieResNet):

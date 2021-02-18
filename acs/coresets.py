@@ -289,7 +289,7 @@ class ProjectedFrankWolfe(object):
         scores = (self.ELn / self.sigmas[:, None]) @ (self.EL - self.ELw)
         f = torch.argmax(scores)
         gamma, f1 = self.compute_gamma(f, w)
-        print('f: {}, gamma: {:.4f}, score: {:.4f}'.format(f, gamma.item(), scores[f].item()))
+        #print('f: {}, gamma: {:.4f}, score: {:.4f}'.format(f, gamma.item(), scores[f].item()))
         if np.isnan(gamma.cpu()):
             raise ValueError
 

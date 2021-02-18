@@ -5,16 +5,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 import wandb
+from torch.distributions.multivariate_normal import MultivariateNormal as MVN
 from torch.nn.functional import one_hot
 from torch.utils.data import DataLoader
-from torch.distributions.normal import Normal
-from torch.distributions.multivariate_normal import MultivariateNormal as MVN
 
 import acs.utils as utils
 from acs.al_data_set import Dataset
-
-from sklearn.metrics import roc_auc_score
-
 from lieconv_utils import print_with_overwrite, format_time, get_eta
 
 
@@ -218,8 +214,7 @@ class NeuralClassification(nn.Module):
     :param cov_rank: (int) Optional, if using low-rank approximation, specify rank
     """
     def __init__(self, feature_extractor=None, metric='Acc',
-                 num_features=256, full_cov=False, cov_rank=2, wandb=None,
-                 run=None):
+                 num_features=256, full_cov=False, cov_rank=2):
         super().__init__()
         self.num_classes = 2
         self.feature_extractor = feature_extractor
@@ -243,8 +238,6 @@ class NeuralClassification(nn.Module):
         #self.cross_entropy = nn.CrossEntropyLoss(reduction='none')
         self.cross_entropy = nn.CrossEntropyLoss()
         self.metric = metric
-        self.wandb = wandb
-        self.run = run
 
     def forward(self, x, num_samples=1):
         """
@@ -267,7 +260,7 @@ class NeuralClassification(nn.Module):
         return x
 
     def optimize(self, data, num_epochs=1000, batch_size=64, initial_lr=1e-2, freq_summary=100,
-                 weight_decay=1e-1, weight_decay_theta=None, train_transform=None, val_transform=None, wandb_project=None, wandb_run=None, opt_cycle=0, **kwargs):
+                 weight_decay=1e-1, weight_decay_theta=None, train_transform=None, val_transform=None, opt_cycle=0, **kwargs):
         """
         Internal functionality to train model
         :param data: (Object) Training data
@@ -315,11 +308,6 @@ class NeuralClassification(nn.Module):
                 num_workers=4
             )
 
-        if wandb_project is not None:
-            if wandb_run is not None:
-                wandb.run.name = wandb_run
-            wandb.watch(self)
-
         start_time = time.time()
         total_iters = num_epochs * len(dataloader)
         global_iter = 0
@@ -366,8 +354,11 @@ class NeuralClassification(nn.Module):
                         'Mean decoy prediction (train)': decoy_mean_pred,
                     })
 
-                if wandb_project is not None:
+                try:
                     wandb.log(wandb_update_dict)
+                except wandb.Error:
+                    pass
+
 
                 print_with_overwrite(
                     (

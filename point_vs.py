@@ -21,7 +21,7 @@ from pathlib import PosixPath
 from acs.model import NeuralClassification
 from active_learning import active_learning
 from session import Session, EvidentialLieResNet, SE3TransformerSigmoid, \
-    LieResNetSigmoid, LieFeatureExtractor
+    LieResNetSigmoid, LieFeatureExtractor, LieTransformerResNet
 
 try:
     import wandb
@@ -104,6 +104,9 @@ if __name__ == '__main__':
     parser.add_argument('--al_initial_pool_size', '-alips', type=int,
                         default=-1,
                         help='Size of initial pool size for active learning.')
+    parser.add_argument('--al_control', action='store_true',
+                        help='Active learning with random data selection (used '
+                             'as a control).')
     args = parser.parse_args()
 
     save_path = args.save_path.expanduser()
@@ -181,8 +184,9 @@ if __name__ == '__main__':
                 setattr(sess, arg, value)
 
     if al:
+        mode = 'control' if args.al_control else 'active'
         active_learning(sess, args.al_initial_pool_size, args.al_batch_size,
-                        wandb_project=args.wandb, wandb_run=args.run)
+                        mode=mode, wandb_project=args.wandb, wandb_run=args.run)
 
     if args.wandb is None:
         sess.wandb = None
