@@ -84,7 +84,7 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
         remaining = len(indices) - len(labelled_indices)
         pool = np.random.choice(
             np.setdiff1d(indices, labelled_indices),
-            min(remaining, next_pool_size),
+            min(remaining, next_pool_size * 10),
             replace=False)
         data_loader_kwargs['sampler'] = SubsetSequentialSampler(pool)
         enumerate(session.train_dataset)
