@@ -123,6 +123,9 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
             print('Generating random learning batch')
             batch_indices_global = np.random.choice(
                 unlabelled_indices, next_pool_size, replace=False)
+        else:
+            raise NotImplementedError(
+                'active learning mode must be one of `control` or `active`')
         print()
         print('Newly labelled data count:', len(batch_indices_global))
         print()
