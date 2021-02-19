@@ -503,7 +503,7 @@ class SE3TransformerLoader(torch.utils.data.Dataset):
 class SubsetSequentialSampler(SubsetRandomSampler):
 
     def __iter__(self):
-        return (self.indices[i] for i in range(len(self.indices)))
+        return (self.indices[i] for i in np.arange(len(self.indices)))
 
 
 class WeightedSubsetRandomSampler(WeightedRandomSampler):

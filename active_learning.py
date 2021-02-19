@@ -9,7 +9,7 @@ from data_loaders import WeightedSubsetRandomSampler, SubsetSequentialSampler
 def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
                     mode='active', projections=64, wandb_project=None,
                     wandb_run=None):
-    def generate_sampler():
+    def random_sampler_from_labelled():
         n_labelled_actives = np.sum(labels[labelled_indices])
         n_labelled_decoys = len(labelled_indices) - n_labelled_actives
 
@@ -79,7 +79,7 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
 
         # Construct data loader and train on labelled data
         enumerate(session.train_dataset)
-        train_data_loader_kwargs['sampler'] = generate_sampler()
+        train_data_loader_kwargs['sampler'] = random_sampler_from_labelled()
         training_loader = torch.utils.data.DataLoader(
             session.train_dataset, **train_data_loader_kwargs)
         session.network.apply(session.weights_init)
