@@ -40,7 +40,7 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
     """
 
     def random_sampler_from_labelled():
-        """Generates random sampler from subset of labels, weighted by class.
+        """Generate random sampler from subset of labels, weighted by class.
 
         This will only index from samples in the labelled_indices variable, and
         class weighting is taken from this subset rather than statistics on
@@ -64,7 +64,7 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
                 sample_weights, labelled_indices)
 
     def test_fname_generator(stem):
-        """Generates sequential filenames for validation outputs."""
+        """Generate sequential filenames for validation outputs."""
         x = 0
         while True:
             yield '{0}_{1}.txt'.format(stem, x)

@@ -254,6 +254,7 @@ class Session:
             })
         elif isinstance(self.network, (
                 NeuralClassification, LieResNet)):
+            dataset_kwargs.update({'rot': True})
             dataset_class = LieConvLoader
         else:
             raise NotImplementedError(
@@ -298,6 +299,8 @@ class Session:
         if self.test_data_root is not None:
             del data_loader_kwargs['sampler']
             dataset_kwargs.update({'receptors': test_receptors})
+            if isinstance(self.network, (NeuralClassification, LieResNet)):
+                dataset_kwargs['rot'] = False
             self.test_dataset = dataset_class(
                 self.test_data_root, **dataset_kwargs
             )

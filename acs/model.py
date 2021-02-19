@@ -1,3 +1,5 @@
+"""Modified from https://github.com/rpinsler/active-bayesian-coresets"""
+
 import time
 
 import gtimer as gt
@@ -50,34 +52,37 @@ def collate(batch):
             m_batch.bool()), label_batch.long(), ligands, receptors
 
 
-### LAYERS ###
-
-
-
-
 class LinearVariance(nn.Linear):
     def __init__(self, in_features, out_features, bias):
-        """
-        Helper module for computing the variance given a linear layer.
-        :param in_features: (int) Number of input features to layer.
-        :param out_features: (int) Number of output features from layer.
+        """Helper module for computing the variance given a linear layer.
+
+        Arguments:
+            in_features: (int) Number of input features to layer.
+
+        Returns:
+            out_features: (int) Number of output features from layer.
         """
         super().__init__(in_features, out_features, bias)
         self.softplus = nn.Softplus()
 
     @property
     def w_var(self):
-        """
-        Computes variance from log std parameter.
-        :return: (torch.tensor) Variance
+        """Computes variance from log std parameter.
+
+        Returns:
+            (torch.tensor) Variance
         """
         return self.softplus(self.weight) ** 2
 
     def forward(self, x):
-        """
-        Computes a forward pass through the layer with the squared values of the inputs.
-        :param x: (torch.tensor) Inputs
-        :return: (torch.tensor) Variance of predictions
+        """Computes a forward pass through the layer with the squared values of
+        the inputs.
+
+        Arguments:
+            x: (torch.tensor) Inputs
+
+        Returns:
+            (torch.tensor) Variance of predictions
         """
         return torch.nn.functional.linear(x ** 2, self.w_var, bias=self.bias)
 
@@ -85,8 +90,11 @@ class LinearVariance(nn.Linear):
 class LocalReparamDense(nn.Module):
     def __init__(self, shape):
         """
-        A wrapper module for functional dense layer that performs local reparametrization.
-        :param shape: ((int, int) tuple) Number of input / output features to layer.
+        A wrapper module for functional dense layer that performs local
+        reparametrization.
+
+        Arguments:
+            shape: ((int, int) tuple) Number of input / output features to layer
         """
         super().__init__()
         self.in_features, self.out_features = shape
@@ -96,7 +104,8 @@ class LocalReparamDense(nn.Module):
             bias=True
         )
 
-        self.var = LinearVariance(self.in_features, self.out_features, bias=False)
+        self.var = LinearVariance(self.in_features, self.out_features,
+                                  bias=False)
 
         nn.init.normal_(self.mean.weight, 0., 0.05)
         nn.init.normal_(self.var.weight, -4., 0.05)
@@ -113,30 +122,36 @@ class LocalReparamDense(nn.Module):
         return utils.sample_normal(mean, var, num_samples, squeeze)
 
     def compute_kl(self):
-        """
-        Computes the KL divergence w.r.t. a standard Normal prior.
-        :return: (torch.tensor) KL divergence value.
+        """Computes the KL divergence w.r.t. a standard Normal prior.
+
+        Returns:
+             (torch.tensor) KL divergence value.
         """
         mean, cov = self._compute_posterior()
         scale = 2. / self.mean.weight.shape[0]
         # scale = 1.
-        return utils.gaussian_kl_diag(mean, torch.diag(cov), torch.zeros_like(mean), scale * torch.ones_like(mean))
+        return utils.gaussian_kl_diag(mean, torch.diag(cov),
+                                      torch.zeros_like(mean),
+                                      scale * torch.ones_like(mean))
 
     def _compute_posterior(self):
-        """
-        Returns the approximate posterior over the weights.
-        :return: (torch.tensor, torch.tensor) Posterior mean and covariance for layer weights.
+        """Return the approximate posterior over the weights.
+
+        Returns:
+            (torch.tensor, torch.tensor) Posterior mean and covariance for layer
+            weights.
         """
         return self.mean.weight.flatten(), torch.diag(self.var.w_var.flatten())
 
 
 class ReparamFullDense(nn.Module):
     def __init__(self, shape, bias=True, rank=None):
-        """
-        Reparameterization module for dense covariance layer.
-        :param shape: ((int, int) tuple) Number of input / output features.
-        :param bias: (bool) Use a bias term in the layer.
-        :param rank: (int) Rank of covariance matrix approximation.
+        """Reparameterization module for dense covariance layer.
+
+        Arguments:
+            shape: ((int, int) tuple) Number of input / output features.
+            bias: (bool) Use a bias term in the layer.
+            rank: (int) Rank of covariance matrix approximation.
         """
         super().__init__()
         self.in_features, self.out_features = shape
@@ -156,47 +171,62 @@ class ReparamFullDense(nn.Module):
 
     @property
     def variance(self):
-        """
-        Computes variance from log std parameter.
-        :return: (torch.tensor) Variance
+        """Computes variance from log std parameter.
+
+        Returns:
+            (torch.tensor) Variance
         """
         return torch.exp(self.log_std) ** 2
 
     @property
     def cov(self):
-        """
-        Computes covariance matrix from matrix F and variance terms.
-        :return: (torch.tensor) Covariance matrix.
+        """Computes covariance matrix from matrix F and variance terms.
+
+        Returns:
+             (torch.tensor) Covariance matrix.
         """
         return self.F @ self.F.t() + torch.diag(self.variance)
 
     def forward(self, x, num_samples=1):
-        """
-        Computes a forward pass through the layer.
-        :param x: (torch.tensor) Inputs.
-        :param num_samples: (int) Number of samples to take.
-        :return: (torch.tensor) Reparametrized sample from the layer.
+        """Computes a forward pass through the layer.
+
+        Arguments:
+            x: (torch.tensor) Inputs.
+            num_samples: (int) Number of samples to take.
+
+        Returns:
+            (torch.tensor) Reparametrized sample from the layer.
         """
         mean = self.mean.weight  # need un-flattened
-        post_sample = utils.sample_lr_gaussian(mean.view(1, -1), self.F, self.variance, num_samples, squeeze=True)
+        post_sample = utils.sample_lr_gaussian(mean.view(1, -1), self.F,
+                                               self.variance, num_samples,
+                                               squeeze=True)
         post_sample = post_sample.squeeze(dim=1).view(num_samples, *mean.shape)
 
-        return (post_sample[:, None, :, :] @ x[:, :, None].repeat(num_samples, 1, 1, 1)).squeeze(-1) + self.mean.bias
+        return (post_sample[:, None, :, :] @ x[:, :, None].repeat(num_samples,
+                                                                  1, 1,
+                                                                  1)).squeeze(
+            -1) + self.mean.bias
 
     def compute_kl(self):
-        """
-        Computes the KL divergence w.r.t. a standard Normal prior.
-        :return: (torch.tensor) KL divergence value.
+        """Computes the KL divergence w.r.t. a standard Normal prior.
+
+        Returns:
+             (torch.tensor) KL divergence value.
         """
         mean, cov = self._compute_posterior()
         # scale = 1.
         scale = 2. / self.mean.weight.shape[0]
-        return utils.smart_gaussian_kl(mean, cov, torch.zeros_like(mean), torch.diag(scale * torch.ones_like(mean)))
+        return utils.smart_gaussian_kl(mean, cov, torch.zeros_like(mean),
+                                       torch.diag(
+                                           scale * torch.ones_like(mean)))
 
     def _compute_posterior(self):
-        """
-        Returns the approximate posterior over the weights.
-        :return: (torch.tensor, torch.tensor) Posterior mean and covariance for layer weights.
+        """Returns the approximate posterior over the weights.
+
+        Returns:
+            (torch.tensor, torch.tensor) Posterior mean and covariance for layer
+            weights.
         """
         return self.mean.weight.flatten(), self.cov
 
@@ -204,17 +234,21 @@ class ReparamFullDense(nn.Module):
 ### MODELS ###
 
 class NeuralClassification(nn.Module):
-    """
-    Neural Linear model for multi-class classification.
-    :param data: (Object) Data for model to trained / evaluated on
-    :param feature_extractor: (nn.Module) Feature extractor to generate representations
-    :param metric: (str) Metric to use for evaluating model
-    :param num_features: (int) Dimensionality of final feature representation
-    :param full_cov: (bool) Use (low-rank approximation to) full covariance matrix for last layer distribution
-    :param cov_rank: (int) Optional, if using low-rank approximation, specify rank
-    """
+
     def __init__(self, feature_extractor=None, metric='Acc',
                  num_features=256, full_cov=False, cov_rank=2):
+        """Neural Linear model for multi-class classification.
+
+        Arguments:
+            feature_extractor: (nn.Module) Feature extractor to generate
+                representations
+            metric: (str) Metric to use for evaluating model
+            num_features: (int) Dimensionality of final feature representation
+            full_cov: (bool) Use (low-rank approximation to) full covariance
+                matrix for last layer distribution
+            cov_rank: (int) Optional, if using low-rank approximation, specify
+                rank
+        """
         super().__init__()
         self.num_classes = 2
         self.feature_extractor = feature_extractor
@@ -224,27 +258,33 @@ class NeuralClassification(nn.Module):
             self.num_features = num_features
         else:
             self.num_features = num_features
-        self.fc1 = nn.Linear(in_features=256, out_features=self.num_features, bias=True)
-        self.fc2 = nn.Linear(in_features=self.num_features, out_features=self.num_features, bias=True)
+        self.fc1 = nn.Linear(in_features=256, out_features=self.num_features,
+                             bias=True)
+        self.fc2 = nn.Linear(in_features=self.num_features,
+                             out_features=self.num_features, bias=True)
         nn.init.xavier_normal_(self.fc1.weight)
         nn.init.xavier_normal_(self.fc2.weight)
         if full_cov:
-            self.linear = ReparamFullDense([self.num_features, self.num_classes], rank=cov_rank)
+            self.linear = ReparamFullDense(
+                [self.num_features, self.num_classes], rank=cov_rank)
         else:
-            self.linear = LocalReparamDense([self.num_features, self.num_classes])
+            self.linear = LocalReparamDense(
+                [self.num_features, self.num_classes])
 
         self.softmax = nn.Softmax()
         self.relu = nn.ReLU()
-        #self.cross_entropy = nn.CrossEntropyLoss(reduction='none')
         self.cross_entropy = nn.CrossEntropyLoss()
         self.metric = metric
 
     def forward(self, x, num_samples=1):
-        """
-        Make prediction with model
-        :param x: (torch.tensor) Inputs
-        :param num_samples: (int) Number of samples to use in forward pass
-        :return: (torch.tensor) Predictive distribution (may be tuple)
+        """Make prediction with model
+
+        Arguments:
+            x: (torch.tensor) Inputs
+            num_samples: (int) Number of samples to use in forward pass
+
+        Returns:
+             (torch.tensor) Predictive distribution (may be tuple)
         """
         return self.linear(
             self.encode(x), num_samples=num_samples).squeeze()
@@ -259,8 +299,11 @@ class NeuralClassification(nn.Module):
         x = self.fc1(x)
         return x
 
-    def optimize(self, data, num_epochs=1000, batch_size=64, initial_lr=1e-2, freq_summary=100,
-                 weight_decay=1e-1, weight_decay_theta=None, train_transform=None, val_transform=None, opt_cycle=0, **kwargs):
+    def optimize(self, data, num_epochs=1000, batch_size=64, initial_lr=1e-2,
+                 freq_summary=100,
+                 weight_decay=1e-1, weight_decay_theta=None,
+                 train_transform=None, val_transform=None, opt_cycle=0,
+                 **kwargs):
         """
         Internal functionality to train model
         :param data: (Object) Training data
@@ -275,9 +318,12 @@ class NeuralClassification(nn.Module):
         :return: None
         """
         weight_decay_theta = weight_decay if weight_decay_theta is None else weight_decay_theta
-        weights = [v for k, v in self.named_parameters() if (not k.startswith('linear')) and k.endswith('weight')]
-        weights_theta = [v for k, v in self.named_parameters() if k.startswith('linear') and k.endswith('weight')]
-        other = [v for k, v in self.named_parameters() if not k.endswith('weight')]
+        weights = [v for k, v in self.named_parameters() if
+                   (not k.startswith('linear')) and k.endswith('weight')]
+        weights_theta = [v for k, v in self.named_parameters() if
+                         k.startswith('linear') and k.endswith('weight')]
+        other = [v for k, v in self.named_parameters() if
+                 not k.endswith('weight')]
         optimizer = torch.optim.Adam([
             {'params': weights, 'weight_decay': weight_decay},
             {'params': weights_theta, 'weight_decay': weight_decay_theta},
@@ -287,7 +333,7 @@ class NeuralClassification(nn.Module):
         def sigmoid(x):
             return 1 / (1 + np.exp(-x))
 
-        #scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, num_epochs, eta_min=1e-5)
+        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, num_epochs, eta_min=1e-5)
 
         if isinstance(data, torch.utils.data.Dataset):
             dataloader = DataLoader(
@@ -313,7 +359,7 @@ class NeuralClassification(nn.Module):
         global_iter = 0
         active_mean_pred, decoy_mean_pred = 0.5, 0.5
         for epoch in range(num_epochs):
-            #scheduler.step()
+            # scheduler.step()
             losses, kls, performances = [], [], []
             for batch, (x, y, _, _) in enumerate(dataloader):
                 optimizer.zero_grad()
@@ -346,19 +392,20 @@ class NeuralClassification(nn.Module):
                 if len(active_idx[0]):
                     active_mean_pred = np.mean(y_pred_np[active_idx, 1])
                     wandb_update_dict.update({
-                        'Mean active prediction (train)': active_mean_pred
+                        'Mean active prediction (train, cycle {})'.format(
+                            copt_cycle): active_mean_pred
                     })
                 if len(decoy_idx[0]):
                     decoy_mean_pred = np.mean(y_pred_np[decoy_idx, 1])
                     wandb_update_dict.update({
-                        'Mean decoy prediction (train)': decoy_mean_pred,
+                        'Mean decoy prediction (train, cycle {})'.format(
+                            opt_cycle): decoy_mean_pred,
                     })
 
                 try:
                     wandb.log(wandb_update_dict)
                 except wandb.Error:
                     pass
-
 
                 print_with_overwrite(
                     (
@@ -370,24 +417,26 @@ class NeuralClassification(nn.Module):
                      'Time remaining:', eta),
                     ('Loss: {0:.4f}'.format(ce_loss), '|',
                      'KL: {0:.4f}'.format(kl), '|'
-                     'Mean active: {0:.4f}'.format(active_mean_pred), '|',
+                                               'Mean active: {0:.4f}'.format(
+                        active_mean_pred), '|',
                      'Mean decoy: {0:.4f}'.format(decoy_mean_pred))
                 )
                 global_iter += 1
 
-                #performance = self._evaluate_performance(y, y_pred)
+                # performance = self._evaluate_performance(y, y_pred)
                 losses.append(step_loss.cpu().item())
                 kls.append(kl.cpu().item())
-                #performances.append(performance.cpu().item())
+                # performances.append(performance.cpu().item())
 
-            #if epoch % freq_summary == 0 or epoch == num_epochs - 1:
+            # if epoch % freq_summary == 0 or epoch == num_epochs - 1:
             #    val_bsz = 1024
             #    val_losses, val_performances = self._evaluate(data, val_bsz, 'val', transform=val_transform, **kwargs)
-                #print('#{} loss: {:.4f} (val: {:.4f}), kl: {:.4f}, {}: {:.4f} (val: {:.4f})'.format(
-                #    epoch, np.mean(losses), np.mean(val_losses), np.mean(kls),
-                #    self.metric, np.mean(performances), np.mean(val_performances)))
+            # print('#{} loss: {:.4f} (val: {:.4f}), kl: {:.4f}, {}: {:.4f} (val: {:.4f})'.format(
+            #    epoch, np.mean(losses), np.mean(val_losses), np.mean(kls),
+            #    self.metric, np.mean(performances), np.mean(val_performances)))
 
-    def get_projections(self, data, J, projection='two', gamma=0, transform=None, **kwargs):
+    def get_projections(self, data, J, projection='two', gamma=0,
+                        transform=None, **kwargs):
         """
         Get projections for ACS approximate procedure
         :param data: (Object) Data object to get projections for
@@ -401,26 +450,31 @@ class NeuralClassification(nn.Module):
         with torch.no_grad():
             mean, cov = self.linear._compute_posterior()
             jitter = utils.to_gpu(torch.eye(len(cov)) * 1e-6)
-            theta_samples = MVN(mean, cov + jitter).sample(torch.Size([J])).view(J, -1, self.linear.out_features)
+            theta_samples = MVN(mean, cov + jitter).sample(
+                torch.Size([J])).view(J, -1, self.linear.out_features)
             if isinstance(data, DataLoader):
                 dataloader = data
             else:
-                dataloader = DataLoader(Dataset(data, 'unlabeled', transform=transform),
-                                        batch_size=256, shuffle=False)
+                dataloader = DataLoader(
+                    Dataset(data, 'unlabeled', transform=transform),
+                    batch_size=256, shuffle=False)
 
             for batch, (x, _, _, _) in enumerate(dataloader):
                 x = tuple(utils.to_gpu(*x))
                 feat_x.append(self.encode(x))
                 print_with_overwrite(
                     ('Getting projections for batch {0} of {1}'.format(
-                    batch, len(dataloader)), ))
+                        batch, len(dataloader)),))
 
             feat_x = torch.cat(feat_x)
-            py = self._compute_predictive_posterior(self.linear(feat_x, num_samples=100), logits=False)
+            py = self._compute_predictive_posterior(
+                self.linear(feat_x, num_samples=100), logits=False)
             ent_x = ent(py)
             if projection == 'two':
                 for theta_sample in theta_samples:
-                    projections.append(self._compute_expected_ll(feat_x, theta_sample, py) + gamma * ent_x[:, None])
+                    projections.append(
+                        self._compute_expected_ll(feat_x, theta_sample,
+                                                  py) + gamma * ent_x[:, None])
             else:
                 raise NotImplementedError
 
@@ -441,7 +495,8 @@ class NeuralClassification(nn.Module):
         test_bsz = 1024
         losses, performances = self._evaluate(data, test_bsz, 'test', **kwargs)
         print("predictive ll: {:.4f}, N: {}, {}: {:.4f}".format(
-            -np.mean(losses), len(data.index['train']), self.metric, np.mean(performances)))
+            -np.mean(losses), len(data.index['train']), self.metric,
+            np.mean(performances)))
         return np.hstack(losses), np.hstack(performances)
 
     def _compute_log_likelihood(self, y, y_pred):
@@ -521,10 +576,10 @@ class NeuralClassification(nn.Module):
         :param transform: (torchvision.transform) Tranform procedure applied to data during training / validation
         :return: (np.arrays) Performance metrics for model
         """
-        #assert data_type in ['val', 'test']
+        # assert data_type in ['val', 'test']
         losses, performances = [], []
 
-        #if data_type == 'val' and len(data.index['val']) == 0:
+        # if data_type == 'val' and len(data.index['val']) == 0:
         #    return losses, performances
 
         gt.pause()
@@ -541,15 +596,17 @@ class NeuralClassification(nn.Module):
                 )
             for (x, y, _, _) in dataloader:
                 x = tuple(utils.to_gpu(*x))
-                #y = utils.to_gpu(torch.nn.functional.one_hot(y, num_classes=2))
-                #x, y = utils.to_gpu(x, y.type(torch.LongTensor).squeeze())
+                # y = utils.to_gpu(torch.nn.functional.one_hot(y, num_classes=2))
+                # x, y = utils.to_gpu(x, y.type(torch.LongTensor).squeeze())
                 y_pred_samples = self.forward(x, num_samples=100).squeeze()
-                y_pred = self._compute_predictive_posterior(y_pred_samples)[None, :, :].squeeze()
-                loss = self._compute_log_likelihood(y.squeeze(), y_pred.squeeze())  # use predictive at test time
+                y_pred = self._compute_predictive_posterior(y_pred_samples)[
+                         None, :, :].squeeze()
+                loss = self._compute_log_likelihood(y.squeeze(),
+                                                    y_pred.squeeze())  # use predictive at test time
                 avg_loss = loss / len(x)
-                #performance = self._evaluate_performance(y, y_pred_samples)
+                # performance = self._evaluate_performance(y, y_pred_samples)
                 losses.append(avg_loss.cpu().item())
-                #performances.append(performance.cpu().item())
+                # performances.append(performance.cpu().item())
 
         gt.resume()
         return losses, performances

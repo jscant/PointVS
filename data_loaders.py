@@ -18,6 +18,16 @@ from preprocessing import centre_on_ligand, make_box, concat_structs, \
     make_bit_vector
 
 
+class RandomRotation(object):
+    def __init__(self):
+        pass
+
+    def __call__(self, x):
+        M = np.random.randn(3, 3)
+        Q, _ = np.linalg.qr(M)
+        return x @ Q
+
+
 def multiple_source_dataset(loader_class, *base_paths, receptors=None,
                             balanced=True, **kwargs):
     """Concatenate mulitple datasets into one, preserving balanced sampling.
@@ -74,7 +84,7 @@ class LieConvLoader(torch.utils.data.Dataset):
     """Class for feeding structure parquets into network."""
 
     def __init__(self, base_path, radius=12, receptors=None, data_only=False,
-                 **kwargs):
+                 rot=False, **kwargs):
         """Initialise dataset.
 
         Arguments:
@@ -126,6 +136,7 @@ class LieConvLoader(torch.utils.data.Dataset):
             )
         self.labels = labels
         self.data_only = data_only
+        self.rot = RandomRotation() if rot else lambda x: x
 
     def __len__(self):
         """Returns the total size of the dataset."""
@@ -153,7 +164,7 @@ class LieConvLoader(torch.utils.data.Dataset):
             concat_structs(rec_fname, lig_fname)), radius=10))
 
         p = torch.from_numpy(
-            np.expand_dims(struct[struct.columns[:3]].to_numpy(),
+            np.expand_dims(self.rot(struct[struct.columns[:3]].to_numpy()),
                            0)).float()
         v = torch.unsqueeze(make_bit_vector(struct.types.to_numpy(), 11), 0)
         m = torch.from_numpy(np.ones((1, len(struct)))).float()
@@ -507,6 +518,8 @@ class SubsetSequentialSampler(SubsetRandomSampler):
 
 
 class WeightedSubsetRandomSampler(WeightedRandomSampler):
+    """WeightedRandomSampler but with a subset."""
+
     def __init__(self, weights, indices, replacement=True,
                  generator=None):
         if not isinstance(replacement, bool):

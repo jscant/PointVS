@@ -1,3 +1,5 @@
+"""Modified from https://github.com/rpinsler/active-bayesian-coresets"""
+
 import numpy as np
 import torch
 import abc
