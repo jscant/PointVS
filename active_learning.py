@@ -1,3 +1,10 @@
+"""
+Active learning for PointVS; method uses (modified versions of) scripts
+found at https://github.com/rpinsler/active-bayesian-coresets, from the paper
+Bayesian Batch Active Learning as Sparse Subset Approximation (Pinsler et al.),
+which can be found at https://arxiv.org/abs/1908.02144 .
+"""
+
 import numpy as np
 import torch
 import wandb
@@ -9,7 +16,36 @@ from data_loaders import WeightedSubsetRandomSampler, SubsetSequentialSampler
 def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
                     mode='active', projections=64, wandb_project=None,
                     wandb_run=None):
+    """Trains and tests a neural network using active learning.
+
+    Active learning is the process of selecting data to train on (and label)
+    based on some heuristic, such that the model becomes more accurate over
+    less training data. The paper found at https://arxiv.org/abs/1908.02144 is
+    one such method, and the code found in the acs directory of this repo is
+    a modified version of that.
+
+    Arguments:
+        session: instantiated Session object
+        initial_labelled_size: size of starting pool (randomly selected from
+            training data)
+        next_pool_size: amount of data to be added to labelled training set at
+            each active learning iteration
+        mode: one of `control` or `active`, whether to use the data selection
+            mentioned above (active) or random selection at each AL iteration
+            (control)
+        projections: number of projections to use for Frank-Wolfe optimisation
+            (see paper)
+        wandb_project: name of weights and biases project
+        wandb_run: name of weights and biases run
+    """
+
     def random_sampler_from_labelled():
+        """Generates random sampler from subset of labels, weighted by class.
+
+        This will only index from samples in the labelled_indices variable, and
+        class weighting is taken from this subset rather than statistics on
+        the entire (unlabelled) training set.
+        """
         n_labelled_actives = np.sum(labels[labelled_indices])
         n_labelled_decoys = len(labelled_indices) - n_labelled_actives
 
@@ -28,11 +64,13 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
                 sample_weights, labelled_indices)
 
     def test_fname_generator(stem):
+        """Generates sequential filenames for validation outputs."""
         x = 0
         while True:
             yield '{0}_{1}.txt'.format(stem, x)
             x += 1
 
+    # Some kwargs for later
     cs_kwargs = {'gamma': 0.7}
     optim_params = {'num_epochs': 1,
                     'batch_size': 32, 'initial_lr': 0.002,
@@ -40,16 +78,6 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
                     'weight_decay_theta': 5e-4,
                     'train_transform': None,
                     'val_transform': None}
-
-    indices = np.arange(len(session.train_dataset))
-    labels = session.train_dataset.labels
-
-    labelled_indices = np.random.choice(
-        indices, initial_labelled_size, replace=False)
-    while sum(labels[labelled_indices]) == 0:
-        labelled_indices = np.random.choice(
-            indices, initial_labelled_size, replace=False)
-
     train_data_loader_kwargs = {
         'batch_size': 32,
         'num_workers': 0,
@@ -63,33 +91,50 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
         'drop_last': True,
     }
 
+    # Global indices and labels - pool from which we will choose data to label
+    indices = np.arange(len(session.train_dataset))
+    labels = session.train_dataset.labels
+
+    # Initial (random) labelled dataset
+    labelled_indices = np.random.choice(
+        indices, initial_labelled_size, replace=False)
+    while sum(labels[labelled_indices]) == 0:  # ensure at least one active
+        labelled_indices = np.random.choice(
+            indices, initial_labelled_size, replace=False)
+
     print('Initial selection indices:', labelled_indices)
     print('Initial datset size:', len(labelled_indices))
     print('AL batch size', next_pool_size)
 
+    # Setup for prediction output filenames
     predictions_file_base = str(
         session.predictions_file.parent / session.predictions_file.stem)
     test_fnames = test_fname_generator(predictions_file_base)
-    opt_cycle = 0
+
+    al_cycle = 0
+
+    # Setup weights & biases if we are using this (recommended!)
     if wandb_project is not None:
         if wandb_run is not None:
             wandb.run.name = wandb_run
         wandb.watch(session.network)
     while len(labelled_indices < len(indices)):
 
-        # Construct data loader and train on labelled data
+        # Construct training data loader from labelled subset of indices
         enumerate(session.train_dataset)
         train_data_loader_kwargs['sampler'] = random_sampler_from_labelled()
         training_loader = torch.utils.data.DataLoader(
             session.train_dataset, **train_data_loader_kwargs)
+
+        # we want to train from scratch each time to avoid correlations
         session.network.apply(session.weights_init)
         print('Training on labelled dataset')
         session.network.optimize(training_loader, wandb_project=wandb_project,
-                                 wandb_run=wandb_run, opt_cycle=opt_cycle,
+                                 wandb_run=wandb_run, opt_cycle=al_cycle,
                                  **optim_params)
         print('Finished training')
         session.save(
-            session.save_path / 'checkpoints' / '{}.pt'.format(opt_cycle))
+            session.save_path / 'checkpoints' / '{}.pt'.format(al_cycle))
 
         # Perform inference on validation set
         print('Testing...')
@@ -99,12 +144,12 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
         # Select next batch of unlabelled data to label
         remaining = len(indices) - len(labelled_indices)
         unlabelled_indices = np.setdiff1d(indices, labelled_indices)
-        opt_cycle += 1
-        if len(unlabelled_indices) <= next_pool_size:
+        al_cycle += 1
+        if len(unlabelled_indices) <= next_pool_size:  # label all that remains
             print('Labelling final data points')
             labelled_indices = indices
             break
-        if mode == 'active':
+        if mode == 'active':  # Bayes Batch AL
             print('Calculating projections for Bayesian core-set batch '
                   'selection')
             pool = np.random.choice(
@@ -119,7 +164,7 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
             print('Projections calculated')
             batch_indices_local = cs.build(next_pool_size)
             batch_indices_global = pool[batch_indices_local]
-        elif mode == 'control':
+        elif mode == 'control':  # random selection
             print('Generating random learning batch')
             batch_indices_global = np.random.choice(
                 unlabelled_indices, next_pool_size, replace=False)
@@ -137,11 +182,11 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
     session.network.apply(session.weights_init)
     print('Training on labelled dataset')
     session.network.optimize(training_loader, wandb_project=wandb_project,
-                             wandb_run=wandb_run, opt_cycle=opt_cycle,
+                             wandb_run=wandb_run, opt_cycle=al_cycle,
                              **optim_params)
     print('Finished training')
     session.save(
-        session.save_path / 'checkpoints' / '{}.pt'.format(opt_cycle))
+        session.save_path / 'checkpoints' / '{}.pt'.format(al_cycle))
     print('Testing...')
     session.predictions_file = next(test_fnames)
     session.test()
