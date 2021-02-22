@@ -18,14 +18,10 @@ from preprocessing import centre_on_ligand, make_box, concat_structs, \
     make_bit_vector
 
 
-class RandomRotation(object):
-    def __init__(self):
-        pass
-
-    def __call__(self, x):
-        M = np.random.randn(3, 3)
-        Q, _ = np.linalg.qr(M)
-        return x @ Q
+def random_rotation(x):
+    M = np.random.randn(3, 3)
+    Q, _ = np.linalg.qr(M)
+    return x @ Q
 
 
 def multiple_source_dataset(loader_class, *base_paths, receptors=None,
@@ -105,10 +101,6 @@ class LieConvLoader(torch.utils.data.Dataset):
             kwargs: keyword arguments passed to the parent class (Dataset).
         """
 
-        # no rotation (cannot pickle lambda x: x)
-        def identity(x):
-            return x
-
         super().__init__(**kwargs)
         self.radius = radius
         self.base_path = Path(base_path).expanduser()
@@ -147,7 +139,7 @@ class LieConvLoader(torch.utils.data.Dataset):
         self.data_only = data_only
 
         # lambda functions can't be pickled
-        self.rot = RandomRotation() if rot else identity
+        self.rot = rot
 
     def __len__(self):
         """Returns the total size of the dataset."""
@@ -174,9 +166,14 @@ class LieConvLoader(torch.utils.data.Dataset):
         struct = centre_on_ligand(make_box(centre_on_ligand(
             concat_structs(rec_fname, lig_fname)), radius=10))
 
-        p = torch.from_numpy(
-            np.expand_dims(self.rot(struct[struct.columns[:3]].to_numpy()),
-                           0)).float()
+        if self.rot:
+            p = torch.from_numpy(
+                np.expand_dims(random_rotation(
+                    struct[struct.columns[:3]].to_numpy()), 0)).float()
+        else:
+            p = torch.from_numpy(
+                np.expand_dims(
+                    struct[struct.columns[:3]].to_numpy(), 0)).float()
         v = torch.unsqueeze(make_bit_vector(struct.types.to_numpy(), 11), 0)
         m = torch.from_numpy(np.ones((1, len(struct)))).float()
         return (p, v, m, len(struct)), lig_fname, rec_fname, label
