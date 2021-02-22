@@ -38,7 +38,6 @@ def crossentropy(x):
 
 
 class LieFeatureExtractor(nn.Module):
-    """We need all of our networks to finish with a sigmoid activation."""
 
     def __init__(self, chin, ds_frac=1, k=64, nbhd=np.inf,
                  act="swish", bn=True, num_layers=6, mean=True, per_point=True,
@@ -62,7 +61,7 @@ class LieFeatureExtractor(nn.Module):
             *[BottleBlock(k[i], k[i + 1], conv, bn=bn, act=act, fill=fill[i])
               for i in range(num_layers)],
             MaskBatchNormNd(k[-1]) if bn else nn.Sequential(),
-            Pass(nn.Linear(k[-1], 256), dim=1),
+            Pass(nn.Linear(k[-1], 512), dim=1),
             GlobalPool(mean=mean) if pool else Expression(lambda x: x[1]),
             # Expression(lambda x: x[1]),
         )

@@ -8,15 +8,16 @@ which can be found at https://arxiv.org/abs/1908.02144 .
 import numpy as np
 import torch
 import wandb
-from acs.model import NeuralClassification
 
 from acs.coresets import ProjectedFrankWolfe as coreset
+from acs.model import NeuralClassification
 from data_loaders import WeightedSubsetRandomSampler, SubsetSequentialSampler
 
 
 def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
                     mode='active', projections=64, wandb_project=None,
-                    wandb_run=None, ms={}, network_class=None):
+                    wandb_run=None, ms={}, network_class=None,
+                    num_features=256):
     """Trains and tests a neural network using active learning.
 
     Active learning is the process of selecting data to train on (and label)
@@ -123,7 +124,7 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
 
         # Construct training data loader from labelled subset of indices
         session.network = NeuralClassification(
-        network_class(**ms), num_features=256).cuda()
+            network_class(**ms), num_features=num_features).cuda()
         session.network.apply(session.weights_init)
         session.network.train()
 

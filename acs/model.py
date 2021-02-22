@@ -255,11 +255,10 @@ class NeuralClassification(nn.Module):
         if self.feature_extractor.pretrained:
             for param in self.feature_extractor.parameters():
                 param.requires_grad = False
-            self.num_features = num_features
-        else:
-            self.num_features = num_features
-        self.fc1 = nn.Linear(in_features=256, out_features=self.num_features,
-                             bias=True)
+        self.num_features = num_features
+        self.fc1 = nn.Linear(
+            in_features=512, out_features=self.num_features,
+            bias=True)
         self.fc2 = nn.Linear(in_features=self.num_features,
                              out_features=self.num_features, bias=True)
         nn.init.xavier_normal_(self.fc1.weight)
@@ -393,7 +392,7 @@ class NeuralClassification(nn.Module):
                     active_mean_pred = np.mean(y_pred_np[active_idx, 1])
                     wandb_update_dict.update({
                         'Mean active prediction (train, cycle {})'.format(
-                            copt_cycle): active_mean_pred
+                            opt_cycle): active_mean_pred
                     })
                 if len(decoy_idx[0]):
                     decoy_mean_pred = np.mean(y_pred_np[decoy_idx, 1])

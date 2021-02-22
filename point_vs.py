@@ -107,6 +107,9 @@ if __name__ == '__main__':
     parser.add_argument('--al_control', action='store_true',
                         help='Active learning with random data selection (used '
                              'as a control).')
+    parser.add_argument('--al_projections', type=int, default=64,
+                        help='Number of projections for bayes active learning '
+                             '(J in the paper)')
     args = parser.parse_args()
 
     save_path = args.save_path.expanduser()
@@ -187,7 +190,8 @@ if __name__ == '__main__':
         mode = 'control' if args.al_control else 'active'
         active_learning(sess, args.al_initial_pool_size, args.al_batch_size,
                         mode=mode, wandb_project=args.wandb, wandb_run=args.run,
-                        ms=ms, network_class=network_class)
+                        ms=ms, network_class=network_class,
+                        projections=args.al_projections)
 
     if args.wandb is None:
         sess.wandb = None
