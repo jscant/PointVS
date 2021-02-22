@@ -104,6 +104,11 @@ class LieConvLoader(torch.utils.data.Dataset):
                 included.
             kwargs: keyword arguments passed to the parent class (Dataset).
         """
+
+        # no rotation (cannot pickle lambda x: x)
+        def identity(x):
+            return x
+
         super().__init__(**kwargs)
         self.radius = radius
         self.base_path = Path(base_path).expanduser()
@@ -140,7 +145,9 @@ class LieConvLoader(torch.utils.data.Dataset):
             )
         self.labels = labels
         self.data_only = data_only
-        self.rot = RandomRotation() if rot else lambda x: x
+
+        # lambda functions can't be pickled
+        self.rot = RandomRotation() if rot else identity
 
     def __len__(self):
         """Returns the total size of the dataset."""
