@@ -8,6 +8,7 @@ which can be found at https://arxiv.org/abs/1908.02144 .
 import numpy as np
 import torch
 import wandb
+from acs.model import NeuralClassification
 
 from acs.coresets import ProjectedFrankWolfe as coreset
 from data_loaders import WeightedSubsetRandomSampler, SubsetSequentialSampler
@@ -15,7 +16,7 @@ from data_loaders import WeightedSubsetRandomSampler, SubsetSequentialSampler
 
 def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
                     mode='active', projections=64, wandb_project=None,
-                    wandb_run=None):
+                    wandb_run=None, ms={}, network_class=None):
     """Trains and tests a neural network using active learning.
 
     Active learning is the process of selecting data to train on (and label)
@@ -121,13 +122,17 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
     while len(labelled_indices < len(indices)):
 
         # Construct training data loader from labelled subset of indices
+        session.network = NeuralClassification(
+        network_class(**ms), num_features=256).cuda()
+        session.network.apply(session.weights_init)
+        session.network.train()
+
         enumerate(session.train_dataset)
         train_data_loader_kwargs['sampler'] = random_sampler_from_labelled()
         training_loader = torch.utils.data.DataLoader(
             session.train_dataset, **train_data_loader_kwargs)
 
         # we want to train from scratch each time to avoid correlations
-        session.network.apply(session.weights_init)
         print('Training on labelled dataset')
         session.network.optimize(training_loader, wandb_project=wandb_project,
                                  wandb_run=wandb_run, opt_cycle=al_cycle,
@@ -139,6 +144,7 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
         # Perform inference on validation set
         print('Testing...')
         session.predictions_file = next(test_fnames)
+        session.network.eval()
         session.test()
 
         # Select next batch of unlabelled data to label

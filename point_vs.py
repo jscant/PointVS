@@ -186,7 +186,8 @@ if __name__ == '__main__':
     if al:
         mode = 'control' if args.al_control else 'active'
         active_learning(sess, args.al_initial_pool_size, args.al_batch_size,
-                        mode=mode, wandb_project=args.wandb, wandb_run=args.run)
+                        mode=mode, wandb_project=args.wandb, wandb_run=args.run,
+                        ms=ms, network_class=network_class)
 
     if args.wandb is None:
         sess.wandb = None
