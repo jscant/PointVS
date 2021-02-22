@@ -142,8 +142,13 @@ def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
         session.save(
             session.save_path / 'checkpoints' / '{}.pt'.format(al_cycle))
 
+
         # Perform inference on validation set
         print('Testing...')
+        np.savetxt(str(
+            session.predictions_file).replace(
+            '.txt', '_labelled_indices.txt'),
+            labelled_indices, fmt='%d', delimiter=',')
         session.predictions_file = next(test_fnames)
         session.network.eval()
         session.test()

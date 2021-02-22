@@ -47,10 +47,13 @@ def multiple_source_dataset(loader_class, *base_paths, receptors=None,
     """
     datasets = []
     labels = []
+    filenames = []
+    base_paths = sorted(base_paths)
     for base_path in base_paths:
         if base_path is not None:
             dataset = loader_class(base_path, receptors=receptors, **kwargs)
             labels += list(dataset.labels)
+            filenames += list(dataset.filenames)
             datasets.append(dataset)
     labels = np.array(labels)
     class_sample_count = np.array(
@@ -67,6 +70,7 @@ def multiple_source_dataset(loader_class, *base_paths, receptors=None,
     multi_source_dataset.collate = loader_class.collate
     multi_source_dataset.class_sample_count = class_sample_count
     multi_source_dataset.labels = labels
+    multi_source_dataset.filenames = filenames
     return multi_source_dataset
 
 
