@@ -263,12 +263,10 @@ class ProjectedFrankWolfe(object):
         self._init_build(M, **kwargs)
         w = utils.to_gpu(torch.zeros([len(self.ELn), 1]))
         norm = lambda weights: (self.EL - (self.ELn.t() @ weights).squeeze()).norm()
-        #for m in range(M):
-        while len(torch.nonzero(w)) < M:
-            #w = self._step(m, w)
-            w = self._step(None, w)
+        for m in range(M):
+            w = self._step(m, w)
 
-        # print(w[w.nonzero()[:, 0]].cpu().numpy())
+        print('Final FW weights:', w[w.nonzero()].cpu().numpy())
         print('|| L-L(w)  ||: {:.4f}'.format(norm(w)))
         print('|| L-L(w1) ||: {:.4f}'.format(norm((w > 0).float())))
         print('Avg pred entropy (pool): {:.4f}'.format(self.entropy.mean().item()))
