@@ -110,6 +110,8 @@ if __name__ == '__main__':
     parser.add_argument('--al_projections', type=int, default=64,
                         help='Number of projections for bayes active learning '
                              '(J in the paper)')
+    parser.add_argument('--al_features', type=int, default=256,
+                        help='Size of finalature embedding for active learning')
     args = parser.parse_args()
 
     save_path = args.save_path.expanduser()
@@ -155,8 +157,7 @@ if __name__ == '__main__':
         if al:
             ms = model_settings.settings.copy()
             ms['num_outputs'] = 2
-            network = NeuralClassification(
-                network_class(**ms), num_features=256)
+            network = NeuralClassification(network_class(**ms))
         else:
             network = network_class(**model_settings.settings)
 
@@ -191,6 +192,7 @@ if __name__ == '__main__':
         active_learning(sess, args.al_initial_pool_size, args.al_batch_size,
                         mode=mode, wandb_project=args.wandb, wandb_run=args.run,
                         ms=ms, network_class=network_class,
+                        num_features=args.al_features,
                         projections=args.al_projections)
 
     if args.wandb is None:
