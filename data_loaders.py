@@ -80,7 +80,7 @@ def one_hot(numerical_category, num_classes):
     return one_hot_array
 
 
-class LieConvLoader(torch.utils.data.Dataset):
+class LieConvDataset(torch.utils.data.Dataset):
     """Class for feeding structure parquets into network."""
 
     def __init__(self, base_path, radius=12, receptors=None, data_only=False,
@@ -215,7 +215,7 @@ class LieConvLoader(torch.utils.data.Dataset):
                 m_batch.bool()), label_batch.long(), ligands, receptors
 
 
-class SE3TransformerLoader(torch.utils.data.Dataset):
+class SE3TransformerDataset(torch.utils.data.Dataset):
 
     def __init__(
             self,
@@ -517,34 +517,3 @@ class SE3TransformerLoader(torch.utils.data.Dataset):
         graphs, y = map(list, zip(*samples))
         batched_graph = dgl.batch(graphs)
         return (batched_graph,), th.tensor(y), ligands, receptors
-
-
-class SubsetSequentialSampler(SubsetRandomSampler):
-
-    def __iter__(self):
-        return (self.indices[i] for i in np.arange(len(self.indices)))
-
-
-class WeightedSubsetRandomSampler(WeightedRandomSampler):
-    """WeightedRandomSampler but with a subset."""
-
-    def __init__(self, weights, indices, replacement=True,
-                 generator=None):
-        if not isinstance(replacement, bool):
-            raise ValueError("replacement should be a boolean value, but got "
-                             "replacement={}".format(replacement))
-        self.np_indices = np.array(indices)
-        self.np_subweights = np.array(weights)[self.np_indices]
-
-        self.subweights = torch.as_tensor(
-            self.np_subweights, dtype=torch.double)
-
-        self.replacement = replacement
-        self.generator = generator
-        self.num_samples = len(self.np_indices)
-
-    def __iter__(self):
-        rand_tensor = torch.multinomial(
-            self.subweights, len(self.np_subweights), self.replacement,
-            generator=self.generator).numpy()
-        return iter(list(self.np_indices[rand_tensor]))

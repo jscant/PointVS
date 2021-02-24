@@ -24,7 +24,7 @@ except ImportError:
 from experiments.qm9.models import SE3Transformer
 from lie_conv.lieConv import LieResNet, BottleBlock, LieConv, GlobalPool
 
-from data_loaders import SE3TransformerLoader, LieConvLoader, \
+from data_loaders import SE3TransformerDataset, LieConvDataset, \
     multiple_source_dataset
 from lieconv_utils import format_time, print_with_overwrite, get_eta
 
@@ -246,7 +246,7 @@ class Session:
         }
 
         if isinstance(self.network, SE3Transformer):
-            dataset_class = SE3TransformerLoader
+            dataset_class = SE3TransformerDataset
             dataset_kwargs.update({
                 'mode': 'interaction_edges',
                 'interaction_dist': 4
@@ -254,7 +254,7 @@ class Session:
         elif isinstance(self.network, (
                 NeuralClassification, LieResNet)):
             dataset_kwargs.update({'rot': True})
-            dataset_class = LieConvLoader
+            dataset_class = LieConvDataset
         else:
             raise NotImplementedError(
                 'Unrecognised network class {}'.format(self.network.__class__))

@@ -11,7 +11,7 @@ import wandb
 
 from acs.coresets import ProjectedFrankWolfe as coreset
 from acs.model import NeuralClassification
-from data_loaders import WeightedSubsetRandomSampler, SubsetSequentialSampler
+from samplers import WeightedSubsetRandomSampler, SubsetSequentialSampler
 
 
 def active_learning(session, initial_labelled_size=10000, next_pool_size=5000,
