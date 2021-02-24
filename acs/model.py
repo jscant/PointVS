@@ -236,7 +236,8 @@ class ReparamFullDense(nn.Module):
 class NeuralClassification(nn.Module):
 
     def __init__(self, feature_extractor=None, metric='Acc',
-                 num_features=256, full_cov=False, cov_rank=2):
+                 num_features=256, full_cov=False, cov_rank=2,
+                 opt_cycle=None):
         """Neural Linear model for multi-class classification.
 
         Arguments:
@@ -250,6 +251,7 @@ class NeuralClassification(nn.Module):
                 rank
         """
         super().__init__()
+        self.opt_cycle = '_' if opt_cycle is None else opt_cycle
         self.num_classes = 2
         self.feature_extractor = feature_extractor
         if self.feature_extractor.pretrained:
@@ -301,7 +303,7 @@ class NeuralClassification(nn.Module):
     def optimize(self, data, num_epochs=1000, batch_size=64, initial_lr=1e-2,
                  freq_summary=100,
                  weight_decay=1e-1, weight_decay_theta=None,
-                 train_transform=None, val_transform=None, opt_cycle=0,
+                 train_transform=None, val_transform=None,
                  **kwargs):
         """
         Internal functionality to train model
@@ -377,11 +379,12 @@ class NeuralClassification(nn.Module):
                 eta = get_eta(start_time, global_iter, total_iters)
                 time_elapsed = format_time(time.time() - start_time)
 
+                suffix = '(train, cycle {})'.format(self.opt_cycle)
                 wandb_update_dict = {
-                    'Time remaining (train)': eta,
-                    'Binary crossentropy (train, cycle {})'.format(
-                        opt_cycle): ce_loss,
-                    'Batch': epoch * len(dataloader) + batch
+                    'Time remaining ' + suffix: eta,
+                    'Binary crossentropy ' + suffix.format(
+                        self.opt_cycle): ce_loss,
+                    'Batch ' + suffix: epoch * len(dataloader) + batch
                 }
 
                 y_pred_np = nn.Softmax(dim=1)(y_pred).cpu().detach().numpy()
@@ -392,13 +395,13 @@ class NeuralClassification(nn.Module):
                     active_mean_pred = np.mean(y_pred_np[active_idx, 1])
                     wandb_update_dict.update({
                         'Mean active prediction (train, cycle {})'.format(
-                            opt_cycle): active_mean_pred
+                            self.opt_cycle): active_mean_pred
                     })
                 if len(decoy_idx[0]):
                     decoy_mean_pred = np.mean(y_pred_np[decoy_idx, 1])
                     wandb_update_dict.update({
                         'Mean decoy prediction (train, cycle {})'.format(
-                            opt_cycle): decoy_mean_pred,
+                            self.opt_cycle): decoy_mean_pred,
                     })
 
                 try:
@@ -422,17 +425,8 @@ class NeuralClassification(nn.Module):
                 )
                 global_iter += 1
 
-                # performance = self._evaluate_performance(y, y_pred)
                 losses.append(step_loss.cpu().item())
                 kls.append(kl.cpu().item())
-                # performances.append(performance.cpu().item())
-
-            # if epoch % freq_summary == 0 or epoch == num_epochs - 1:
-            #    val_bsz = 1024
-            #    val_losses, val_performances = self._evaluate(data, val_bsz, 'val', transform=val_transform, **kwargs)
-            # print('#{} loss: {:.4f} (val: {:.4f}), kl: {:.4f}, {}: {:.4f} (val: {:.4f})'.format(
-            #    epoch, np.mean(losses), np.mean(val_losses), np.mean(kls),
-            #    self.metric, np.mean(performances), np.mean(val_performances)))
 
     def get_projections(self, data, J, projection='two', gamma=0,
                         transform=None, **kwargs):
@@ -458,9 +452,20 @@ class NeuralClassification(nn.Module):
                     Dataset(data, 'unlabeled', transform=transform),
                     batch_size=256, shuffle=False)
 
+            start_time = time.time()
+            total_iters = len(dataloader)
+            global_iter = 0
             for batch, (x, _, _, _) in enumerate(dataloader):
                 x = tuple(utils.to_gpu(*x))
                 feat_x.append(self.encode(x))
+                eta = get_eta(start_time, global_iter, total_iters)
+
+                suffix = '(projections, cycle {})'.format(self.opt_cycle)
+                wandb_update_dict = {
+                    'Time remaining ' + suffix: eta,
+                    'Batch ' + suffix: batch
+                }
+                wandb.log(wandb_update_dict)
                 print_with_overwrite(
                     ('Getting projections for batch {0} of {1}'.format(
                         batch, len(dataloader)),))
