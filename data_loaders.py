@@ -44,7 +44,8 @@ def multiple_source_dataset(loader_class, *base_paths, receptors=None,
     datasets = []
     labels = []
     filenames = []
-    base_paths = sorted(base_paths)
+    base_paths = sorted(
+        [Path(bp).expanduser() for bp in base_paths if bp is not None])
     for base_path in base_paths:
         if base_path is not None:
             dataset = loader_class(base_path, receptors=receptors, **kwargs)
@@ -67,6 +68,7 @@ def multiple_source_dataset(loader_class, *base_paths, receptors=None,
     multi_source_dataset.class_sample_count = class_sample_count
     multi_source_dataset.labels = labels
     multi_source_dataset.filenames = filenames
+    multi_source_dataset.base_path = ', '.join([str(bp) for bp in base_paths])
     return multi_source_dataset
 
 
@@ -201,7 +203,7 @@ class LieConvDataset(torch.utils.data.Dataset):
         p_batch = torch.zeros(batch_size, max_len, 3)
         v_batch = torch.zeros(batch_size, max_len, 12)
         m_batch = torch.zeros(batch_size, max_len)
-        label_batch = torch.zeros(batch_size, 1)
+        label_batch = torch.zeros(batch_size, )
         ligands, receptors = [], []
         for batch_index, ((p, v, m, _), ligand, receptor, label) in enumerate(
                 batch):
@@ -217,14 +219,8 @@ class LieConvDataset(torch.utils.data.Dataset):
 
 class SE3TransformerDataset(torch.utils.data.Dataset):
 
-    def __init__(
-            self,
-            base_path,
-            radius: float = 12.0,
-            interaction_dist: float = 4,
-            receptors=None,
-            mode: str = 'all',
-            transform=None):
+    def __init__(self, base_path, radius=12.0, interaction_dist=4,
+                 receptors=None, mode='all', transform=None):
 
         self.base_path = Path(base_path).expanduser()
         self.filenames, self.labels, self.sampler = self.get_files_and_labels(

@@ -23,8 +23,11 @@ class CoresetConstruction(metaclass=abc.ABCMeta):
         self.save_dir = self.kwargs.pop('save_dir', None)
         train_idx, unlabeled_idx = data.index['train'], data.index['unlabeled']
         self.X_train, self.y_train = data.X[train_idx], data.y[train_idx]
-        self.X_unlabeled, self.y_unlabeled = data.X[unlabeled_idx], data.y[unlabeled_idx]
-        self.theta_mean, self.theta_cov = self.posterior(self.X_train, self.y_train, **self.kwargs)
+        self.X_unlabeled, self.y_unlabeled = data.X[unlabeled_idx], data.y[
+            unlabeled_idx]
+        self.theta_mean, self.theta_cov = self.posterior(self.X_train,
+                                                         self.y_train,
+                                                         **self.kwargs)
         self.scores = np.zeros(len(self.X_unlabeled))
 
     def build(self, M=1, **kwargs):
@@ -74,7 +77,8 @@ class ImportanceSampling(CoresetConstruction):
         :param kwargs: (dict) Additional arguments.
         """
         super().__init__(acq, data, posterior, **kwargs)
-        self.scores = self.acq(self.theta_mean, self.theta_cov, self.X_unlabeled, **self.kwargs)
+        self.scores = self.acq(self.theta_mean, self.theta_cov,
+                               self.X_unlabeled, **self.kwargs)
 
     def _init_build(self, M=1, seed=None):
         """
@@ -85,7 +89,8 @@ class ImportanceSampling(CoresetConstruction):
         if seed is not None:
             np.random.seed(seed)
 
-        self.counts = np.random.multinomial(M, self.scores / np.sum(self.scores))
+        self.counts = np.random.multinomial(
+            M, self.scores / np.sum(self.scores))
 
     def _step(self, m, w, **kwargs):
         """
@@ -111,7 +116,7 @@ class Random(CoresetConstruction):
         :param kwargs: (dict) Additional arguments.
         """
         super().__init__(acq, data, posterior, **kwargs)
-        self.scores = np.ones(len(self.X_unlabeled),)
+        self.scores = np.ones(len(self.X_unlabeled), )
 
     def _init_build(self, M=1, seed=None):
         """
@@ -144,6 +149,7 @@ class Argmax(ImportanceSampling):
     """
     Constructs a batch of points by selecting the M highest-scoring points according to the acquisition function.
     """
+
     def _init_build(self, M=1, seed=None):
         pass
 
@@ -173,7 +179,8 @@ class FrankWolfe(CoresetConstruction):
         super().__init__(acq, data, posterior, **kwargs)
         self.norm_fn = acq
         self.dotprod_fn = dotprod_fn
-        self.sigmas = self.norm_fn(self.theta_mean, self.theta_cov, self.X_unlabeled, **self.kwargs)
+        self.sigmas = self.norm_fn(self.theta_mean, self.theta_cov,
+                                   self.X_unlabeled, **self.kwargs)
         self.sigma = self.sigmas.sum()
 
     def _init_build(self, M=1, **kwargs):
@@ -186,12 +193,16 @@ class FrankWolfe(CoresetConstruction):
         self.cross_prods = np.zeros([N, N])
 
         for n, x_n in enumerate(self.X_unlabeled):
-             # self.cross_prods[n] = self.dotprod_fn(self.theta_mean, self.theta_cov, self.X_unlabeled, x_n, **self.kwargs)
-             self.cross_prods[n, :(n+1)] = self.dotprod_fn(self.theta_mean, self.theta_cov,
-                                                           self.X_unlabeled[:(n+1)], x_n, **self.kwargs)
+            # self.cross_prods[n] = self.dotprod_fn(self.theta_mean, self.theta_cov, self.X_unlabeled, x_n, **self.kwargs)
+            self.cross_prods[n, :(n + 1)] = self.dotprod_fn(self.theta_mean,
+                                                            self.theta_cov,
+                                                            self.X_unlabeled[
+                                                            :(n + 1)], x_n,
+                                                            **self.kwargs)
 
         # np.fill_diagonal(self.cross_prods, self.sigmas ** 2)
-        self.cross_prods = self.cross_prods + self.cross_prods.T - np.diag(np.diag(self.cross_prods))
+        self.cross_prods = self.cross_prods + self.cross_prods.T - np.diag(
+            np.diag(self.cross_prods))
         # np.testing.assert_allclose(np.diag(self.cross_prods), self.sigmas ** 2)
 
     def _step(self, m, w, **kwargs):
@@ -224,15 +235,15 @@ class FrankWolfe(CoresetConstruction):
         """
         f1 = np.zeros_like(w)
         f1[f] = 1
-        denominator = self.sigma**2 - 2 * self.sigma / self.sigmas[f] * w.T @ cross_prods[f] + w.T @ cross_prods @ w
-        numerator = self.sigma / self.sigmas[f] * (1-w).T @ cross_prods[f] - (1-w).T @ cross_prods @ w
+        denominator = self.sigma ** 2 - 2 * self.sigma / self.sigmas[f] * w.T @ \
+                      cross_prods[f] + w.T @ cross_prods @ w
+        numerator = self.sigma / self.sigmas[f] * (1 - w).T @ cross_prods[f] - (
+                1 - w).T @ cross_prods @ w
         return numerator / denominator, f1
 
 
-
-
 class ProjectedFrankWolfe(object):
-    def __init__(self, model, data, J, **kwargs):
+    def __init__(self, model, data, J, opt_cycle=-1, **kwargs):
         """
         Constructs a batch of points using ACS-FW with random projections. Note the slightly different interface.
         :param model: (nn.module) PyTorch model.
@@ -240,7 +251,8 @@ class ProjectedFrankWolfe(object):
         :param J: (int) Number of projections.
         :param kwargs: (dict) Additional arguments.
         """
-        self.ELn, self.entropy = model.get_projections(data, J, **kwargs)
+        self.ELn, self.entropy = model.get_projections(
+            data, J, opt_cycle=opt_cycle, **kwargs)
         squared_norm = torch.sum(self.ELn * self.ELn, dim=-1)
         self.sigmas = torch.sqrt(squared_norm + 1e-6)
         self.sigma = self.sigmas.sum()
@@ -262,17 +274,21 @@ class ProjectedFrankWolfe(object):
         """
         self._init_build(M, **kwargs)
         w = utils.to_gpu(torch.zeros([len(self.ELn), 1]))
-        norm = lambda weights: (self.EL - (self.ELn.t() @ weights).squeeze()).norm()
+        norm = lambda weights: (
+                self.EL - (self.ELn.t() @ weights).squeeze()).norm()
         for m in range(M):
             w = self._step(m, w)
 
         print('Final FW weights:', w[w.nonzero()].cpu().numpy())
         print('|| L-L(w)  ||: {:.4f}'.format(norm(w)))
         print('|| L-L(w1) ||: {:.4f}'.format(norm((w > 0).float())))
-        print('Avg pred entropy (pool): {:.4f}'.format(self.entropy.mean().item()))
-        print('Avg pred entropy (batch): {:.4f}'.format(self.entropy[w.flatten() > 0].mean().item()))
+        print('Avg pred entropy (pool): {:.4f}'.format(
+            self.entropy.mean().item()))
+        print('Avg pred entropy (batch): {:.4f}'.format(
+            self.entropy[w.flatten() > 0].mean().item()))
         try:
-            logdet = torch.slogdet(self.model.linear._compute_posterior()[1])[1].item()
+            logdet = torch.slogdet(self.model.linear._compute_posterior()[1])[
+                1].item()
             print('logdet weight cov: {:.4f}'.format(logdet))
         except TypeError:
             pass
@@ -291,7 +307,7 @@ class ProjectedFrankWolfe(object):
         scores = (self.ELn / self.sigmas[:, None]) @ (self.EL - self.ELw)
         f = torch.argmax(scores)
         gamma, f1 = self.compute_gamma(f, w)
-        #print('f: {}, gamma: {:.4f}, score: {:.4f}'.format(f, gamma.item(), scores[f].item()))
+        # print('f: {}, gamma: {:.4f}, score: {:.4f}'.format(f, gamma.item(), scores[f].item()))
         if np.isnan(gamma.cpu()):
             raise ValueError
 

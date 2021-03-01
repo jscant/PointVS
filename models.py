@@ -578,3 +578,40 @@ class BayesianPointNN(PointNeuralNetwork):
         log_pred_samples = y_pred
         y2 = self._compute_predictive_posterior(log_pred_samples)
         return torch.mean((y == torch.argmax(y2, dim=-1)).float())
+
+
+class LieFeatureExtractor(nn.Module):
+
+    def __init__(self, chin, ds_frac=1, k=64, nbhd=np.inf,
+                 act="swish", bn=True, num_layers=6, mean=True, per_point=True,
+                 liftsamples=1, fill=1 / 4, group=SE3, knn=False, cache=False,
+                 num_outputs=None, pool=None,
+                 **kwargs):
+        super().__init__()
+        utils.set_gpu_mode(True)
+        self.pretrained = False
+        if isinstance(fill, (float, int)):
+            fill = [fill] * num_layers
+        if isinstance(k, int):
+            k = [k] * (num_layers + 1)
+        conv = lambda ki, ko, fill: LieConv(ki, ko, mc_samples=nbhd,
+                                            ds_frac=ds_frac, bn=bn, act=act,
+                                            mean=mean,
+                                            group=group, fill=fill, cache=cache,
+                                            knn=knn, **kwargs)
+        self.net = nn.Sequential(
+            Pass(nn.Linear(chin, k[0]), dim=1),  # embedding layer
+            *[BottleBlock(k[i], k[i + 1], conv, bn=bn, act=act, fill=fill[i])
+              for i in range(num_layers)],
+            MaskBatchNormNd(k[-1]) if bn else nn.Sequential(),
+            Pass(nn.Linear(k[-1], 512), dim=1),
+            GlobalPool(mean=mean) if pool else Expression(lambda x: x[1]),
+            # Expression(lambda x: x[1]),
+        )
+        self.liftsamples = liftsamples
+        self.per_point = per_point
+        self.group = group
+
+    def forward(self, x):
+        lifted_x = self.group.lift(x, self.liftsamples)
+        return self.net(lifted_x)
