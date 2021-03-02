@@ -8,13 +8,15 @@ import torch.nn.functional as F
 from matplotlib import pyplot as plt
 
 
-def make_box(struct, radius=4):
+def make_box(struct, radius=4, relative_to_ligand=True):
     """Truncates receptor atoms which are too far away from the ligand.
 
     Arguments:
         struct: DataFrame containing x, y, z, types, bp series.
         radius: maximum distance from a ligand atom a receptor atom can be
             to avoid being discarded.
+        relative_to_ligand: if True, radius means minimum distance to closest
+            ligand atom; if False, radius means distance to centre of ligand
 
     Returns:
         DataFrame of the same format as the input <struct>, with all ligand
@@ -22,17 +24,22 @@ def make_box(struct, radius=4):
         ligand atom.
     """
     struct['sq_dist'] = struct['x'] ** 2 + struct['y'] ** 2 + struct['z'] ** 2
-    struct = struct[struct.sq_dist < 10 ** 2].copy()
+
+    if not relative_to_ligand:
+        struct = struct[struct.sq_dist < radius ** 2].copy()
+        return struct
+    struct = struct[struct.sq_dist < 10].copy()
     struct['include'] = 0
     ligand = struct[struct.bp == 0].copy()
     receptor = struct[struct.bp == 1].copy()
     ligand_np = ligand.to_numpy()[:, :3]
     receptor_np = receptor.to_numpy()[:, :3]
+    r_squared = radius ** 2
     for rec_idx in range(len(receptor)):
         for lig_idx in range(len(ligand)):
-            if np.linalg.norm(
-                    receptor_np[rec_idx, :] - ligand_np[lig_idx, :],
-                    2) <= radius:
+            sq_dist = sum(
+                np.square(receptor_np[rec_idx, :] - ligand_np[lig_idx, :]))
+            if sq_dist <= r_squared:
                 receptor.iloc[rec_idx, -1] = 1
                 break
     receptor = receptor[receptor.include == 1]

@@ -160,14 +160,15 @@ class LieConvDataset(torch.utils.data.Dataset):
             the number of points in the structure and (b) the label \in \{0, 1\}
             denoting whether the structure is an active or a decoy.
         """
+
         lig_fname = self.filenames[item]
         label = self.labels[item]
         rec_name = lig_fname.parent.name.split('_')[0]
         rec_fname = next((self.base_path / 'receptors').glob(
             '{}*.parquet'.format(rec_name)))
-        struct = centre_on_ligand(make_box(centre_on_ligand(
-            concat_structs(rec_fname, lig_fname)), radius=10))
-
+        struct = make_box(centre_on_ligand(
+            concat_structs(rec_fname, lig_fname)),
+            radius=10, relative_to_ligand=False)
         if self.rot:
             p = torch.from_numpy(
                 np.expand_dims(random_rotation(
@@ -178,6 +179,7 @@ class LieConvDataset(torch.utils.data.Dataset):
                     struct[struct.columns[:3]].to_numpy(), 0)).float()
         v = torch.unsqueeze(make_bit_vector(struct.types.to_numpy(), 11), 0)
         m = torch.from_numpy(np.ones((1, len(struct)))).float()
+
         return (p, v, m, len(struct)), lig_fname, rec_fname, label
 
     @staticmethod

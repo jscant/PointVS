@@ -450,7 +450,8 @@ class BayesianPointNN(PointNeuralNetwork):
         return x
 
     def get_projections(
-            self, dataloader, J, projection='two', gamma=0, opt_cycle=-1, **kwargs):
+            self, dataloader, J, projection='two', gamma=0, opt_cycle=-1,
+            **kwargs):
         """Get projections for ACS approximate procedure.
 
         Arguments:
