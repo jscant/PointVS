@@ -486,7 +486,6 @@ class EnResNet(PointNeuralNetwork):
             knn:
             cache:
         """
-        k = 64
         self.layers = nn.ModuleList([
             Pass(nn.Linear(12, k), dim=1),
             *[EnResBlock(k, k, EnTransformerBlock(
@@ -544,7 +543,6 @@ class EnFeatureExtractor(nn.Module):
         super().__init__()
         utils.set_gpu_mode(True)
         self.pretrained = False
-        k = 64
         self.net = nn.Sequential(
             Pass(nn.Linear(12, k), dim=1),
             *[EnResBlock(k, k, EnTransformerBlock(

@@ -97,6 +97,8 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', '-e', type=int, required=False,
                         default=1,
                         help='Number of times to iterate through training set.')
+    parser.add_argument('--channels', '-k', type=int, default=32,
+                        help='Channels for feature vectors')
     parser.add_argument('--train_receptors', '-r', type=str, nargs='*',
                         help='Names of specific receptors for training. If '
                              'specified, other structures will be ignored.')
@@ -189,7 +191,7 @@ if __name__ == '__main__':
         'ds_frac': 1.0,
         'fill': 1.0,
         'group': SE3(),
-        'k': 32,
+        'k': args.channels,
         'knn': False,
         'liftsamples': 1,
         'mean': True,
