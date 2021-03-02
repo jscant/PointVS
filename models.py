@@ -512,6 +512,60 @@ class EnResNet(PointNeuralNetwork):
         return x
 
 
+class EnFeatureExtractor(nn.Module):
+    """ResNet feature extractor for E(n)Transformer"""
+
+    def __init__(self, chin, k=12, act="swish", bn=True, num_layers=6,
+                 mean=True, pool=None, fc_in_features=512, **kwargs):
+        """
+        Arguments:
+            chin: number of input channels: 1 for MNIST, 3 for RGB images, other
+                for non images
+            ds_frac: total downsampling to perform throughout the layers of the
+                net. In (0,1)
+            k: channel width for the network. Can be int (same for all) or array
+                to specify individually.
+            nbhd: number of samples to use for Monte Carlo estimation (p)
+            act:
+            bn: whether or not to use batch normalization. Recommended in al
+                cases except dynamical systems.
+            num_layers: number of BottleNeck Block layers in the network
+            mean:
+            pool:
+            liftsamples: number of samples to use in lifting. 1 for all groups
+                with trivial stabilizer. Otherwise 2+
+            fill: specifies the fraction of the input which is included in local
+                neighborhood. (can be array to specify a different value for
+                each layer)
+            group: group to be equivariant to
+            knn:
+            cache:
+        """
+        super().__init__()
+        utils.set_gpu_mode(True)
+        self.pretrained = False
+        k = 64
+        self.net = nn.Sequential(
+            Pass(nn.Linear(12, k), dim=1),
+            *[EnResBlock(k, k, EnTransformerBlock(
+                k // 4, m_dim=16), bn=bn, act=act)
+              for _ in range(num_layers)],
+            MaskBatchNormNd(k) if bn else nn.Sequential(),
+            Pass(nn.Linear(k, fc_in_features), dim=1),
+            GlobalPool(mean=mean) if pool else Expression(lambda x: x[1]),
+        )
+
+        def init_weights(m):
+            if type(m) == nn.Linear:
+                torch.nn.init.xavier_uniform(m.weight)
+                m.bias.data.fill_(0.01)
+
+        self.apply(init_weights)
+
+    def forward(self, x):
+        return self.net(x)
+
+
 class BayesianPointNN(PointNeuralNetwork):
 
     def _get_y_true(self, y):
@@ -722,7 +776,7 @@ class LieFeatureExtractor(nn.Module):
     def __init__(self, chin, ds_frac=1, k=64, nbhd=np.inf,
                  act="swish", bn=True, num_layers=6, mean=True, per_point=True,
                  liftsamples=1, fill=1 / 4, group=SE3, knn=False, cache=False,
-                 num_outputs=None, pool=None,
+                 num_outputs=None, pool=None, fc_in_features=512,
                  **kwargs):
         super().__init__()
         utils.set_gpu_mode(True)
@@ -741,7 +795,7 @@ class LieFeatureExtractor(nn.Module):
             *[BottleBlock(k[i], k[i + 1], conv, bn=bn, act=act, fill=fill[i])
               for i in range(num_layers)],
             MaskBatchNormNd(k[-1]) if bn else nn.Sequential(),
-            Pass(nn.Linear(k[-1], 512), dim=1),
+            Pass(nn.Linear(k[-1], fc_in_features), dim=1),
             GlobalPool(mean=mean) if pool else Expression(lambda x: x[1]),
             # Expression(lambda x: x[1]),
         )

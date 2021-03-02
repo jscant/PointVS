@@ -26,7 +26,8 @@ from acs import utils
 from active_learning import active_learning
 from data_loaders import LieConvDataset, SE3TransformerDataset, \
     multiple_source_dataset
-from models import LieResNet, BayesianPointNN, LieFeatureExtractor, EnResNet
+from models import LieResNet, BayesianPointNN, LieFeatureExtractor, EnResNet, \
+    EnFeatureExtractor
 
 try:
     import wandb
@@ -157,8 +158,8 @@ if __name__ == '__main__':
 
     if args.model in ['lieconv', 'al_lieconv', 'entransformer']:
         ds_class = LieConvDataset
-    elif args.model == 'entransformer':
-        ds_class = EnResNet
+    elif args.model in ['entransformer', 'al_entransformer']:
+        ds_class = LieConvDataset
     elif args.model == 'se3transformer':
         raise NotImplementedError('se3transformer has been removed')
     else:
@@ -224,7 +225,8 @@ if __name__ == '__main__':
             model.test(test_dl)
     elif args.model == 'al_lieconv':
         train_ds = train_dl.dataset
-        feature_extractor = LieFeatureExtractor(**lieconv_model_kwargs)
+        feature_extractor = LieFeatureExtractor(
+            fc_in_features=args.al_fc_in_features, **lieconv_model_kwargs)
         bayesian_point_nn_kwargs = {
             'feature_extractor': feature_extractor,
             'fc_in_features': args.al_fc_in_features,
@@ -260,5 +262,29 @@ if __name__ == '__main__':
         model.optimise(train_dl, epochs=args.epochs)
         if test_dl is not None:
             model.test(test_dl)
+    elif args.model == 'al_entransformer':
+        train_ds = train_dl.dataset
+        feature_extractor = EnFeatureExtractor(
+            fc_in_features=args.al_fc_in_features, **lieconv_model_kwargs)
+        bayesian_point_nn_kwargs = {
+            'feature_extractor': feature_extractor,
+            'fc_in_features': args.al_fc_in_features,
+            'fc_out_features': args.al_features,
+            'full_cov': False,
+            'cov_rank': 2
+        }
+        model = BayesianPointNN(save_path, args.learning_rate, 'scratch', 0.002,
+                                **bayesian_point_nn_kwargs)
+        mode = 'control' if args.al_control else 'active'
+
+        if args.wandb_project is not None:
+            wandb.init(project=args.wandb_project, allow_val_change=True)
+            if args.wandb_run is not None:
+                wandb.run.name = args.run_name
+        active_learning(model, train_ds, test_dl, args.al_initial_pool_size,
+                        args.al_batch_size, mode=mode,
+                        wandb_project=args.wandb_project,
+                        wandb_run=args.wandb_run,
+                        projections=args.al_projections)
     else:
         raise NotImplementedError('model must be either lieconv or al_lieconv')
