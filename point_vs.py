@@ -282,7 +282,7 @@ if __name__ == '__main__':
         if args.wandb_project is not None:
             wandb.init(project=args.wandb_project, allow_val_change=True)
             if args.wandb_run is not None:
-                wandb.run.name = args.run_name
+                wandb.run.name = args.wandb_run
         active_learning(model, train_ds, test_dl, args.al_initial_pool_size,
                         args.al_batch_size, mode=mode,
                         wandb_project=args.wandb_project,
