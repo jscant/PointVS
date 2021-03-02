@@ -26,7 +26,7 @@ from acs import utils
 from active_learning import active_learning
 from data_loaders import LieConvDataset, SE3TransformerDataset, \
     multiple_source_dataset
-from models import LieResNet, BayesianPointNN, LieFeatureExtractor
+from models import LieResNet, BayesianPointNN, LieFeatureExtractor, EnResNet
 
 try:
     import wandb
@@ -39,7 +39,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 
 def get_data_loader(ds_class, *data_roots, receptors=None, batch_size=32,
-                    radius=6, rot=True):
+                    radius=6, rot=True, mask=True):
     ds_kwargs = {
         'receptors': receptors,
         'radius': radius,
@@ -55,9 +55,10 @@ def get_data_loader(ds_class, *data_roots, receptors=None, batch_size=32,
         })
     ds = multiple_source_dataset(
         ds_class, *data_roots, balanced=True, **ds_kwargs)
+    collate = ds.collate if mask else ds.collate_no_masking
     return DataLoader(
         ds, batch_size, False, sampler=ds.sampler, num_workers=0,
-        collate_fn=ds.collate)
+        collate_fn=collate)
 
 
 if __name__ == '__main__':
@@ -154,8 +155,10 @@ if __name__ == '__main__':
     save_path = args.save_path.expanduser()
     save_path.mkdir(parents=True, exist_ok=True)
 
-    if args.model in ['lieconv', 'al_lieconv']:
+    if args.model in ['lieconv', 'al_lieconv', 'entransformer']:
         ds_class = LieConvDataset
+    elif args.model == 'entransformer':
+        ds_class = EnResNet
     elif args.model == 'se3transformer':
         raise NotImplementedError('se3transformer has been removed')
     else:
@@ -172,9 +175,10 @@ if __name__ == '__main__':
     else:
         test_receptors = args.test_receptors
 
+    mask = False if args.model == 'entransformer' else True
     train_dl = get_data_loader(
         ds_class, args.train_data_root, args.translated_actives,
-        receptors=train_receptors, radius=args.radius, rot=True)
+        receptors=train_receptors, radius=args.radius, rot=True, mask=mask)
 
     lieconv_model_kwargs = {
         'act': 'relu',
@@ -213,7 +217,7 @@ if __name__ == '__main__':
         if args.wandb_project is not None:
             wandb.init(project=args.wandb_project, allow_val_change=True)
             if args.wandb_run is not None:
-                wandb.run.name = args.run_name
+                wandb.run.name = args.wandb_run
             wandb.watch(model)
         model.optimise(train_dl, epochs=args.epochs)
         if test_dl is not None:
@@ -243,5 +247,18 @@ if __name__ == '__main__':
                         projections=args.al_projections)
     elif args.model == 'se3transformer':
         raise NotImplementedError('se3transformer has been removed')
+    elif args.model == 'entransformer':
+        model = EnResNet(save_path, args.learning_rate, **lieconv_model_kwargs)
+        if args.load_weights is not None:
+            model.load(args.load_weights.expanduser())
+        model.save_path = save_path
+        if args.wandb_project is not None:
+            wandb.init(project=args.wandb_project, allow_val_change=True)
+            if args.wandb_run is not None:
+                wandb.run.name = args.wandb_run
+            wandb.watch(model)
+        model.optimise(train_dl, epochs=args.epochs)
+        if test_dl is not None:
+            model.test(test_dl)
     else:
         raise NotImplementedError('model must be either lieconv or al_lieconv')

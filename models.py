@@ -4,17 +4,23 @@ from pathlib import Path, PosixPath
 
 import numpy as np
 import torch
-import torch.nn as nn
 import wandb
-from lie_conv.lieConv import LieConv, GlobalPool, BottleBlock
+from egnn_pytorch import EGNN
+from egnn_pytorch.egnn_pytorch import fourier_encode_dist, exists
+from einops import rearrange, repeat
+from lie_conv.lieConv import LieConv, GlobalPool, BottleBlock, Swish
 from lie_conv.lieGroups import SE3
 from lie_conv.masked_batchnorm import MaskBatchNormNd
 from lie_conv.utils import Expression, Pass
+from torch import nn, einsum
 from torch.distributions.multivariate_normal import MultivariateNormal as MVN
 
 from acs import utils
 from acs.model import ReparamFullDense, LocalReparamDense
 from lieconv_utils import get_eta, format_time, print_with_overwrite
+
+
+# types
 
 
 class PointNeuralNetwork(nn.Module):
@@ -371,6 +377,136 @@ class LieResNet(PointNeuralNetwork):
 
     def forward(self, x):
         x = tuple([ten.cuda() for ten in self.group.lift(x, self.liftsamples)])
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
+
+class EnTransformerBlock(EGNN):
+    def forward(self, x):
+        if len(x) == 3:
+            coors, feats, mask = x
+            edges = None
+        else:
+            coors, feats, mask, edges = x
+        b, n, d, fourier_features = *feats.shape, self.fourier_features
+
+        rel_coors = rearrange(coors, 'b i d -> b i () d') - rearrange(
+            coors, 'b j d -> b () j d')
+        rel_dist = (rel_coors ** 2).sum(dim=-1, keepdim=True)
+
+        if fourier_features > 0:
+            rel_dist = fourier_encode_dist(rel_dist,
+                                           num_encodings=fourier_features)
+            rel_dist = rearrange(rel_dist, 'b i j () d -> b i j d')
+
+        feats_i = repeat(feats, 'b i d -> b i n d', n=n)
+        feats_j = repeat(feats, 'b j d -> b n j d', n=n)
+        edge_input = torch.cat((feats_i, feats_j, rel_dist), dim=-1)
+
+        if exists(edges):
+            edge_input = torch.cat((edge_input, edges), dim=-1)
+
+        m_ij = self.edge_mlp(edge_input)
+
+        coor_weights = self.coors_mlp(m_ij)
+        coor_weights = rearrange(coor_weights, 'b i j () -> b i j')
+
+        coors_out = einsum('b i j, b i j c -> b i c', coor_weights,
+                           rel_coors) + coors
+
+        m_i = m_ij.sum(dim=-2)
+
+        node_mlp_input = torch.cat((feats, m_i), dim=-1)
+        node_out = self.node_mlp(node_mlp_input) + feats
+
+        return coors_out, node_out, mask
+
+
+class EnResBlock(nn.Module):
+
+    def __init__(self, chin, chout, conv, bn=False, act='swish'):
+        super().__init__()
+        nonlinearity = Swish if act == 'swish' else nn.ReLU
+        self.conv = conv
+        self.net = nn.ModuleList([
+            MaskBatchNormNd(chin) if bn else nn.Sequential(),
+            Pass(nonlinearity(), dim=1),
+            Pass(nn.Linear(chin, chin // 4), dim=1),
+            MaskBatchNormNd(chin // 4) if bn else nn.Sequential(),
+            Pass(nonlinearity(), dim=1),
+            self.conv,
+            MaskBatchNormNd(chout // 4) if bn else nn.Sequential(),
+            Pass(nonlinearity(), dim=1),
+            Pass(nn.Linear(chout // 4, chout), dim=1),
+        ])
+        self.chin = chin
+
+    def forward(self, inp):
+        sub_coords, sub_values, mask = inp
+        for layer in self.net:
+            inp = layer(inp)
+        new_coords, new_values, mask = inp
+        new_values[..., :self.chin] += sub_values
+        return new_coords, new_values, mask
+
+
+class EnResNet(PointNeuralNetwork):
+    """ResNet for E(n)Transformer"""
+
+    def _get_y_true(self, y):
+        return y.cuda()
+
+    def _process_inputs(self, x):
+        return tuple([ten.cuda() for ten in x])
+
+    def build_net(self, chin, k=12, act="swish", bn=True, num_layers=6,
+                  mean=True, pool=True, **kwargs):
+        """
+        Arguments:
+            chin: number of input channels: 1 for MNIST, 3 for RGB images, other
+                for non images
+            ds_frac: total downsampling to perform throughout the layers of the
+                net. In (0,1)
+            k: channel width for the network. Can be int (same for all) or array
+                to specify individually.
+            nbhd: number of samples to use for Monte Carlo estimation (p)
+            act:
+            bn: whether or not to use batch normalization. Recommended in al
+                cases except dynamical systems.
+            num_layers: number of BottleNeck Block layers in the network
+            mean:
+            pool:
+            liftsamples: number of samples to use in lifting. 1 for all groups
+                with trivial stabilizer. Otherwise 2+
+            fill: specifies the fraction of the input which is included in local
+                neighborhood. (can be array to specify a different value for
+                each layer)
+            group: group to be equivariant to
+            knn:
+            cache:
+        """
+        k = 64
+        self.layers = nn.ModuleList([
+            Pass(nn.Linear(12, k), dim=1),
+            *[EnResBlock(k, k, EnTransformerBlock(
+                k // 4, m_dim=16), bn=bn, act=act)
+              for _ in range(num_layers)],
+            MaskBatchNormNd(k) if bn else nn.Sequential(),
+            Pass(nn.ReLU(), dim=1),
+            Pass(nn.Linear(k, 2), dim=1),
+            GlobalPool(mean=mean) if pool else Expression(lambda x: x[1])
+        ])
+
+        def init_weights(m):
+            if type(m) == nn.Linear:
+                torch.nn.init.xavier_uniform(m.weight)
+                m.bias.data.fill_(0.01)
+
+        self.apply(init_weights)
+        print('Params:', self.param_count)
+
+    def forward(self, x):
         for layer in self.layers:
             x = layer(x)
         return x

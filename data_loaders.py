@@ -65,6 +65,8 @@ def multiple_source_dataset(loader_class, *base_paths, receptors=None,
     multi_source_dataset = torch.utils.data.ConcatDataset(datasets)
     multi_source_dataset.sampler = sampler
     multi_source_dataset.collate = loader_class.collate
+    if hasattr(loader_class, 'collate_no_masking'):
+        multi_source_dataset.collate_no_masking = loader_class.collate_no_masking
     multi_source_dataset.class_sample_count = class_sample_count
     multi_source_dataset.labels = labels
     multi_source_dataset.filenames = filenames
@@ -212,6 +214,41 @@ class LieConvDataset(torch.utils.data.Dataset):
             p_batch[batch_index, :p.shape[1], :] = p
             v_batch[batch_index, :v.shape[1], :] = v
             m_batch[batch_index, :m.shape[1]] = m
+            label_batch[batch_index] = label
+            ligands.append(ligand)
+            receptors.append(receptor)
+        return (p_batch.float(), v_batch.float(),
+                m_batch.bool()), label_batch.long(), ligands, receptors
+
+    @staticmethod
+    def collate_no_masking(batch):
+        """Processing of inputs which takes place after batch is selected.
+
+        LieConv networks take tuples of torch tensors (p, v, m), which are:
+            p, (batch_size, n_atoms, 3): coordinates of each atom
+            v, (batch_size, n_atoms, n_features): features for each atom
+            m, (batch_size, n_atoms): mask for each coordinate slot
+
+        Note that n_atoms is the largest number of atoms in a structure in
+        each batch.
+
+        Arguments:
+            batch: iterable of individual inputs.
+
+        Returns:
+            Tuple of feature vectors ready for input into a LieConv network.
+        """
+        max_len = max([b[0][-1] for b in batch])
+        batch_size = len(batch)
+        p_batch = torch.zeros(batch_size, max_len, 3)
+        v_batch = torch.zeros(batch_size, max_len, 12)
+        m_batch = torch.ones(batch_size, max_len)
+        label_batch = torch.zeros(batch_size, )
+        ligands, receptors = [], []
+        for batch_index, ((p, v, m, _), ligand, receptor, label) in enumerate(
+                batch):
+            p_batch[batch_index, :p.shape[1], :] = p
+            v_batch[batch_index, :v.shape[1], :] = v
             label_batch[batch_index] = label
             ligands.append(ligand)
             receptors.append(receptor)
