@@ -127,13 +127,13 @@ class PointNeuralNetwork(nn.Module):
                         data_loader) + self.batch + 1
                 }
 
-                if len(active_idx[0]):
+                if len(active_idx[0][0]):
                     active_mean_pred = np.mean(
                         y_pred_np[active_idx])
                     wandb_update_dict.update({
                         'Mean active prediction (train)': active_mean_pred
                     })
-                if len(decoy_idx[0]):
+                if len(decoy_idx[0][0]):
                     decoy_mean_pred = np.mean(
                         y_pred_np[decoy_idx])
                     wandb_update_dict.update({
@@ -181,7 +181,7 @@ class PointNeuralNetwork(nn.Module):
         self.cuda()
         start_time = time.time()
         log_interval = 10
-        decoy_mean_pred, active_mean_pred = -1, -1
+        decoy_mean_pred, active_mean_pred = 0.5, 0.5
         predictions = ''
         if predictions_file is None:
             predictions_file = self.predictions_file
@@ -214,12 +214,12 @@ class PointNeuralNetwork(nn.Module):
                     'Batch': self.batch + 1
                 }
 
-                if len(active_idx[0]):
+                if len(active_idx[0][0]):
                     active_mean_pred = np.mean(y_pred_np[active_idx])
                     wandb_update_dict.update({
                         'Mean active prediction (validation)': active_mean_pred
                     })
-                if len(decoy_idx[0]):
+                if len(decoy_idx[0][0]):
                     decoy_mean_pred = np.mean(y_pred_np[decoy_idx])
                     wandb_update_dict.update({
                         'Mean decoy prediction (validation)': decoy_mean_pred,
