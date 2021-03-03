@@ -40,7 +40,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 
 def get_data_loader(ds_class, *data_roots, receptors=None, batch_size=32,
-                    radius=6, rot=True, mask=True):
+                    radius=6, rot=True, mask=True, mode='train'):
     ds_kwargs = {
         'receptors': receptors,
         'radius': radius,
@@ -57,8 +57,9 @@ def get_data_loader(ds_class, *data_roots, receptors=None, batch_size=32,
     ds = multiple_source_dataset(
         ds_class, *data_roots, balanced=True, **ds_kwargs)
     collate = ds.collate if mask else ds.collate_no_masking
+    sampler = ds.sampler if mode == 'train' else None
     return DataLoader(
-        ds, batch_size, False, sampler=ds.sampler, num_workers=0,
+        ds, batch_size, False, sampler=sampler, num_workers=0,
         collate_fn=collate)
 
 
@@ -181,7 +182,8 @@ if __name__ == '__main__':
     mask = False if args.model == 'entransformer' else True
     train_dl = get_data_loader(
         ds_class, args.train_data_root, args.translated_actives,
-        receptors=train_receptors, radius=args.radius, rot=True, mask=mask)
+        receptors=train_receptors, radius=args.radius, rot=True, mask=mask,
+        mode='train')
 
     lieconv_model_kwargs = {
         'act': 'relu',
@@ -208,7 +210,7 @@ if __name__ == '__main__':
     if args.test_data_root is not None:
         test_dl = get_data_loader(
             ds_class, args.test_data_root, receptors=test_receptors,
-            radius=args.radius, rot=False)
+            radius=args.radius, rot=False, mode='val')
     else:
         test_dl = None
 

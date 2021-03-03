@@ -73,6 +73,9 @@ class PointNeuralNetwork(nn.Module):
         self.bce_loss = loss
         return loss
 
+    def forward_pass(self, x):
+        return self.forward(x)
+
     def optimise(self, data_loader, epochs=1, opt_cycle=-1):
         """Train the network.
 
@@ -97,7 +100,8 @@ class PointNeuralNetwork(nn.Module):
 
                 x = self._process_inputs(x)
                 y_true = self._get_y_true(y_true).cuda()
-                y_pred = self.forward(x)
+                y_pred = self.forward_pass(x)
+
                 y_true_np = y_true.cpu().detach().numpy()
                 y_pred_np = nn.Softmax(dim=1)(y_pred).cpu().detach().numpy()
 
@@ -191,7 +195,7 @@ class PointNeuralNetwork(nn.Module):
 
                 x = self._process_inputs(x)
                 y_true = self._get_y_true(y_true).cuda()
-                y_pred = self.forward(x)
+                y_pred = self.forward_pass(x)
                 y_true_np = y_true.cpu().detach().numpy()
                 y_pred_np = nn.Softmax(dim=1)(y_pred).cpu().detach().numpy()
 
@@ -565,6 +569,11 @@ class EnFeatureExtractor(nn.Module):
 
 
 class BayesianPointNN(PointNeuralNetwork):
+
+    def forward_pass(self, x):
+        y_pred_samples = self.forward(x, num_samples=100)
+        y_pred = self._compute_predictive_posterior(y_pred_samples)
+        return y_pred
 
     def _get_y_true(self, y):
         return y
