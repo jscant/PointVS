@@ -321,7 +321,7 @@ class SE3TransformerDataset(torch.utils.data.Dataset):
         else:
             weights = 1. / class_sample_count
             sample_weights = torch.from_numpy(
-                np.array([weights[i] for i in labels])).
+                np.array([weights[i] for i in labels]))
             sampler = torch.utils.data.WeightedRandomSampler(
                 sample_weights, len(sample_weights)
             )
