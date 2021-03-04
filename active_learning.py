@@ -62,7 +62,7 @@ def active_learning(model, train_dataset, val_dataloader,
         else:
             weights = 1. / class_sample_count
             sample_weights = torch.from_numpy(
-                np.array([weights[i] for i in labels])).
+                np.array([weights[i] for i in labels]))
             sample_weights[np.setdiff1d(indices, labelled_indices)] = 0
             return WeightedSubsetRandomSampler(
                 sample_weights, labelled_indices)
