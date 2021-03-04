@@ -18,6 +18,7 @@ import argparse
 import warnings
 from pathlib import PosixPath
 
+import torch
 import yaml
 from lie_conv.lieGroups import SE3
 from torch.utils.data import DataLoader
@@ -37,7 +38,6 @@ except ImportError:
     wandb = None
 
 warnings.filterwarnings("ignore", category=UserWarning)
-
 
 def get_data_loader(ds_class, *data_roots, receptors=None, batch_size=32,
                     radius=6, rot=True, mask=True, mode='train'):
@@ -146,7 +146,16 @@ if __name__ == '__main__':
                         help='Load yaml file with command line args. Any args '
                              'specified in the file will overwrite other args '
                              'specified on the command line.')
+    parser.add_argument('--double', action='store_true',
+                        help='Use 64-bit floating point precision')
     args = parser.parse_args()
+
+    if args.double:
+        torch.set_default_dtype(torch.float64)
+        torch.set_default_tensor_type(torch.DoubleTensor)
+    else:
+        torch.set_default_dtype(torch.float32)
+        torch.set_default_tensor_type(torch.FloatTensor)
 
     if args.load_args is not None:
         with open(args.load_args.expanduser(), 'r') as f:
@@ -182,6 +191,7 @@ if __name__ == '__main__':
     mask = False if args.model == 'entransformer' else True
     train_dl = get_data_loader(
         ds_class, args.train_data_root, args.translated_actives,
+        batch_size=args.batch_size,
         receptors=train_receptors, radius=args.radius, rot=True, mask=mask,
         mode='train')
 
@@ -210,6 +220,7 @@ if __name__ == '__main__':
     if args.test_data_root is not None:
         test_dl = get_data_loader(
             ds_class, args.test_data_root, receptors=test_receptors,
+            batch_size=args.batch_size,
             radius=args.radius, rot=False, mode='val')
     else:
         test_dl = None

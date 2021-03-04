@@ -20,9 +20,6 @@ from acs.model import ReparamFullDense, LocalReparamDense
 from lieconv_utils import get_eta, format_time, print_with_overwrite
 
 
-# types
-
-
 class PointNeuralNetwork(nn.Module):
 
     def __init__(self, save_path, learning_rate, wandb_project=None,
@@ -51,15 +48,13 @@ class PointNeuralNetwork(nn.Module):
 
         self.build_net(**model_kwargs)
         self.optimiser = torch.optim.Adam(self.parameters(), lr=self.lr)
+
         self.cuda()
 
-    def build_net(self, **kwargs):
-        for layer in [t for t in self.parameters() if t.requires_grad]:
-            nn.init.xavier_normal_(layer)
-
-    @abstractmethod
     def forward(self, x):
-        pass
+        for layer in self.layers:
+            x = layer(x)
+        return x
 
     @abstractmethod
     def _get_y_true(self, y):
@@ -69,7 +64,7 @@ class PointNeuralNetwork(nn.Module):
         return x.cuda()
 
     def _get_loss(self, y_true, y_pred, scale=None):
-        loss = self.cross_entropy(y_pred.float(), y_true.long())
+        loss = self.cross_entropy(y_pred, y_true.long())
         self.bce_loss = loss
         return loss
 
@@ -158,7 +153,7 @@ class PointNeuralNetwork(nn.Module):
                      'Mean decoy: {0:.4f}'.format(decoy_mean_pred))
                 )
 
-                self.losses.append(float(loss))
+                self.losses.append(float(self.bce_loss))
                 if not (self.batch + 1) % log_interval or \
                         self.batch == total_iters - 1:
                     self.save_loss(log_interval)
@@ -470,25 +465,14 @@ class EnResNet(PointNeuralNetwork):
         Arguments:
             chin: number of input channels: 1 for MNIST, 3 for RGB images, other
                 for non images
-            ds_frac: total downsampling to perform throughout the layers of the
-                net. In (0,1)
             k: channel width for the network. Can be int (same for all) or array
                 to specify individually.
-            nbhd: number of samples to use for Monte Carlo estimation (p)
             act:
             bn: whether or not to use batch normalization. Recommended in al
                 cases except dynamical systems.
             num_layers: number of BottleNeck Block layers in the network
             mean:
             pool:
-            liftsamples: number of samples to use in lifting. 1 for all groups
-                with trivial stabilizer. Otherwise 2+
-            fill: specifies the fraction of the input which is included in local
-                neighborhood. (can be array to specify a different value for
-                each layer)
-            group: group to be equivariant to
-            knn:
-            cache:
         """
         self.layers = nn.ModuleList([
             Pass(nn.Linear(12, k), dim=1),
@@ -508,11 +492,6 @@ class EnResNet(PointNeuralNetwork):
 
         self.apply(init_weights)
         print('Params:', self.param_count)
-
-    def forward(self, x):
-        for layer in self.layers:
-            x = layer(x)
-        return x
 
 
 class EnFeatureExtractor(nn.Module):
@@ -718,7 +697,7 @@ class BayesianPointNN(PointNeuralNetwork):
         """
         log_pred_samples = y_pred
         ll_samples = -self.cross_entropy(
-            log_pred_samples.float(), y.squeeze().long())
+            log_pred_samples, y.squeeze().long())
         return ll_samples
 
     def _compute_predictive_posterior(self, y_pred, logits=True):
@@ -768,14 +747,6 @@ class BayesianPointNN(PointNeuralNetwork):
         if classes > 1:
             return torch.sum(py * loglik, dim=-1, keepdim=True)
         return py * loglik
-
-    def _evaluate_performance(self, y, y_pred):
-        """
-        Evaluate performance metric for model
-        """
-        log_pred_samples = y_pred
-        y2 = self._compute_predictive_posterior(log_pred_samples)
-        return torch.mean((y == torch.argmax(y2, dim=-1)).float())
 
 
 class LieFeatureExtractor(nn.Module):

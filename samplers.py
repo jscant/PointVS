@@ -19,8 +19,7 @@ class WeightedSubsetRandomSampler(Sampler):
         self.np_indices = np.array(indices)
         self.np_subweights = np.array(weights)[self.np_indices]
 
-        self.subweights = torch.as_tensor(
-            self.np_subweights, dtype=torch.double)
+        self.subweights = torch.as_tensor(self.np_subweights)
 
         self.replacement = replacement
         self.generator = generator

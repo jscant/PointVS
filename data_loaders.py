@@ -60,7 +60,7 @@ def multiple_source_dataset(loader_class, *base_paths, receptors=None,
     else:
         weights = 1. / class_sample_count
         sample_weights = torch.from_numpy(
-            np.array([weights[i] for i in labels])).float()
+            np.array([weights[i] for i in labels]))
         sampler = WeightedRandomSampler(sample_weights, len(sample_weights))
     multi_source_dataset = torch.utils.data.ConcatDataset(datasets)
     multi_source_dataset.sampler = sampler
@@ -135,7 +135,7 @@ class LieConvDataset(torch.utils.data.Dataset):
         else:
             weights = 1. / class_sample_count
             self.sample_weights = torch.from_numpy(
-                np.array([weights[i] for i in labels])).float()
+                np.array([weights[i] for i in labels]))
             self.sampler = torch.utils.data.WeightedRandomSampler(
                 self.sample_weights, len(self.sample_weights)
             )
@@ -174,13 +174,13 @@ class LieConvDataset(torch.utils.data.Dataset):
         if self.rot:
             p = torch.from_numpy(
                 np.expand_dims(random_rotation(
-                    struct[struct.columns[:3]].to_numpy()), 0)).float()
+                    struct[struct.columns[:3]].to_numpy()), 0))
         else:
             p = torch.from_numpy(
                 np.expand_dims(
-                    struct[struct.columns[:3]].to_numpy(), 0)).float()
+                    struct[struct.columns[:3]].to_numpy(), 0))
         v = torch.unsqueeze(make_bit_vector(struct.types.to_numpy(), 11), 0)
-        m = torch.from_numpy(np.ones((1, len(struct)))).float()
+        m = torch.from_numpy(np.ones((1, len(struct))))
 
         return (p, v, m, len(struct)), lig_fname, rec_fname, label
 
@@ -217,7 +217,7 @@ class LieConvDataset(torch.utils.data.Dataset):
             label_batch[batch_index] = label
             ligands.append(ligand)
             receptors.append(receptor)
-        return (p_batch.float(), v_batch.float(),
+        return (p_batch, v_batch,
                 m_batch.bool()), label_batch.long(), ligands, receptors
 
     @staticmethod
@@ -252,7 +252,7 @@ class LieConvDataset(torch.utils.data.Dataset):
             label_batch[batch_index] = label
             ligands.append(ligand)
             receptors.append(receptor)
-        return (p_batch.float(), v_batch.float(),
+        return (p_batch, v_batch,
                 m_batch.bool()), label_batch.long(), ligands, receptors
 
 
@@ -321,7 +321,7 @@ class SE3TransformerDataset(torch.utils.data.Dataset):
         else:
             weights = 1. / class_sample_count
             sample_weights = torch.from_numpy(
-                np.array([weights[i] for i in labels])).float()
+                np.array([weights[i] for i in labels])).
             sampler = torch.utils.data.WeightedRandomSampler(
                 sample_weights, len(sample_weights)
             )

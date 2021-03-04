@@ -59,12 +59,12 @@ def make_bit_vector(atom_types, n_atom_types):
         which indicates the structure (ligand == 0, receptor == 1).
     """
     indices = torch.from_numpy(atom_types % n_atom_types).long()
-    one_hot = F.one_hot(indices, num_classes=n_atom_types).float()
+    one_hot = F.one_hot(indices, num_classes=n_atom_types)
     rows, cols = one_hot.shape
     result = torch.zeros(rows, cols + 1)
     result[:, 1:] = one_hot
     type_bit = torch.from_numpy(
-        (atom_types // n_atom_types).astype('bool').astype('int')).float()
+        (atom_types // n_atom_types).astype('bool').astype('int'))
     result[:, 0] = type_bit
     return result
 
