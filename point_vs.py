@@ -39,6 +39,7 @@ except ImportError:
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
+
 def get_data_loader(ds_class, *data_roots, receptors=None, batch_size=32,
                     radius=6, rot=True, mask=True, mode='train'):
     ds_kwargs = {
@@ -225,13 +226,18 @@ if __name__ == '__main__':
     else:
         test_dl = None
 
+    wandb_init_kwargs = {
+        'project': args.wandb_project, 'allow_val_change': True,
+        'config': vars(args)
+    }
+
     if args.model == 'lieconv':
         model = LieResNet(save_path, args.learning_rate, **lieconv_model_kwargs)
         if args.load_weights is not None:
             model.load(args.load_weights.expanduser())
         model.save_path = save_path
         if args.wandb_project is not None:
-            wandb.init(project=args.wandb_project, allow_val_change=True)
+            wandb.init(**wandb_init_kwargs)
             if args.wandb_run is not None:
                 wandb.run.name = args.wandb_run
             wandb.watch(model)
@@ -254,7 +260,7 @@ if __name__ == '__main__':
         mode = 'control' if args.al_control else 'active'
 
         if args.wandb_project is not None:
-            wandb.init(project=args.wandb_project, allow_val_change=True)
+            wandb.init(**wandb_init_kwargs)
             if args.wandb_run is not None:
                 wandb.run.name = args.run_name
         active_learning(model, train_ds, test_dl, args.al_initial_pool_size,
@@ -270,7 +276,7 @@ if __name__ == '__main__':
             model.load(args.load_weights.expanduser())
         model.save_path = save_path
         if args.wandb_project is not None:
-            wandb.init(project=args.wandb_project, allow_val_change=True)
+            wandb.init(**wandb_init_kwargs)
             if args.wandb_run is not None:
                 wandb.run.name = args.wandb_run
             wandb.watch(model)
@@ -293,7 +299,7 @@ if __name__ == '__main__':
         mode = 'control' if args.al_control else 'active'
 
         if args.wandb_project is not None:
-            wandb.init(project=args.wandb_project, allow_val_change=True)
+            wandb.init(**wandb_init_kwargs)
             if args.wandb_run is not None:
                 wandb.run.name = args.wandb_run
         active_learning(model, train_ds, test_dl, args.al_initial_pool_size,
