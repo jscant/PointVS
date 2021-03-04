@@ -150,6 +150,8 @@ if __name__ == '__main__':
                              'specified on the command line.')
     parser.add_argument('--double', action='store_true',
                         help='Use 64-bit floating point precision')
+    parser.add_argument('--kernel_type', type=str, default='mlp',
+                        help='One of 2232, mlp (see original repo)')
     args = parser.parse_args()
 
     if args.double:
@@ -228,7 +230,7 @@ if __name__ == '__main__':
         'block_norm': "layer_pre",
         'output_norm': "none",
         'kernel_norm': "none",
-        'kernel_type': "mlp",
+        'kernel_type': args.kernel_type,
         'kernel_dim': 16,
         'kernel_act': "swish",
         'mc_samples': 4,
