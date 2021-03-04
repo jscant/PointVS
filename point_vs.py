@@ -150,10 +150,25 @@ if __name__ == '__main__':
                              'specified on the command line.')
     parser.add_argument('--double', action='store_true',
                         help='Use 64-bit floating point precision')
-    parser.add_argument('--kernel_type', type=str, default='mlp',
-                        help='One of 2232, mlp (see original repo)')
+    parser.add_argument('--kernel_type', type=str, default=None,
+                        help='One of 2232, mlp, overrides attention_fn '
+                             '(see original repo)')
+    parser.add_argument('--attention_fn', type=str, default=None,
+                        help='One of norm_exp, softmax, dot_product: '
+                             'activation for attention (overridden by '
+                             'kernel_type)')
     args = parser.parse_args()
 
+    # Some sanitation
+    if args.attention_fn is not None and args.kernel_type is not None:
+        raise RuntimeError('attention_fn={0} is overridden by kernel_type='
+                           '{1}'.format(args.attention_fn, args.kernel_type))
+    elif args.kernel_type is None:
+        args.kernel_type = 'mlp'
+    elif args.attention_fn is None:
+        args.attention_fn = 'norm_exp'
+
+    # This is a lot slower so only use if precision is an issue
     if args.double:
         torch.set_default_dtype(torch.float64)
         torch.set_default_tensor_type(torch.DoubleTensor)
@@ -161,6 +176,7 @@ if __name__ == '__main__':
         torch.set_default_dtype(torch.float32)
         torch.set_default_tensor_type(torch.FloatTensor)
 
+    # Load a yaml if required
     if args.load_args is not None:
         with open(args.load_args.expanduser(), 'r') as f:
             loaded_args = yaml.full_load(f)
@@ -168,20 +184,20 @@ if __name__ == '__main__':
             if hasattr(args, key):
                 setattr(args, key, value)
 
+    # No point even attempting any of this without a GPU
     utils.set_gpu_mode(True)
     save_path = args.save_path.expanduser()
     save_path.mkdir(parents=True, exist_ok=True)
 
-    if args.model in (
-            'lieconv', 'al_lieconv', 'entransformer', 'lietransformer'):
+    allowed_models = ('lieconv', 'al_lieconv', 'entransformer',
+                      'lietransformer', 'al_entransformer')
+
+    # Dataset class
+    if args.model in allowed_models:
         ds_class = LieConvDataset
-    elif args.model in ('entransformer', 'al_entransformer'):
-        ds_class = LieConvDataset
-    elif args.model == 'se3transformer':
-        raise NotImplementedError('se3transformer has been removed')
     else:
         raise NotImplementedError(
-            'Only lieconv and al_lieconv models supported')
+            'model must be one of ' + ', '.join(allowed_models))
 
     if isinstance(args.train_receptors, str):
         train_receptors = tuple([args.train_receptors])
@@ -235,7 +251,7 @@ if __name__ == '__main__':
         'kernel_act': "swish",
         'mc_samples': 4,
         'fill': 1.0,
-        'attention_fn': "norm_exp",
+        'attention_fn': args.attention_fn,
         'feature_embed_dim': None,
         'max_sample_norm': None,
         'lie_algebra_nonlinearity': None,
@@ -246,13 +262,13 @@ if __name__ == '__main__':
     with open(save_path / 'cmd_args.yaml', 'w') as f:
         yaml.dump(vars(args), f)
 
+    # Is a validation set specified?
+    test_dl = None
     if args.test_data_root is not None:
         test_dl = get_data_loader(
             ds_class, args.test_data_root, receptors=test_receptors,
             batch_size=args.batch_size,
             radius=args.radius, rot=False, mode='val')
-    else:
-        test_dl = None
 
     wandb_init_kwargs = {
         'project': args.wandb_project, 'allow_val_change': True,
@@ -287,6 +303,7 @@ if __name__ == '__main__':
         model.optimise(train_dl, epochs=args.epochs)
         if test_dl is not None:
             model.test(test_dl)
+
     elif args.model == 'al_lieconv':
         train_ds = train_dl.dataset
         feature_extractor = LieFeatureExtractor(
@@ -311,8 +328,7 @@ if __name__ == '__main__':
                         wandb_project=args.wandb_project,
                         wandb_run=args.wandb_run,
                         projections=args.al_projections)
-    elif args.model == 'se3transformer':
-        raise NotImplementedError('se3transformer has been removed')
+
     elif args.model == 'entransformer':
         model = EnResNet(save_path, args.learning_rate, **lieconv_model_kwargs)
         if args.load_weights is not None:
@@ -326,6 +342,7 @@ if __name__ == '__main__':
         model.optimise(train_dl, epochs=args.epochs)
         if test_dl is not None:
             model.test(test_dl)
+
     elif args.model == 'al_entransformer':
         train_ds = train_dl.dataset
         feature_extractor = EnFeatureExtractor(
@@ -350,5 +367,3 @@ if __name__ == '__main__':
                         wandb_project=args.wandb_project,
                         wandb_run=args.wandb_run,
                         projections=args.al_projections)
-    else:
-        raise NotImplementedError('model must be either lieconv or al_lieconv')
