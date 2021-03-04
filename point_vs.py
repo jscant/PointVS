@@ -20,6 +20,7 @@ from pathlib import PosixPath
 
 import torch
 import yaml
+from lie_conv.lieGroups import SE3
 from torch.utils.data import DataLoader
 
 from acs import utils
