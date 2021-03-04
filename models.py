@@ -12,10 +12,9 @@ from eqv_transformer.eqv_attention import EquivariantTransformerBlock, \
     GlobalPool
 from eqv_transformer.utils import Swish
 from lie_conv.lieConv import BottleBlock, LieConv
+from lie_conv.lieGroups import SE3
 from lie_conv.masked_batchnorm import MaskBatchNormNd
-from lie_conv.utils import Expression
-from lie_transformer_pytorch.lie_transformer_pytorch import Pass
-from lie_transformer_pytorch.se3 import SE3
+from lie_conv.utils import Expression, Pass
 from torch import nn, einsum
 from torch.distributions.multivariate_normal import MultivariateNormal as MVN
 
