@@ -8,8 +8,11 @@ import wandb
 from egnn_pytorch import EGNN
 from egnn_pytorch.egnn_pytorch import fourier_encode_dist, exists
 from einops import rearrange, repeat
-from eqv_transformer.eqv_attention import EquivariantTransformerBlock, \
-    GlobalPool
+from eqv_transformer.eqv_attention import GlobalPool, \
+    EquivairantMultiheadAttention
+from eqv_transformer.multihead_neural import (
+    MLP,
+)
 from eqv_transformer.utils import Swish
 from lie_conv.lieConv import BottleBlock, LieConv
 from lie_conv.lieGroups import SE3
@@ -466,6 +469,122 @@ class EnResBlock(nn.Module):
         return new_coords, new_values, mask
 
 
+class EquivariantTransformerBlock(nn.Module):
+
+    def __init__(
+            self,
+            dim,
+            n_heads,
+            group,
+            block_norm="layer_pre",
+            kernel_norm="none",
+            kernel_type="mlp",
+            kernel_dim=16,
+            kernel_act="swish",
+            hidden_dim_factor=1,
+            mc_samples=0,
+            fill=1.0,
+            attention_fn="softmax",
+            feature_embed_dim=None,
+    ):
+
+        super().__init__()
+        self.ema = EquivairantMultiheadAttention(
+            dim,
+            dim,
+            n_heads,
+            group,
+            kernel_type=kernel_type,
+            kernel_dim=kernel_dim,
+            act=kernel_act,
+            bn=kernel_norm == "batch",
+            mc_samples=mc_samples,
+            fill=fill,
+            attention_fn=attention_fn,
+            feature_embed_dim=feature_embed_dim,
+        )
+
+        self.mlp = MLP(dim, dim, dim, 2, kernel_act, kernel_norm == "batch")
+
+        if block_norm == "none":
+            self.attention_function = self._lambda_none_ema
+            self.mlp_function = self._lambda_none_mlp
+        elif block_norm == "layer_pre":
+            self.ln_ema = nn.LayerNorm(dim)
+            self.ln_mlp = nn.LayerNorm(dim)
+
+            self.attention_function = self._lambda_layer_pre_ema
+            self.mlp_function = self._lambda_layer_pre_mlp
+        elif block_norm == "layer_post":
+            self.ln_ema = nn.LayerNorm(dim)
+            self.ln_mlp = nn.LayerNorm(dim)
+
+            self.attention_function = self._lambda_layer_post_ema
+            self.mlp_function = self._lambda_layer_post_mlp
+        elif block_norm == "batch_pre":
+            self.bn_ema = MaskBatchNormNd(dim)
+            self.bn_mlp = MaskBatchNormNd(dim)
+
+            self.attention_function = self._lambda_batch_pre_ema
+            self.mlp_function = self._lambda_batch_pre_mlp
+        elif block_norm == "batch_post":
+            self.bn_ema = MaskBatchNormNd(dim)
+            self.bn_mlp = MaskBatchNormNd(dim)
+
+            self.attention_function = self._lambda_batch_post_ema
+            self.mlp_function = self._lambda_batch_post_mlp
+        else:
+            raise ValueError(f"{block_norm} is invalid block norm type.")
+
+    def forward(self, inpt):
+        inpt[1] = self.attention_function(inpt)
+        inpt[1] = self.mlp_function(inpt)
+
+        return inpt
+
+    def _lambda_none_ema(self, inpt):
+        # lambda inpt: inpt[1] + self.ema(inpt)[1]
+        return inpt[1] + self.ema(inpt)[1]
+
+    def _lambda_none_mlp(self, inpt):
+        # lambda inpt: inpt[1] + self.mlp(inpt)[1]
+        return inpt[1] + self.mlp(inpt)[1]
+
+    def _lambda_layer_pre_ema(self, inpt):
+        # lambda inpt:
+        # inpt[1] + self.ema((inpt[0], self.ln_ema(inpt[1]), inpt[2]))[1]
+        return inpt[1] + self.ema((inpt[0], self.ln_ema(inpt[1]), inpt[2]))[1]
+
+    def _lambda_layer_pre_mlp(self, inpt):
+        # lambda inpt:
+        # inpt[1] + self.mlp((inpt[0], self.ln_mlp(inpt[1]), inpt[2]))[1]
+        return inpt[1] + self.mlp((inpt[0], self.ln_mlp(inpt[1]), inpt[2]))[1]
+
+    def _lambda_layer_post_ema(self, inpt):
+        # lambda inpt: inpt[1] + self.ln_ema(self.ema(inpt)[1])
+        return inpt[1] + self.ln_ema(self.ema(inpt)[1])
+
+    def _lambda_layer_post_mlp(self, inpt):
+        # lambda inpt: inpt[1] + self.ln_mlp(self.mlp(inpt)[1])
+        return inpt[1] + self.ln_mlp(self.mlp(inpt)[1])
+
+    def _lambda_batch_pre_ema(self, inpt):
+        # lambda inpt: inpt[1] + self.ema(self.bn_ema(inpt))[1]
+        return inpt[1] + self.ema(self.bn_ema(inpt))[1]
+
+    def _lambda_batch_pre_mlp(self, inpt):
+        # lambda inpt: inpt[1] + self.mlp(self.bn_mlp(inpt))[1]
+        return inpt[1] + self.mlp(self.bn_mlp(inpt))[1]
+
+    def _lambda_batch_post_ema(self, inpt):
+        # lambda inpt: inpt[1] + self.bn_ema(self.ema(inpt))[1]
+        return inpt[1] + self.bn_ema(self.ema(inpt))[1]
+
+    def _lambda_batch_post_mlp(self, inpt):
+        # lambda inpt: inpt[1] + self.bn_mlp(self.mlp(inpt))[1]
+        return inpt[1] + self.bn_mlp(self.mlp(inpt))[1]
+
+
 class EquivariantTransformer(PointNeuralNetwork):
     """Adapted from https://github.com/anonymous-code-0/lie-transformer"""
 
@@ -525,7 +644,7 @@ class EquivariantTransformer(PointNeuralNetwork):
             ],
             GlobalPool(mean=global_pool_mean)
             if global_pool
-            else Expression(lambda x: x[1]),
+            else Expression(self._lambda_index_1),
             nn.Sequential(
                 norm1,
                 activation_fn[kernel_act](),
@@ -551,6 +670,10 @@ class EquivariantTransformer(PointNeuralNetwork):
                 raise ValueError(
                     f"{lie_algebra_nonlinearity} is not a supported nonlinearity"
                 )
+
+    @staticmethod
+    def _lambda_index_1(x):
+        return x[1]
 
     def forward(self, input):
         if self.max_sample_norm is None:

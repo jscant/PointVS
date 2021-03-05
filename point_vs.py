@@ -149,23 +149,21 @@ if __name__ == '__main__':
                              'specified on the command line.')
     parser.add_argument('--double', action='store_true',
                         help='Use 64-bit floating point precision')
-    parser.add_argument('--kernel_type', type=str, default=None,
+    parser.add_argument('--kernel_type', type=str, default='mlp',
                         help='One of 2232, mlp, overrides attention_fn '
                              '(see original repo)')
-    parser.add_argument('--attention_fn', type=str, default=None,
+    parser.add_argument('--attention_fn', type=str, default='dot_product',
                         help='One of norm_exp, softmax, dot_product: '
                              'activation for attention (overridden by '
                              'kernel_type)')
+    parser.add_argument('--activation', type=str, default='relu',
+                        help='Activation function')
     args = parser.parse_args()
 
     # Some sanitation
-    if args.attention_fn is not None and args.kernel_type is not None:
+    if args.attention_fn is not None and args.kernel_type != 'mlp':
         raise RuntimeError('attention_fn={0} is overridden by kernel_type='
                            '{1}'.format(args.attention_fn, args.kernel_type))
-    elif args.kernel_type is None:
-        args.kernel_type = 'mlp'
-    elif args.attention_fn is None:
-        args.attention_fn = 'norm_exp'
 
     # This is a lot slower so only use if precision is an issue
     if args.double:
@@ -216,7 +214,7 @@ if __name__ == '__main__':
         mode='train')
 
     lieconv_model_kwargs = {
-        'act': 'relu',
+        'act': args.activation,
         'bn': True,
         'cache': False,
         'chin': args.channels_in,
@@ -247,7 +245,7 @@ if __name__ == '__main__':
         'kernel_norm': "none",
         'kernel_type': args.kernel_type,
         'kernel_dim': 16,
-        'kernel_act': "swish",
+        'kernel_act': args.activation,
         'mc_samples': 4,
         'fill': 1.0,
         'attention_fn': args.attention_fn,
