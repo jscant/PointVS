@@ -473,7 +473,7 @@ class EquivariantTransformer(PointNeuralNetwork):
         return y.cuda()
 
     def _process_inputs(self, x):
-        return tuple([ten.cuda() for ten in x] + [None])
+        return tuple([ten.cuda() for ten in x])
 
     def build_net(self, dim_input, dim_output, dim_hidden, num_layers,
                   num_heads, global_pool=True, global_pool_mean=True,
