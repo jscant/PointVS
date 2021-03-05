@@ -66,11 +66,6 @@ def get_data_loader(ds_class, *data_roots, receptors=None, batch_size=32,
 if __name__ == '__main__':
     args = parse_args()
 
-    # Some sanitation
-    if args.attention_fn is not None and args.kernel_type != 'mlp':
-        raise RuntimeError('attention_fn={0} is overridden by kernel_type='
-                           '{1}'.format(args.attention_fn, args.kernel_type))
-
     # This is a lot slower so only use if precision is an issue
     if args.double:
         torch.set_default_dtype(torch.float64)
