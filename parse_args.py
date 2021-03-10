@@ -3,6 +3,8 @@
 import argparse
 from pathlib import PosixPath
 
+import numpy as np
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -65,7 +67,7 @@ def parse_args():
     parser.add_argument('--radius', type=int, default=6,
                         help='Maximum distance from a ligand atom for a '
                              'receptor atom to be included in input')
-    parser.add_argument('--nbhd', type=int, default=25,
+    parser.add_argument('--nbhd', type=int, default=np.inf,
                         help='Number of monte carlo samples for integral')
     parser.add_argument('--al_batch_size', '-albs', type=int, default=-1,
                         help='Number of batches to increase training pool size '

@@ -126,15 +126,7 @@ if __name__ == '__main__':
             batch_size=args.batch_size,
             radius=args.radius, rot=False, mode='val')
 
-    wandb_init_kwargs = {
-        'project': args.wandb_project, 'allow_val_change': True,
-        'config': vars(args)
-    }
-
-    if args.wandb_project is not None:
-        wandb.init(**wandb_init_kwargs)
-        if args.wandb_run is not None:
-            wandb.run.name = args.run_name
+    args_to_record = vars(args)
 
     if args.model in (
             'lieconv', 'al_lieconv', 'egnn', 'al_egnn'):
@@ -148,7 +140,7 @@ if __name__ == '__main__':
             'group': SE3(),
             'k': args.channels,
             'knn': False,
-            'liftsamples': 1,
+            'liftsamples': 2,
             'mean': True,
             'nbhd': args.nbhd,
             'num_layers': args.layers,
@@ -172,6 +164,7 @@ if __name__ == '__main__':
                 'full_cov': False,
                 'cov_rank': 2
             }
+            args_to_record.update(model_kwargs)
         elif args.model == 'lieconv':
             model_class = LieResNet
         else:
@@ -214,6 +207,17 @@ if __name__ == '__main__':
                   'r') as f:
             model_kwargs = yaml.load(
                 f, Loader=yaml.FullLoader)
+
+    args_to_record.update(model_kwargs)
+
+    wandb_init_kwargs = {
+        'project': args.wandb_project, 'allow_val_change': True,
+        'config': args_to_record
+    }
+    if args.wandb_project is not None:
+        wandb.init(**wandb_init_kwargs)
+        if args.wandb_run is not None:
+            wandb.run.name = args.run_name
 
     model = model_class(save_path, args.learning_rate, args.weight_decay,
                         **model_kwargs)
