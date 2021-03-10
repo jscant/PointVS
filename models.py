@@ -11,8 +11,7 @@ from einops import rearrange, repeat
 from eqv_transformer.eqv_attention import GlobalPool, \
     EquivairantMultiheadAttention
 from eqv_transformer.multihead_neural import (
-    MLP,
-)
+    MLP, )
 from eqv_transformer.utils import Swish
 from lie_conv.lieConv import BottleBlock, LieConv
 from lie_conv.lieGroups import SE3
@@ -642,9 +641,8 @@ class EquivariantTransformer(PointNeuralNetwork):
                 attention_block(dim_hidden[i], num_heads[i])
                 for i in range(num_layers)
             ],
-            GlobalPool(mean=global_pool_mean)
-            if global_pool
-            else Expression(self._lambda_index_1),
+            GlobalPool(mean=global_pool_mean) if global_pool else \
+                Expression(self._lambda_index_1),
             nn.Sequential(
                 norm1,
                 activation_fn[kernel_act](),

@@ -91,11 +91,20 @@ def parse_args():
                         help='Use 64-bit floating point precision')
     parser.add_argument('--kernel_type', type=str, default='mlp',
                         help='One of 2232, mlp, overrides attention_fn '
-                             '(see original repo)')
+                             '(see original repo) (LieTransformer)')
     parser.add_argument('--attention_fn', type=str, default='dot_product',
                         help='One of norm_exp, softmax, dot_product: '
                              'activation for attention (overridden by '
-                             'kernel_type)')
+                             'kernel_type) (LieTransformer)')
     parser.add_argument('--activation', type=str, default='relu',
                         help='Activation function')
+    parser.add_argument('--kernel_dim', type=int, default=16,
+                        help='Size of linear layers in attention kernel '
+                             '(LieTransformer)')
+    parser.add_argument('--feature_embed_dim', type=int, default=None,
+                        help='Feature embedding dimension for attention; '
+                             'paper had dv=848 for QM9 (LieTransformer)')
+    parser.add_argument('--mc_samples', type=int, default=0,
+                        help='Monte carlo samples for attention '
+                             '(LieTransformer)')
     return parser.parse_args()

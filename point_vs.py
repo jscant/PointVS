@@ -145,7 +145,7 @@ if __name__ == '__main__':
         'output_norm': "none",
         'kernel_norm': "none",
         'kernel_type': args.kernel_type,
-        'kernel_dim': 16,
+        'kernel_dim': args.kernel_dim,
         'kernel_act': args.activation,
         'mc_samples': 4,
         'fill': 1.0,
