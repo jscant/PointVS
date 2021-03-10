@@ -222,10 +222,6 @@ if __name__ == '__main__':
     model = model_class(save_path, args.learning_rate, args.weight_decay,
                         **model_kwargs)
 
-    if args.wandb_project is not None:
-        wandb.init(**wandb_init_kwargs)
-        if args.wandb_run is not None:
-            wandb.run.name = args.wandb_run
     if args.model.startswith('al_'):
         mode = 'control' if args.al_control else 'active'
         active_learning(model, train_dl.dataset, test_dl,
