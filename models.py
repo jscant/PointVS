@@ -366,7 +366,7 @@ class LieResNet(PointNeuralNetwork):
             k = [k] * (num_layers + 1)
         conv = lambda ki, ko, fill: LieConv(
             ki, ko, mc_samples=nbhd, ds_frac=ds_frac, bn=bn, act=act, mean=mean,
-            group=group, fill=fill, cache=cache, knn=knn, **kwargs)
+            group=group, fill=fill, cache=cache, knn=knn)
         self.layers = nn.ModuleList([
             Pass(nn.Linear(chin, k[0]), dim=1),
             *[BottleBlock(k[i], k[i + 1], conv, bn=bn, act=act, fill=fill[i])
