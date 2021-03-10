@@ -140,7 +140,7 @@ if __name__ == '__main__':
             'group': SE3(),
             'k': args.channels,
             'knn': False,
-            'liftsamples': 2,
+            'liftsamples': args.liftsamples,
             'mean': True,
             'nbhd': args.nbhd,
             'num_layers': args.layers,
