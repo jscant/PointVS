@@ -1,10 +1,11 @@
 import time
 from abc import abstractmethod
-from pathlib import Path, PosixPath
+from pathlib import Path
 
 import numpy as np
 import torch
 import wandb
+import yaml
 from egnn_pytorch import EGNN
 from egnn_pytorch.egnn_pytorch import fourier_encode_dist, exists
 from einops import rearrange, repeat
@@ -54,6 +55,9 @@ class PointNeuralNetwork(nn.Module):
         self.build_net(**model_kwargs)
         self.optimiser = torch.optim.Adam(
             self.parameters(), lr=self.lr, weight_decay=1e-6)
+        
+        with open(save_path / 'model_kwargs.yaml', 'w') as f:
+            yaml.dump(model_kwargs, f)
 
         self.cuda()
 
@@ -257,54 +261,18 @@ class PointNeuralNetwork(nn.Module):
 
     def save(self, save_path=None):
         """Save all network attributes, including internal states."""
-        attributes = {}
-        accounted_for = set()
 
-        # Collect state_dicts from anything with a state_dict method
-        for attr in dir(self):
-            if attr != '__class__' and \
-                    'state_dict' in dir(getattr(self, attr)):
-                attributes.update({
-                    attr + '_state_dict': getattr(
-                        getattr(self, attr), 'state_dict')()})
-                accounted_for.add(attr)
-
-        # Other (non-stat_dict) class variables
-        for var, val in [(varname, getattr(self, varname)) for varname in
-                         vars(self) if varname not in accounted_for]:
-            attributes.update({var: val})
-
-        # Save attributes
-        Path(self.save_path, 'checkpoints').mkdir(exist_ok=True, parents=True)
         if save_path is None:
-            torch.save(attributes, Path(
-                self.save_path, 'checkpoints',
-                'ckpt_epoch_{}_batch_{}.pt'.format(self.epoch + 1, self.batch)))
-        else:
-            torch.save(attributes, Path(save_path))
-
-    def load(self, checkpoint_path):
-        """Fully automatic loading of models saved with self.save.
-
-        Arguments:
-            checkpoint_path: directory containing saved model
-        """
-        checkpoint_path = Path(checkpoint_path).expanduser()
-        load_dict = torch.load(checkpoint_path)
-        states = {
-            key.replace('_state_dict', ''): value for key, value in
-            load_dict.items() if key.endswith('_state_dict')}
-        attributes = {
-            key: value for key, value in
-            load_dict.items() if not key.endswith('_state_dict')}
-
-        for attr_name, value in attributes.items():
-            if not isinstance(value, PosixPath):
-                setattr(self, attr_name, value)
-
-        self.optimiser = torch.optim.Adam(self.parameters(), lr=self.lr)
-        self.optimiser.load_state_dict(states['optimiser'])
-        self.cuda()
+            save_path = self.save_path / 'checkpoints/ckpt_epoch_{}.pt'.format(
+                self.epoch + 1)
+        torch.save({
+            'learning_rate': self.lr,
+            'epoch': self.epoch,
+            'losses': self.losses,
+            'bce_loss': self.bce_loss,
+            'model_state_dict': self.state_dict(),
+            'optimiser_state_dict': self.optimiser.state_dict()
+        }, save_path)
 
     def save_loss(self, save_interval):
         """Save the loss information to disk.
