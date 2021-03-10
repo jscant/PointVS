@@ -20,9 +20,11 @@ from lie_conv.masked_batchnorm import MaskBatchNormNd
 from lie_conv.utils import Expression, Pass
 from torch import nn, einsum
 from torch.distributions.multivariate_normal import MultivariateNormal as MVN
+from torch.nn.init import _no_grad_normal_
 
 from acs import utils
 from acs.model import ReparamFullDense, LocalReparamDense
+from layers import EGNNBatchNorm, EGNNGlobalPool
 from lieconv_utils import get_eta, format_time, print_with_overwrite
 
 
@@ -60,6 +62,7 @@ class PointNeuralNetwork(nn.Module):
         with open(save_path / 'model_kwargs.yaml', 'w') as f:
             yaml.dump(model_kwargs, f)
 
+        self.apply(self.xavier_init)
         self.cuda()
 
     def forward(self, x):
@@ -98,11 +101,16 @@ class PointNeuralNetwork(nn.Module):
         log_interval = 10
         global_iter = 0
         self.train()
+        if data_loader.batch_size == 1:
+            aggrigation_interval = 32
+        else:
+            aggrigation_interval = 1
+        decoy_mean_pred, active_mean_pred = [], []
+        loss = 0.0
+        bce_loss = 0.0
         for self.epoch in range(epochs):
-            decoy_mean_pred, active_mean_pred = 0.5, 0.5
             for self.batch, (x, y_true, ligands, receptors) in enumerate(
                     data_loader):
-                self.optimiser.zero_grad()
 
                 x = self._process_inputs(x)
                 y_true = self._get_y_true(y_true).cuda()
@@ -115,60 +123,69 @@ class PointNeuralNetwork(nn.Module):
                 decoy_idx = (np.where(y_true_np < 0.5), 1)
 
                 scale = len(y_true) / len(data_loader)
-                loss = self._get_loss(y_true, y_pred, scale)
-                loss.backward()
-                self.optimiser.step()
-
-                eta = get_eta(start_time, global_iter, total_iters)
-                time_elapsed = format_time(time.time() - start_time)
-
-                if opt_cycle >= 0:
-                    suffix = '(train, cycle {})'.format(opt_cycle)
-                else:
-                    suffix = '(train)'
-                wandb_update_dict = {
-                    'Time remaining ' + suffix: eta,
-                    'Binary crossentropy ' + suffix: self.bce_loss,
-                    'Batch ' + suffix: self.epoch * len(
-                        data_loader) + self.batch + 1
-                }
+                loss += self._get_loss(y_true, y_pred, scale)
+                bce_loss += float(self.bce_loss)
 
                 if len(active_idx[0][0]):
-                    active_mean_pred = np.mean(
-                        y_pred_np[active_idx])
-                    wandb_update_dict.update({
-                        'Mean active prediction (train)': active_mean_pred
-                    })
+                    active_mean_pred.append(np.mean(y_pred_np[active_idx]))
                 if len(decoy_idx[0][0]):
-                    decoy_mean_pred = np.mean(
-                        y_pred_np[decoy_idx])
-                    wandb_update_dict.update({
-                        'Mean decoy prediction (train)': decoy_mean_pred,
-                    })
+                    decoy_mean_pred.append(np.mean(y_pred_np[decoy_idx]))
 
-                try:
-                    wandb.log(wandb_update_dict)
-                except wandb.errors.error.Error:
-                    pass  # wandb has not been initialised so ignore
+                if not (self.batch + 1) % aggrigation_interval:
+                    self.optimiser.zero_grad()
+                    loss /= aggrigation_interval
+                    bce_loss /= aggrigation_interval
+                    reported_batch = (self.batch + 1) // aggrigation_interval
+                    loss.backward()
+                    self.optimiser.step()
+                    self.losses.append(bce_loss)
 
-                print_with_overwrite(
-                    (
-                        'Epoch:',
-                        '{0}/{1}'.format(self.epoch + 1, epochs),
-                        '|', 'Iteration:', '{0}/{1}'.format(
-                            self.batch + 1, len(data_loader))),
-                    ('Time elapsed:', time_elapsed, '|',
-                     'Time remaining:', eta),
-                    ('Loss: {0:.4f}'.format(self.bce_loss), '|',
-                     'Mean active: {0:.4f}'.format(active_mean_pred), '|',
-                     'Mean decoy: {0:.4f}'.format(decoy_mean_pred))
-                )
+                    if not (reported_batch + 1) % log_interval or \
+                            self.batch == total_iters - 1:
+                        self.save_loss(log_interval)
+                    global_iter += 1
 
-                self.losses.append(float(self.bce_loss))
-                if not (self.batch + 1) % log_interval or \
-                        self.batch == total_iters - 1:
-                    self.save_loss(log_interval)
-                global_iter += 1
+                    eta = get_eta(start_time, global_iter, total_iters)
+                    time_elapsed = format_time(time.time() - start_time)
+
+                    if opt_cycle >= 0:
+                        suffix = '(train, cycle {})'.format(opt_cycle)
+                    else:
+                        suffix = '(train)'
+                    wandb_update_dict = {
+                        'Time remaining ' + suffix: eta,
+                        'Binary crossentropy ' + suffix: (
+                            bce_loss),
+                        'Batch ' + suffix:
+                            (self.epoch * len(data_loader) + reported_batch),
+                        'Mean decoy prediction (train)': np.mean(
+                            decoy_mean_pred),
+                        'Mean active prediction (train)': np.mean(
+                            active_mean_pred),
+                    }
+                    try:
+                        wandb.log(wandb_update_dict)
+                    except wandb.errors.error.Error:
+                        pass  # wandb has not been initialised so ignore
+
+                    print_with_overwrite(
+                        (
+                            'Epoch:',
+                            '{0}/{1}'.format(self.epoch + 1, epochs),
+                            '|', 'Batch:', '{0}/{1}'.format(
+                                reported_batch, len(data_loader))),
+                        ('Time elapsed:', time_elapsed, '|',
+                         'Time remaining:', eta),
+                        ('Loss: {0:.4f}'.format(bce_loss), '|',
+                         'Mean active: {0:.4f}'.format(np.mean(
+                             active_mean_pred)), '|',
+                         'Mean decoy: {0:.4f}'.format(np.mean(
+                             decoy_mean_pred)))
+                    )
+
+                    bce_loss = 0.0
+                    loss = 0.0
+                    decoy_mean_pred, active_mean_pred = [], []
 
             # save after each epoch
             self.save()
@@ -665,7 +682,72 @@ class EquivariantTransformer(PointNeuralNetwork):
         return self.net(lifted_data)
 
 
-class EnResNet(PointNeuralNetwork):
+class EGNNStack(PointNeuralNetwork):
+
+    @staticmethod
+    def xavier_init(m):
+        pass
+
+    def _get_y_true(self, y):
+        return y.cuda()
+
+    def _process_inputs(self, x):
+        return tuple([ten.cuda() for ten in x])
+
+    def build_net(self, chin, output_dim=2, k=12, act="swish", bn=True,
+                  dropout=0.0, num_layers=6, mean=False, pool=True, feats_idx=0,
+                  **kwargs):
+        egnn = lambda: EGNN(dim=chin, m_dim=k, norm_rel_coors=True,
+                            norm_coor_weights=False, dropout=dropout)
+        if bn:
+            bn = lambda: EGNNBatchNorm(12)
+            eggn_layers = [(egnn(), bn()) for _ in range(num_layers)]
+        else:
+            eggn_layers = [(egnn(),) for _ in range(num_layers)]
+        if act == 'swish':
+            activation_class = Swish
+        elif act == 'relu':
+            activation_class = nn.ReLU
+        else:
+            raise NotImplementedError('{} not a recognised activation'.format(
+                act))
+        self.layers = nn.ModuleList([
+            *[a for b in eggn_layers for a in b],
+            Pass(nn.Linear(chin, chin * 2), dim=feats_idx),
+            Pass(activation_class(), dim=feats_idx),
+            Pass(nn.Linear(chin * 2, chin), dim=feats_idx),
+            EGNNGlobalPool(
+                dim=feats_idx, tensor_dim=1,
+                mean=mean) if pool else nn.Sequential(),
+            Pass(nn.Linear(chin, chin * 2), dim=feats_idx),
+            Pass(activation_class(), dim=feats_idx),
+            Pass(nn.Linear(chin * 2, output_dim), dim=feats_idx),
+        ])
+
+    def forward(self, x):
+        coords, feats, mask = x
+        for layer in self.layers:
+            if isinstance(layer, EGNN):
+                feats, coords = layer(feats, coords, mask=mask)
+            else:
+                x = layer([feats, coords])
+                if isinstance(x, (tuple, list)):
+                    feats, coords = x
+                else:
+                    feats = x
+        return feats
+
+    @staticmethod
+    def get_min_max(network):
+        min_val, max_val = np.inf, -np.inf
+        for layer in network:
+            if isinstance(layer, nn.Linear):
+                min_val = min(float(torch.min(layer.weight)), min_val)
+                max_val = max(float(torch.max(layer.weight)), max_val)
+        return min_val, max_val
+
+
+class EnResNet_(PointNeuralNetwork):
     """ResNet for E(n)Transformer"""
 
     def _get_y_true(self, y):

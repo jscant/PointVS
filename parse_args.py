@@ -111,4 +111,7 @@ def parse_args():
     parser.add_argument('--mc_samples', type=int, default=0,
                         help='Monte carlo samples for attention '
                              '(LieTransformer)')
+    parser.add_argument('--dropout', type=float, default=0.0,
+                        help='Chance for nodes to be inactivated on each '
+                             'trainin batch (EGNN)')
     return parser.parse_args()

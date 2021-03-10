@@ -26,7 +26,7 @@ from acs import utils
 from active_learning import active_learning
 from data_loaders import LieConvDataset, SE3TransformerDataset, \
     multiple_source_dataset
-from models import LieResNet, BayesianPointNN, LieFeatureExtractor, EnResNet, \
+from models import LieResNet, BayesianPointNN, LieFeatureExtractor, EGNNStack, \
     EnFeatureExtractor, EquivariantTransformer
 from parse_args import parse_args
 
@@ -144,7 +144,9 @@ if __name__ == '__main__':
             'mean': True,
             'nbhd': args.nbhd,
             'num_layers': args.layers,
-            'pool': True
+            'pool': True,
+            'dropout': args.dropout,
+            'output_dim': 2
         }
 
         if args.model.startswith('al_'):
@@ -168,7 +170,7 @@ if __name__ == '__main__':
         elif args.model == 'lieconv':
             model_class = LieResNet
         else:
-            model_class = EnResNet
+            model_class = EGNNStack
 
     elif args.model == 'lietransformer':
         model_kwargs = {
