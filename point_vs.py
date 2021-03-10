@@ -217,7 +217,7 @@ if __name__ == '__main__':
     if args.wandb_project is not None:
         wandb.init(**wandb_init_kwargs)
         if args.wandb_run is not None:
-            wandb.run.name = args.run_name
+            wandb.run.name = args.wandb_run
 
     model = model_class(save_path, args.learning_rate, args.weight_decay,
                         **model_kwargs)
