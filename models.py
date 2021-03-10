@@ -28,8 +28,8 @@ from lieconv_utils import get_eta, format_time, print_with_overwrite
 
 class PointNeuralNetwork(nn.Module):
 
-    def __init__(self, save_path, learning_rate, wandb_project=None,
-                 wandb_run=None, **model_kwargs):
+    def __init__(self, save_path, learning_rate, weight_decay=None,
+                 wandb_project=None, wandb_run=None, **model_kwargs):
         super().__init__()
         self.batch = 0
         self.epoch = 0
@@ -41,6 +41,7 @@ class PointNeuralNetwork(nn.Module):
         self.loss_plot_file = self.save_path / 'loss.png'
 
         self.lr = learning_rate
+        self.weight_decay = weight_decay
         self.translated_actives = model_kwargs.get('translated_actives', None)
         self.n_translated_actives = model_kwargs.get('n_translated_actives', 0)
 
@@ -54,8 +55,8 @@ class PointNeuralNetwork(nn.Module):
 
         self.build_net(**model_kwargs)
         self.optimiser = torch.optim.Adam(
-            self.parameters(), lr=self.lr, weight_decay=1e-6)
-        
+            self.parameters(), lr=self.lr, weight_decay=weight_decay)
+
         with open(save_path / 'model_kwargs.yaml', 'w') as f:
             yaml.dump(model_kwargs, f)
 
@@ -267,6 +268,7 @@ class PointNeuralNetwork(nn.Module):
                 self.epoch + 1)
         torch.save({
             'learning_rate': self.lr,
+            'weight_decay': self.weight_decay,
             'epoch': self.epoch,
             'losses': self.losses,
             'bce_loss': self.bce_loss,

@@ -215,7 +215,8 @@ if __name__ == '__main__':
             model_kwargs = yaml.load(
                 f, Loader=yaml.FullLoader)
 
-    model = model_class(save_path, args.learning_rate, **model_kwargs)
+    model = model_class(save_path, args.learning_rate, args.weight_decay,
+                        **model_kwargs)
 
     if args.wandb_project is not None:
         wandb.init(**wandb_init_kwargs)

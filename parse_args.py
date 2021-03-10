@@ -49,6 +49,8 @@ def parse_args():
                              'specified, other structures will be ignored.')
     parser.add_argument('--learning_rate', '-lr', type=float, default=0.002,
                         help='Learning rate for gradient descent')
+    parser.add_argument('--weight_decay', '-w', type=float, default=1e-4,
+                        help='Weight decay for regularisation')
     parser.add_argument('--wandb_project', type=str,
                         help='Name of wandb project. If left blank, wandb '
                              'logging will not be used.')
