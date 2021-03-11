@@ -281,8 +281,10 @@ class PointNeuralNetwork(nn.Module):
         """Save all network attributes, including internal states."""
 
         if save_path is None:
-            save_path = self.save_path / 'checkpoints/ckpt_epoch_{}.pt'.format(
-                self.epoch + 1)
+            fname = 'ckpt_epoch_{}.pt'.format(self.epoch + 1)
+            save_path = self.save_path / 'checkpoints' / fname
+
+        save_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save({
             'learning_rate': self.lr,
             'weight_decay': self.weight_decay,
