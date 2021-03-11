@@ -38,6 +38,7 @@ class PointNeuralNetwork(nn.Module):
         self.losses = []
         self.final_activation = nn.CrossEntropyLoss()
         self.save_path = Path(save_path).expanduser()
+        self.save_path.mkdir(parents=True, exist_ok=True)
         self.predictions_file = self.save_path / 'predictions.txt'
 
         self.loss_plot_file = self.save_path / 'loss.png'
@@ -92,9 +93,9 @@ class PointNeuralNetwork(nn.Module):
         loss. All figures and logs are saved to save_path.
 
         Arguments:
-            data_loader:
-            epochs:
-            opt_cycle:
+            data_loader: pytorch DataLoader object for training
+            epochs: number of complete training cycles
+            opt_cycle: (for active learning): active learning cycle
         """
         start_time = time.time()
         total_iters = epochs * len(data_loader)
