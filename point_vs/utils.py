@@ -11,6 +11,14 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 
+def set_gpu_mode(mode):
+    global _use_gpu
+    _use_gpu = mode
+    if mode:
+        import torch.backends.cudnn as cudnn
+        cudnn.benchmark = True
+
+
 def condense(arr, gap=100):
     """Condense large arrays into averages over a given window size.
 

@@ -22,13 +22,13 @@ import yaml
 from lie_conv.lieGroups import SE3
 from torch.utils.data import DataLoader
 
-from acs import utils
-from active_learning import active_learning
-from data_loaders import LieConvDataset, SE3TransformerDataset, \
-    multiple_source_dataset
-from models import LieResNet, BayesianPointNN, LieFeatureExtractor, EGNNStack, \
-    EnFeatureExtractor, EquivariantTransformer
-from parse_args import parse_args
+from point_vs import utils
+from point_vs.models.egnn_network import EGNNStack
+from point_vs.models.lie_conv import LieResNet
+from point_vs.models.lie_transformer import EquivariantTransformer
+from point_vs.parse_args import parse_args
+from point_vs.preprocessing.data_loaders import multiple_source_dataset, \
+    LieConvDataset, get_collate_fn
 
 try:
     import wandb
@@ -40,24 +40,16 @@ except ImportError:
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
-def get_data_loader(ds_class, *data_roots, receptors=None, batch_size=32,
-                    radius=6, rot=True, mask=True, mode='train'):
+def get_data_loader(*data_roots, receptors=None, batch_size=32,
+                    radius=6, rot=True, feature_dim=12, mode='train'):
     ds_kwargs = {
         'receptors': receptors,
         'radius': radius,
+        'rot': rot
     }
-    if ds_class == LieConvDataset:
-        ds_kwargs.update({
-            'rot': rot
-        })
-    elif ds_class == SE3TransformerDataset:
-        ds_kwargs.update({
-            'mode': 'interaction_edges',
-            'interaction_dist': 4
-        })
     ds = multiple_source_dataset(
-        ds_class, *data_roots, balanced=True, **ds_kwargs)
-    collate = ds.collate if mask else ds.collate_no_masking
+        LieConvDataset, *data_roots, balanced=True, **ds_kwargs)
+    collate = get_collate_fn(feature_dim)
     sampler = ds.sampler if mode == 'train' else None
     return DataLoader(
         ds, batch_size, False, sampler=sampler, num_workers=0,
@@ -91,15 +83,15 @@ if __name__ == '__main__':
     with open(save_path / 'cmd_args.yaml', 'w') as f:
         yaml.dump(vars(args), f)
 
-    allowed_models = ('lieconv', 'al_lieconv', 'egnn',
-                      'lietransformer', 'al_egnn')
+    model_classes = {
+        'lieconv': LieResNet,
+        'egnn': EGNNStack,
+        'lietransformer': EquivariantTransformer
+    }
 
-    # Dataset class
-    if args.model in allowed_models:
-        ds_class = LieConvDataset
-    else:
+    if args.model not in model_classes.keys():
         raise NotImplementedError(
-            'model must be one of ' + ', '.join(allowed_models))
+            'model must be one of ' + ', '.join(model_classes.keys()))
 
     if isinstance(args.train_receptors, str):
         train_receptors = tuple([args.train_receptors])
@@ -113,105 +105,63 @@ if __name__ == '__main__':
 
     mask = False if args.model == 'egnn' else True
     train_dl = get_data_loader(
-        ds_class, args.train_data_root, args.translated_actives,
+        args.train_data_root, args.translated_actives,
         batch_size=args.batch_size,
-        receptors=train_receptors, radius=args.radius, rot=True, mask=mask,
+        receptors=train_receptors, radius=args.radius, rot=True,
         mode='train')
 
     # Is a validation set specified?
     test_dl = None
     if args.test_data_root is not None:
         test_dl = get_data_loader(
-            ds_class, args.test_data_root, receptors=test_receptors,
-            batch_size=args.batch_size,
-            radius=args.radius, rot=False, mode='val')
+            args.test_data_root, receptors=test_receptors,
+            batch_size=args.batch_size, radius=args.radius, rot=False,
+            mode='val')
 
     args_to_record = vars(args)
 
-    if args.model in (
-            'lieconv', 'al_lieconv', 'egnn', 'al_egnn'):
-        model_kwargs = {
-            'act': args.activation,
-            'bn': True,
-            'cache': False,
-            'chin': args.channels_in,
-            'ds_frac': 1.0,
-            'fill': 1.0,
-            'group': SE3(),
-            'k': args.channels,
-            'knn': False,
-            'liftsamples': args.liftsamples,
-            'mean': True,
-            'nbhd': args.nbhd,
-            'num_layers': args.layers,
-            'pool': True,
-            'dropout': args.dropout,
-            'output_dim': 2
-        }
+    model_kwargs = {
+        'act': args.activation,
+        'bn': True,
+        'cache': False,
+        'chin': args.channels_in,
+        'ds_frac': 1.0,
+        'fill': 1.0,
+        'group': SE3(0.2),
+        'k': args.channels,
+        'knn': False,
+        'liftsamples': args.liftsamples,
+        'mean': True,
+        'nbhd': args.nbhd,
+        'num_layers': args.layers,
+        'pool': True,
+        'dropout': args.dropout,
+        'dim_input': 12,
+        'dim_output': 1,
+        'dim_hidden': args.channels,  # == 32
+        'num_heads': 8,
+        'global_pool': True,
+        'global_pool_mean': True,
+        'block_norm': "layer_pre",
+        'output_norm': "none",
+        'kernel_norm': "none",
+        'kernel_type': args.kernel_type,
+        'kernel_dim': args.kernel_dim,
+        'kernel_act': args.activation,
+        'mc_samples': 4,
+        'attention_fn': args.attention_fn,
+        'feature_embed_dim': None,
+        'max_sample_norm': None,
+        'lie_algebra_nonlinearity': None,
+    }
 
-        if args.model.startswith('al_'):
-            model_class = BayesianPointNN
-            model_kwargs.update({'fc_in_features': args.al_fc_in_features})
-            if args.model == 'al_lieconv':
-                feature_extractor = LieFeatureExtractor(**model_kwargs)
-            elif args.model == 'al_egnn':
-                feature_extractor = EnFeatureExtractor(**model_kwargs)
-            else:
-                raise NotImplementedError('model {} not supported'.format(
-                    args.model))
-            model_kwargs = {
-                'feature_extractor': feature_extractor,
-                'fc_in_features': args.al_fc_in_features,
-                'fc_out_features': args.al_features,
-                'full_cov': False,
-                'cov_rank': 2
-            }
-            args_to_record.update(model_kwargs)
-        elif args.model == 'lieconv':
-            model_class = LieResNet
-        else:
-            model_class = EGNNStack
-
-    elif args.model == 'lietransformer':
-        model_kwargs = {
-            'dim_input': 12,
-            'dim_output': 2,
-            'dim_hidden': args.channels,  # == 32
-            'num_layers': args.layers,  # == 6
-            'num_heads': 8,
-            'global_pool': True,
-            'global_pool_mean': True,
-            'group': SE3(0.2),
-            'liftsamples': args.liftsamples,  # == 1
-            'block_norm': "layer_pre",
-            'output_norm': "none",
-            'kernel_norm': "none",
-            'kernel_type': args.kernel_type,
-            'kernel_dim': args.kernel_dim,
-            'kernel_act': args.activation,
-            'mc_samples': 4,
-            'fill': 1.0,
-            'attention_fn': args.attention_fn,
-            'feature_embed_dim': None,
-            'max_sample_norm': None,
-            'lie_algebra_nonlinearity': None,
-            'dropout': args.dropout
-        }
-        model_class = EquivariantTransformer
-    else:
-        raise NotImplementedError('Supported models are ' +
-                                  ', '.join(allowed_models))
+    args_to_record.update(model_kwargs)
 
     if args.load_weights is not None:
-        if args.model.startswith('al_'):
-            raise NotImplementedError(
-                'Active learning model loading not yet supported')
         with open(args.load_weights.parents[1] / 'model_kwargs.yaml',
                   'r') as f:
             model_kwargs = yaml.load(
                 f, Loader=yaml.FullLoader)
-
-    args_to_record.update(model_kwargs)
 
     wandb_init_kwargs = {
         'project': args.wandb_project, 'allow_val_change': True,
@@ -222,29 +172,23 @@ if __name__ == '__main__':
         if args.wandb_run is not None:
             wandb.run.name = args.wandb_run
 
-    model = model_class(save_path, args.learning_rate, args.weight_decay,
-                        **model_kwargs)
+    model_class = model_classes[args.model]
+    model = model_class(
+        save_path, args.learning_rate, args.weight_decay, **model_kwargs)
 
-    if args.model.startswith('al_'):
-        mode = 'control' if args.al_control else 'active'
-        active_learning(model, train_dl.dataset, test_dl,
-                        args.al_initial_pool_size,
-                        args.al_batch_size, mode=mode,
-                        wandb_project=args.wandb_project,
-                        wandb_run=args.wandb_run,
-                        projections=args.al_projections)
-    else:
-        if args.load_weights is not None:
-            checkpoint = torch.load(args.load_weights)
-            model.load_state_dict(checkpoint['model_state_dict'])
-            model.optimiser.load_state_dict(checkpoint['optimiser_state_dict'])
-            model.epoch = checkpoint['epoch']
-            model.losses = checkpoint['losses']
-            model.bce_loss = checkpoint['bce_loss']
-        try:
-            wandb.watch(model)
-        except ValueError:
-            pass
-        model.optimise(train_dl, epochs=args.epochs)
-        if test_dl is not None:
-            model.test(test_dl)
+    if args.load_weights is not None:
+        checkpoint = torch.load(args.load_weights)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        model.optimiser.load_state_dict(checkpoint['optimiser_state_dict'])
+        model.epoch = checkpoint['epoch']
+        model.losses = checkpoint['losses']
+        model.bce_loss = checkpoint['bce_loss']
+
+    try:
+        wandb.watch(model)
+    except ValueError:
+        pass
+
+    model.optimise(train_dl, epochs=args.epochs)
+    if test_dl is not None:
+        model.test(test_dl)

@@ -8,8 +8,9 @@ import numpy as np
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('model', type=str, help='Type of point cloud network to'
-                                                ' use: se3trans or lieconv')
+    parser.add_argument('model', type=str,
+                        help='Type of point cloud network to use: '
+                             'lietransformer, lieconv or egnn')
     parser.add_argument('train_data_root', type=PosixPath,
                         help='Location of structure training *.parquets files. '
                              'Receptors should be in a directory named '
