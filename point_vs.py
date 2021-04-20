@@ -26,7 +26,7 @@ from point_vs import utils
 
 try:
     from point_vs.models.egnn_network import EGNNStack
-except ModuleNotFoundError:
+except (ModuleNotFoundError, OSError):
     EGNNStack = None
 from point_vs.models.lie_conv import LieResNet
 from point_vs.models.lie_transformer import EquivariantTransformer

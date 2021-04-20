@@ -68,26 +68,8 @@ def parse_args():
     parser.add_argument('--radius', type=int, default=6,
                         help='Maximum distance from a ligand atom for a '
                              'receptor atom to be included in input')
-    parser.add_argument('--nbhd', type=int, default=np.inf,
+    parser.add_argument('--nbhd', type=int, default=32,
                         help='Number of monte carlo samples for integral')
-    parser.add_argument('--al_batch_size', '-albs', type=int, default=-1,
-                        help='Number of batches to increase training pool size '
-                             'at each iteration of active learning. If '
-                             'unspecified, active learning will not be used.')
-    parser.add_argument('--al_initial_pool_size', '-alips', type=int,
-                        default=-1,
-                        help='Size of initial pool size for active learning.')
-    parser.add_argument('--al_control', action='store_true',
-                        help='Active learning with random data selection (used '
-                             'as a control).')
-    parser.add_argument('--al_projections', type=int, default=64,
-                        help='Number of projections for bayes active learning '
-                             '(J in the paper)')
-    parser.add_argument('--al_features', type=int, default=256,
-                        help='Size of finalature embedding for active learning')
-    parser.add_argument('--al_fc_in_features', type=int, default=512,
-                        help='Size of input to embedding layer for active '
-                             'learning')
     parser.add_argument('--load_args', type=PosixPath,
                         help='Load yaml file with command line args. Any args '
                              'specified in the file will overwrite other args '
