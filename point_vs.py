@@ -23,7 +23,11 @@ from lie_conv.lieGroups import SE3
 from torch.utils.data import DataLoader
 
 from point_vs import utils
-from point_vs.models.egnn_network import EGNNStack
+
+try:
+    from point_vs.models.egnn_network import EGNNStack
+except ModuleNotFoundError:
+    EGNNStack = None
 from point_vs.models.lie_conv import LieResNet
 from point_vs.models.lie_transformer import EquivariantTransformer
 from point_vs.parse_args import parse_args
