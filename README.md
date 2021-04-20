@@ -1,19 +1,25 @@
-# PointVS: SE(3)-equivariant point cloud convolutions for virtual screening with active learning
+# PointVS: SE(3)-equivariant point cloud networks for virtual screening
 
 ## This project is in its nascent stages, so many features are not yet implemented and there are likely to be bugs.
 
-[LieConv](https://github.com/mfinzi/LieConv) ([paper](https://arxiv.org/abs/2002.12880)) is a method for [group-equivariant](https://en.wikipedia.org/wiki/Equivariant_map) convolutions performed on point clouds in real space. [SE(3)-Transformer](https://github.com/FabianFuchsML/se3-transformer-public) ([paper](https://arxiv.org/abs/2006.10503)) is a similar method which also uses an attention-based graph neural network. Previous work on virtual screening using voxelisation can be found [here](https://pubs.acs.org/doi/10.1021/acs.jcim.0c00263). PointVS uses LieConv and SE(3)-Transformer with SE(3) equivariance to perform [virtual screening](https://en.wikipedia.org/wiki/Virtual_screening).
-
-[Bayes Batch Active Learning as Sparse Subset Approximation](https://github.com/rpinsler/active-bayesian-coresets) ([paper](https://arxiv.org/abs/1908.02144)) is a method for batch active learning which attempts to maximise the posterior distribution over the network parameters. The implementation of this for PointVS is a work in progress.
+[LieTransformer](https://github.com/oxcsml/lie-transformer)
+([paper](https://arxiv.org/abs/2012.10885)) is a self-attention-based group 
+equivariant network.. [LieConv](https://github.com/mfinzi/LieConv)
+([paper](https://arxiv.org/abs/2002.12880)) is a method for
+[group-equivariant](https://en.wikipedia.org/wiki/Equivariant_map) convolutions
+performed on point clouds in real space. Previous work on virtual screening
+using voxelisation can be found
+[here](https://pubs.acs.org/doi/10.1021/acs.jcim.0c00263). PointVS uses LieConv
+and LieTransformer with SE(3) equivariance to perform
+[virtual screening](https://en.wikipedia.org/wiki/Virtual_screening).
 
 No installation is required (yet). Dependencies are:
 
 ```
 pytorch >= 1.7.1
 LieConv
-se3-transformer-public
+LieTransformer
 wandb (optional but strongly recommended for easy graphs and logging)
-gprofile
 ```
 
 A small working example is:
