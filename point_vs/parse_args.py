@@ -115,4 +115,7 @@ def parse_args():
     parser.add_argument('--dropout', type=float, default=0.0,
                         help='Chance for nodes to be inactivated on each '
                              'trainin batch (EGNN)')
+    parser.add_argument('--pooling_only', action='store_true',
+                        help='Only do global pooling after graph layers (no '
+                             'linear layers)')
     return parser.parse_args()

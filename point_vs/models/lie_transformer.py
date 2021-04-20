@@ -6,7 +6,8 @@ from lie_conv.lieGroups import SE3
 from lie_conv.utils import Expression, Pass
 from torch import nn
 
-from point_vs.models.point_neural_network import PointNeuralNetwork
+from point_vs.models.point_neural_network import PointNeuralNetwork, \
+    GlobalPoolFinal
 
 
 class EquivariantTransformer(PointNeuralNetwork):
@@ -26,6 +27,7 @@ class EquivariantTransformer(PointNeuralNetwork):
                   kernel_dim=16, kernel_act="swish", nbhd=0, fill=1.0,
                   attention_fn="norm_exp", feature_embed_dim=None,
                   max_sample_norm=None, lie_algebra_nonlinearity=None,
+                  pooling_only=False,
                   dropout=0, **kwargs):
 
         if isinstance(dim_hidden, int):
@@ -70,7 +72,7 @@ class EquivariantTransformer(PointNeuralNetwork):
             ],
             GlobalPool(mean=global_pool_mean) if global_pool else Expression(
                 lambda x: x[1]),
-            nn.Sequential(
+            GlobalPoolFinal() if pooling_only else nn.Sequential(
                 norm1,
                 activation_fn[kernel_act](),
                 nn.Linear(dim_hidden[-1], dim_hidden[-1]),
@@ -80,7 +82,7 @@ class EquivariantTransformer(PointNeuralNetwork):
                 norm3,
                 activation_fn[kernel_act](),
                 nn.Linear(dim_hidden[-1], dim_output),
-            ),
+            )
         )
 
         self.group = group

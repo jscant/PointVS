@@ -153,6 +153,7 @@ if __name__ == '__main__':
         'feature_embed_dim': None,
         'max_sample_norm': None,
         'lie_algebra_nonlinearity': None,
+        'pooling_only': args.pooling_only
     }
 
     args_to_record.update(model_kwargs)

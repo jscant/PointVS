@@ -88,6 +88,7 @@ class LieResNet(PointNeuralNetwork):
         if isinstance(fill, (float, int)):
             fill = [fill] * num_layers
         if isinstance(k, int):
+            # k = [dim_input] + [k] * (num_layers)
             k = [k] * (num_layers + 1)
         conv = lambda ki, ko, fill: LieConv(
             ki, ko, mc_samples=nbhd, ds_frac=ds_frac, bn=bn, act=act, mean=mean,
@@ -101,7 +102,7 @@ class LieResNet(PointNeuralNetwork):
             MaskBatchNormNd(k[-1]) if bn else nn.Sequential(),
             Pass(nn.Dropout(p=dropout), dim=1) if dropout else nn.Sequential(),
             Pass(nn.Linear(k[-1], dim_output), dim=1),
-            GlobalPool(mean=mean) if pool else Expression(lambda x: x[1])
+            GlobalPool(mean=mean) if pool else Expression(lambda x: x[1]),
         ])
         self.group = group
         self.liftsamples = liftsamples

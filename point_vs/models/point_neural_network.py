@@ -300,3 +300,11 @@ class PointNeuralNetwork(nn.Module):
             m.weight.data.fill_(1)
             if m.bias is not None:
                 m.bias.data.fill_(0)
+
+
+class GlobalPoolFinal(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        return torch.mean(x, dim=1)
