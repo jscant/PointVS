@@ -130,7 +130,7 @@ if __name__ == '__main__':
         'cache': False,
         'chin': args.channels_in,
         'ds_frac': 1.0,
-        'fill': 1.0,
+        'fill': args.fill,
         'group': SE3(0.2),
         'k': args.channels,
         'knn': False,
