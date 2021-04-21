@@ -5,6 +5,7 @@ import pytest
 import torch
 from lie_conv.lieGroups import SE3
 
+from point_vs.models.egnn_network import EGNNStack
 from point_vs.models.lie_conv import LieResNet
 from point_vs.models.lie_transformer import EquivariantTransformer
 from point_vs.models.point_neural_network import to_numpy
@@ -13,19 +14,19 @@ from point_vs.preprocessing.data_loaders import random_rotation
 # This is higher than usual, because for infinite Lie groups, there are several
 # approximations (MC sampling, for example) which reduce the true invariance
 # to approximate invariance.
-EPS = 5e-3
+EPS = 5e-2
 MODEL_KWARGS = {
     'act': 'relu',
     'bn': True,
     'cache': False,
-    'ds_frac': 1.0,
-    'fill': 1.0,
+    'ds_frac': 0.75,
+    'fill': 0.75,
     'group': SE3(0.2),
     'k': 16,
     'knn': False,
     'liftsamples': 4,
     'mean': True,
-    'nbhd': 128,
+    'nbhd': 256,
     'num_layers': 2,
     'pool': True,
     'dropout': 0,
@@ -48,8 +49,16 @@ MODEL_KWARGS = {
     'lie_algebra_nonlinearity': None,
 }
 
-torch.random.manual_seed(1)
-np.random.seed(1)
+# Tests should be repeatable
+torch.random.manual_seed(2)
+np.random.seed(2)
+
+# Check if we can write to /tmp/; if not, write to test directory
+dump_path = Path('/tmp/pointvs_test')
+try:
+    open(dump_path / 'probe')
+except IOError:
+    dump_path = Path('test/dump_path')
 
 
 def _set_precision(precision):
@@ -61,6 +70,40 @@ def _set_precision(precision):
         torch.set_default_tensor_type(torch.FloatTensor)
 
 
+def test_egnn_double():
+    _set_precision('double')
+    original_coords = torch.rand(1, 100, 3).cuda()
+    rotated_coords = torch.from_numpy(
+        random_rotation(to_numpy(original_coords))).double().cuda()
+
+    feats = torch.rand(1, 100, 12).cuda()
+    mask = torch.ones(1, 100).bool().cuda()
+    model = EGNNStack(dump_path, 0, 0, None, None, **MODEL_KWARGS).cuda()
+
+    unrotated_result = float((model((original_coords, feats, mask))))
+    rotated_result = float(to_numpy(model((rotated_coords, feats, mask))))
+
+    assert unrotated_result != pytest.approx(0, abs=1e-5)
+    assert unrotated_result == pytest.approx(rotated_result, abs=EPS)
+
+
+def test_egnn_float():
+    _set_precision('float')
+    original_coords = torch.rand(1, 100, 3).cuda()
+    rotated_coords = torch.from_numpy(
+        random_rotation(to_numpy(original_coords))).float().cuda()
+
+    feats = torch.rand(1, 100, 12).cuda()
+    mask = torch.ones(1, 100).bool().cuda()
+    model = EGNNStack(dump_path, 0, 0, None, None, **MODEL_KWARGS).cuda()
+
+    unrotated_result = float(to_numpy(model((original_coords, feats, mask))))
+    rotated_result = float((model((rotated_coords, feats, mask))))
+
+    assert unrotated_result != pytest.approx(0, abs=1e-5)
+    assert unrotated_result == pytest.approx(rotated_result, abs=EPS)
+
+
 def test_lie_conv_double():
     _set_precision('double')
     original_coords = torch.rand(1, 100, 3)
@@ -69,11 +112,12 @@ def test_lie_conv_double():
 
     feats = torch.rand(1, 100, 12)
     mask = torch.ones(1, 100).bool()
-    model = LieResNet(Path('test/data_dump'), 0, 0, None, None, **MODEL_KWARGS)
+    model = LieResNet(dump_path, 0, 0, None, None, **MODEL_KWARGS)
 
     unrotated_result = float((model((original_coords, feats, mask))))
     rotated_result = float(to_numpy(model((rotated_coords, feats, mask))))
 
+    assert unrotated_result != pytest.approx(0, abs=1e-5)
     assert unrotated_result == pytest.approx(rotated_result, abs=EPS)
 
 
@@ -85,11 +129,12 @@ def test_lie_conv_float():
 
     feats = torch.rand(1, 100, 12)
     mask = torch.ones(1, 100).bool()
-    model = LieResNet(Path('test/data_dump'), 0, 0, None, None, **MODEL_KWARGS)
+    model = LieResNet(dump_path, 0, 0, None, None, **MODEL_KWARGS)
 
     unrotated_result = float(to_numpy(model((original_coords, feats, mask))))
     rotated_result = float((model((rotated_coords, feats, mask))))
 
+    assert unrotated_result != pytest.approx(0, abs=1e-5)
     assert unrotated_result == pytest.approx(rotated_result, abs=EPS)
 
 
@@ -102,11 +147,12 @@ def test_lie_transformer_double():
     feats = torch.rand(1, 100, 12).cuda()
     mask = torch.ones(1, 100).bool().cuda()
     model = EquivariantTransformer(
-        Path('test/data_dump'), 0, 0, None, None, **MODEL_KWARGS).cuda()
+        dump_path, 0, 0, None, None, **MODEL_KWARGS).cuda()
 
     unrotated_result = float(to_numpy(model((original_coords, feats, mask))))
     rotated_result = float((model((rotated_coords, feats, mask))))
 
+    assert unrotated_result != pytest.approx(0, abs=1e-5)
     assert unrotated_result == pytest.approx(rotated_result, abs=EPS)
 
 
@@ -119,9 +165,10 @@ def test_lie_transformer_float():
     feats = torch.rand(1, 100, 12).cuda()
     mask = torch.ones(1, 100).bool().cuda()
     model = EquivariantTransformer(
-        Path('test/data_dump'), 0, 0, None, None, **MODEL_KWARGS).cuda()
+        dump_path, 0, 0, None, None, **MODEL_KWARGS).cuda()
 
     unrotated_result = float(to_numpy(model((original_coords, feats, mask))))
     rotated_result = float((model((rotated_coords, feats, mask))))
 
+    assert unrotated_result != pytest.approx(0, abs=1e-5)
     assert unrotated_result == pytest.approx(rotated_result, abs=EPS)

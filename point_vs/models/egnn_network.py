@@ -93,10 +93,10 @@ class EGNNStack(PointNeuralNetwork):
     def _process_inputs(self, x):
         return tuple([ten.cuda() for ten in x])
 
-    def build_net(self, chin, dim_output=2, k=12, act="swish", bn=True,
+    def build_net(self, dim_input, dim_output=2, k=12, act="swish", bn=True,
                   dropout=0.0, num_layers=6, mean=False, pool=True, feats_idx=0,
                   **kwargs):
-        egnn = lambda: EGNN(dim=chin, m_dim=k, norm_rel_coors=True,
+        egnn = lambda: EGNN(dim=dim_input, m_dim=k, norm_rel_coors=True,
                             norm_coor_weights=False, dropout=dropout)
         if bn:
             bn = lambda: EGNNBatchNorm(12)
@@ -112,15 +112,15 @@ class EGNNStack(PointNeuralNetwork):
                 act))
         self.layers = nn.ModuleList([
             *[a for b in eggn_layers for a in b],
-            Pass(nn.Linear(chin, chin * 2), dim=feats_idx),
+            Pass(nn.Linear(dim_input, dim_input * 2), dim=feats_idx),
             Pass(activation_class(), dim=feats_idx),
-            Pass(nn.Linear(chin * 2, chin), dim=feats_idx),
+            Pass(nn.Linear(dim_input * 2, dim_input), dim=feats_idx),
             EGNNGlobalPool(
                 dim=feats_idx, tensor_dim=1,
                 mean=mean) if pool else nn.Sequential(),
-            Pass(nn.Linear(chin, chin * 2), dim=feats_idx),
+            Pass(nn.Linear(dim_input, dim_input * 2), dim=feats_idx),
             Pass(activation_class(), dim=feats_idx),
-            Pass(nn.Linear(chin * 2, dim_output), dim=feats_idx),
+            Pass(nn.Linear(dim_input * 2, dim_output), dim=feats_idx),
         ])
 
     def forward(self, x):
