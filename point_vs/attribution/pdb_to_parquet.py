@@ -714,9 +714,7 @@ class DistanceCalculator:
         keep_atoms, sequential_indices = [], []
         obabel_to_sequential = defaultdict(lambda: len(obabel_to_sequential))
         for atomid, atom in mol.atoms.items():
-            if atom.OBAtom.GetResidue().GetName().upper() in RESIDUE_IDS \
-                    and atomid not in all_ligand_indices and \
-                    atom.atomicnum > 1:
+            if atom.atomicnum > 1:
                 keep_atoms.append(atomid)
                 # Book keeping for DSSP
                 chain = atom.OBAtom.GetResidue().GetChain()

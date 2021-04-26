@@ -100,7 +100,7 @@ def visualize_in_pymol(
     dt = DistanceCalculator()
     vis.colour_b_factors(
         model, attribution_fn=attribution_fn,
-        pdb_file=pdb_file, dt=dt, chain='', quiet=True,
+        pdb_file=pdb_file, dt=dt, chain=chain, quiet=True,
         input_dim=input_dim, radius=radius, bs=bs)
 
     vis.refinements()

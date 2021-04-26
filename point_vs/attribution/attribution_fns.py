@@ -6,7 +6,7 @@ from point_vs.models.point_neural_network import to_numpy
 
 
 def cam(model, p, v, m, **kwargs):
-    """Performs class activation mapping (CAM) on input.
+    """Perform class activation mapping (CAM) on input.
 
     Arguments:
         p: matrix of size (1, n, 3) with atom positions
@@ -21,14 +21,17 @@ def cam(model, p, v, m, **kwargs):
         if layer.__class__.__name__ == 'GlobalPool':
             break
         x = layer(x)
+
+    # We can directly look at the contribution of each node by taking the
+    # dot product between each node's features and the final FC layer
     final_layer_weights = to_numpy(model.layers[-1].weight).T
     node_features = to_numpy(x[1].squeeze())
     scores = node_features @ final_layer_weights
-    return scores.squeeze()
+    return scores
 
 
 def masking(model, p, v, m, bs=16):
-    """Performs masking on each point in the input.
+    """Perform masking on each point in the input.
 
     Scores are calculated by taking the difference between the original
     (unmasked) score and the score with each point masked.

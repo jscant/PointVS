@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn.functional as F
 from plip.basic.remote import VisualizerData
@@ -43,6 +44,9 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
         df['z'] -= mean_z
         df['sq_dist'] = (df['x'] ** 2 + df['y'] ** 2 + df['z'] ** 2)
         df = df[df.sq_dist < radius ** 2].copy()
+        df['x'] += mean_x
+        df['y'] += mean_y
+        df['z'] += mean_z
 
         labelled_indices = df['atom_id'].to_numpy()
         unlabelled_indices = np.setdiff1d(all_indices, labelled_indices)
@@ -58,13 +62,11 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
         model_labels = attribution_fn(
             model, p.cuda(), v.cuda(), m.cuda(), bs=bs)
 
-        """
         df['attribution'] = model_labels
         with pd.option_context('display.max_colwidth', None):
             with pd.option_context('display.max_rows', None):
                 with pd.option_context('display.max_columns', None):
                     print(df)
-        """
 
         atom_to_bfactor_map = {
             labelled_indices[i]: model_labels[i] for i in range(len(df))}
@@ -75,32 +77,33 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
         b_factor_labels = atom_data_extract(
             chain, atom_to_bfactor_map)
 
-        def b_lookup(chain, resi, name, ID, b):
-            def _lookup(chain, resi, name, ID):
+        def b_lookup(chain, resi, name, atom_id, b):
+            def _lookup(chain, resi, name, atom_id):
                 if resi in b_factor_labels[chain] and isinstance(
                         b_factor_labels[chain][resi], dict):
                     return b_factor_labels[chain][resi][name][0]
                 else:
                     # find data by ID
-                    return b_factor_labels[chain][int(ID)][0]
+                    return b_factor_labels[chain][int(atom_id)][0]
 
             try:
                 if chain not in b_factor_labels:
                     chain = ''
-                b = _lookup(chain, resi, name, ID)
-                if not quiet: print(
-                    '///%s/%s/%s new: %f' % (chain, resi, name, b))
+                b = _lookup(chain, resi, name, atom_id)
+                if not quiet:
+                    print('///%s/%s/%s new: %f' % (chain, resi, name, b))
             except KeyError:
-                if not quiet: print(
-                    '///%s/%s/%s keeping: %f' % (chain, resi, name, b))
+                if not quiet:
+                    print('///%s/%s/%s keeping: %f' % (chain, resi, name, b))
             return b
 
         stored.b = b_lookup
 
-        cmd.alter(self.protname, '%s=stored.b(chain, resi, name, ID, %s)' % (
-            'b', 'b'))
+        cmd.alter('all', "b=0")
+        cmd.alter(
+            'all', '%s=stored.b(chain, resi, name, ID, %s)' % ('b', 'b'))
         print(self.ligname)
-        cmd.spectrum('b', 'white_red', 'not ({})'.format(self.ligname))
+        cmd.spectrum('b', 'white_red')
         cmd.show('sticks', 'b > 0')
         cmd.rebuild()
 
