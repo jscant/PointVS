@@ -3,10 +3,45 @@ import numpy as np
 import torch
 
 from point_vs.models.point_neural_network import to_numpy
-from point_vs.utils import Timer
+
+
+def cam(model, p, v, m, **kwargs):
+    """Performs class activation mapping (CAM) on input.
+
+    Arguments:
+        p: matrix of size (1, n, 3) with atom positions
+        v: matrix of size (1, n, d) with atom features
+        m: matrix of ones of size (1, n)
+
+    Returns:
+        Numpy array containing CAM score attributions for each atom
+    """
+    x = model.group.lift((p, v, m), model.liftsamples)
+    for layer in model.layers:
+        if layer.__class__.__name__ == 'GlobalPool':
+            break
+        x = layer(x)
+    final_layer_weights = to_numpy(model.layers[-1].weight).T
+    node_features = to_numpy(x[1].squeeze())
+    scores = node_features @ final_layer_weights
+    return scores.squeeze()
 
 
 def masking(model, p, v, m, bs=16):
+    """Performs masking on each point in the input.
+
+    Scores are calculated by taking the difference between the original
+    (unmasked) score and the score with each point masked.
+
+    Arguments:
+        p: matrix of size (1, n, 3) with atom positions
+        v: matrix of size (1, n, d) with atom features
+        m: matrix of ones of size (1, n)
+        bs: batch size to use (larger is faster but requires more GPU memory)
+
+    Returns:
+        Numpy array containing masking score attributions for each atom
+    """
     scores = np.zeros((m.size(1),))
     original_score = float(to_numpy(torch.sigmoid(model((p, v, m)))))
     p_input_matrix = torch.zeros(bs, p.size(1) - 1, p.size(2))
@@ -30,15 +65,4 @@ def masking(model, p, v, m, bs=16):
         scores[i] = float(to_numpy(
             torch.sigmoid(
                 model((masked_p, masked_v, masked_m))))) - original_score
-    return scores
-    for i in range(p.size(1)):
-        with Timer() as t:
-            masked_p = p[:, torch.arange(p.size(1)) != i, :].cuda()
-            masked_v = v[:, torch.arange(v.size(1)) != i, :].cuda()
-            masked_m = m[:, torch.arange(m.size(1)) != i].cuda()
-        with Timer() as f:
-            scores[i] = float(to_numpy(
-                torch.sigmoid(
-                    model((masked_p, masked_v, masked_m))))) - original_score
-        print(i, 'Making tensors:', t.interval, '\tScoring:', f.interval)
     return scores

@@ -9,13 +9,13 @@ import yaml
 from plip.basic.supplemental import extract_pdbid
 from plip.exchange.webservices import fetch_pdb
 
-from point_vs.attribution.attribution_fns import masking
+from point_vs.attribution.attribution_fns import masking, cam
 from point_vs.attribution.process_pdb import process_pdb
 from point_vs.models.lie_conv import LieResNet
 from point_vs.models.lie_transformer import EquivariantTransformer
 from point_vs.utils import mkdir
 
-ALLOWED_METHODS = ('masking',)
+ALLOWED_METHODS = ('masking', 'cam')
 
 
 def download_pdb_file(pdbid, output_dir):
@@ -73,7 +73,7 @@ def attribute(args):
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
 
-    attribution_fn = {'masking': masking}[args.attribution_type]
+    attribution_fn = {'masking': masking, 'cam': cam}[args.attribution_type]
 
     process_pdb(model, attribution_fn,
                 str(pdbpath), str(output_dir), input_dim=dim_input,
