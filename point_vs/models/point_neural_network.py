@@ -18,14 +18,16 @@ def to_numpy(torch_tensor):
 class PointNeuralNetwork(nn.Module):
 
     def __init__(self, save_path, learning_rate, weight_decay=None,
-                 wandb_project=None, wandb_run=None, **model_kwargs):
+                 wandb_project=None, wandb_run=None, silent=False,
+                 **model_kwargs):
         super().__init__()
         self.batch = 0
         self.epoch = 0
         self.losses = []
         self.final_activation = nn.CrossEntropyLoss()
         self.save_path = Path(save_path).expanduser()
-        self.save_path.mkdir(parents=True, exist_ok=True)
+        if not silent:
+            self.save_path.mkdir(parents=True, exist_ok=True)
         self.predictions_file = self.save_path / 'predictions.txt'
 
         self.loss_plot_file = self.save_path / 'loss.png'
@@ -47,8 +49,9 @@ class PointNeuralNetwork(nn.Module):
         self.optimiser = torch.optim.Adam(
             self.parameters(), lr=self.lr, weight_decay=weight_decay)
 
-        with open(save_path / 'model_kwargs.yaml', 'w') as f:
-            yaml.dump(model_kwargs, f)
+        if not silent:
+            with open(save_path / 'model_kwargs.yaml', 'w') as f:
+                yaml.dump(model_kwargs, f)
 
         self.apply(self.xavier_init)
         self.cuda()
@@ -201,15 +204,14 @@ class PointNeuralNetwork(nn.Module):
                 active_idx = (np.where(y_true_np > 0.5), 1)
                 decoy_idx = (np.where(y_true_np < 0.5), 1)
 
-                scale = len(y_true) / len(data_loader)
-                _ = self._get_loss(y_true, y_pred, scale)
+                loss = float(self._get_loss(y_true, y_pred))
 
                 eta = get_eta(start_time, self.batch, len(data_loader))
                 time_elapsed = format_time(time.time() - start_time)
 
                 wandb_update_dict = {
                     'Time remaining (validation)': eta,
-                    'Binary crossentropy (validation)': self.bce_loss,
+                    'Binary crossentropy (validation)': loss,
                     'Batch': self.batch + 1
                 }
 
@@ -235,7 +237,7 @@ class PointNeuralNetwork(nn.Module):
                         self.batch + 1, len(data_loader))),
                     ('Time elapsed:', time_elapsed, '|',
                      'Time remaining:', eta),
-                    ('Loss: {0:.4f}'.format(self.bce_loss), '|',
+                    ('Loss: {0:.4f}'.format(loss), '|',
                      'Mean active: {0:.4f}'.format(active_mean_pred), '|',
                      'Mean decoy: {0:.4f}'.format(decoy_mean_pred))
                 )
@@ -266,7 +268,6 @@ class PointNeuralNetwork(nn.Module):
             'weight_decay': self.weight_decay,
             'epoch': self.epoch,
             'losses': self.losses,
-            'bce_loss': self.bce_loss,
             'model_state_dict': self.state_dict(),
             'optimiser_state_dict': self.optimiser.state_dict()
         }, save_path)

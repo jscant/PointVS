@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 from egnn_pytorch import EGNN
 from egnn_pytorch.egnn_pytorch import fourier_encode_dist, exists
@@ -9,7 +8,8 @@ from lie_conv.utils import Pass
 from torch import nn, einsum
 
 from point_vs.models.layers import EGNNBatchNorm, EGNNGlobalPool
-from point_vs.models.point_neural_network import PointNeuralNetwork
+from point_vs.models.point_neural_network import PointNeuralNetwork, \
+    GlobalPoolFinal
 
 
 class EnTransformerBlock(EGNN):
@@ -81,6 +81,21 @@ class EnResBlock(nn.Module):
         return new_coords, new_values, mask
 
 
+class EGNNPass(nn.Module):
+    def __init__(self, egnn):
+        super().__init__()
+        self.egnn = egnn
+
+    def forward(self, x):
+        if len(x) == 2:
+            feats, coors = x
+            mask = None
+        else:
+            feats, coors, mask = x
+        feats, coors = self.egnn(feats=feats, coors=coors, mask=mask)
+        return feats, coors, mask
+
+
 class EGNNStack(PointNeuralNetwork):
 
     @staticmethod
@@ -91,13 +106,14 @@ class EGNNStack(PointNeuralNetwork):
         return y.cuda()
 
     def _process_inputs(self, x):
-        return tuple([ten.cuda() for ten in x])
+        return x[1].cuda(), x[0].cuda(), x[2].cuda()
 
     def build_net(self, dim_input, dim_output=2, k=12, act="swish", bn=True,
-                  dropout=0.0, num_layers=6, mean=False, pool=True, feats_idx=0,
+                  dropout=0.0, num_layers=6, pool=True, feats_idx=0,
                   **kwargs):
-        egnn = lambda: EGNN(dim=dim_input, m_dim=k, norm_rel_coors=True,
-                            norm_coor_weights=False, dropout=dropout)
+        egnn = lambda: EGNN(dim=dim_input, m_dim=k, norm_coors=True,
+                            norm_feats=False, dropout=dropout)
+        bn = False
         if bn:
             bn = lambda: EGNNBatchNorm(12)
             eggn_layers = [(egnn(), bn()) for _ in range(num_layers)]
@@ -110,37 +126,43 @@ class EGNNStack(PointNeuralNetwork):
         else:
             raise NotImplementedError('{} not a recognised activation'.format(
                 act))
-        self.layers = nn.ModuleList([
-            *[a for b in eggn_layers for a in b],
-            Pass(nn.Linear(dim_input, dim_input * 2), dim=feats_idx),
-            Pass(activation_class(), dim=feats_idx),
-            Pass(nn.Linear(dim_input * 2, dim_input), dim=feats_idx),
+        self.layers = nn.Sequential(
+            # Pass(nn.Linear(dim_input, dim_input), dim=feats_idx),
+            # Pass(activation_class(), dim=feats_idx),
+            # *[a for b in eggn_layers for a in b],
+            # Pass(nn.Linear(dim_input, dim_input * 2), dim=feats_idx),
+            # Pass(activation_class(), dim=feats_idx),
+            # Pass(nn.Linear(dim_input * 2, dim_input), dim=feats_idx),
+            *[EGNNPass(egnn()) for _ in range(num_layers)],
             EGNNGlobalPool(
                 dim=feats_idx, tensor_dim=1,
-                mean=mean) if pool else nn.Sequential(),
-            Pass(nn.Linear(dim_input, dim_input * 2), dim=feats_idx),
-            Pass(activation_class(), dim=feats_idx),
-            Pass(nn.Linear(dim_input * 2, dim_output), dim=feats_idx),
-        ])
+                mean=True) if pool else nn.Sequential(),
+            Pass(GlobalPoolFinal(), dim=feats_idx)
+            #Pass(nn.Linear(dim_input, dim_input * 2), dim=feats_idx),
+            #Pass(activation_class(), dim=feats_idx),
+            #Pass(nn.Linear(dim_input * 2, dim_input), dim=feats_idx),
+            #Pass(activation_class(), dim=feats_idx),
+            #Pass(GlobalPoolFinal(), dim=feats_idx),
+            #Pass(GlobalPoolFinal(), dim=feats_idx)
+        )
 
     def forward(self, x):
-        coords, feats, mask = x
-        for layer in self.layers:
-            if isinstance(layer, EGNN):
-                feats, coords = layer(feats, coords, mask=mask)
-            else:
-                x = layer([feats, coords])
-                if isinstance(x, (tuple, list)):
-                    feats, coords = x
-                else:
-                    feats = x
-        return feats
+        return self.layers(x)[0]
 
     @staticmethod
     def get_min_max(network):
-        min_val, max_val = np.inf, -np.inf
         for layer in network:
-            if isinstance(layer, nn.Linear):
-                min_val = min(float(torch.min(layer.weight)), min_val)
-                max_val = max(float(torch.max(layer.weight)), max_val)
-        return min_val, max_val
+            if isinstance(layer, Pass):
+                if isinstance(layer.module, nn.Linear):
+                    print('Linear:',
+                          float(torch.min(layer.module.weight)),
+                          float(torch.max(layer.module.weight)))
+            elif isinstance(layer, EGNN):
+                for network_type, network_name in zip(
+                        (layer.edge_mlp, layer.node_mlp, layer.coors_mlp),
+                        ('EGNN-edge', 'EGNN-node', 'EGNN-coors')):
+                    for sublayer in network_type:
+                        if isinstance(sublayer, nn.Linear):
+                            print(network_name,
+                                  float(torch.min(sublayer.weight)),
+                                  float(torch.max(sublayer.weight)))
