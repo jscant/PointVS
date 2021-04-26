@@ -1,10 +1,11 @@
-from joblib import Parallel, delayed
+import argparse
 import struct
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from atom_types import Typer
-import argparse
+from joblib import Parallel, delayed
 
 
 def get_type_map(types: list = None):
