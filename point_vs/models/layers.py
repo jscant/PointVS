@@ -22,21 +22,18 @@ class EGNNGlobalPool(nn.Module):
                     return x.sum(self.tensor_dim)
                 else:
                     return x[self.dim].sum(self.tensor_dim)
-        coords, vals, mask = x
+        vals, coords, mask = x
 
         if self.mean:
             # mean pooling
             summed = torch.where(mask.unsqueeze(-1), vals,
-                                 torch.zeros_like(vals)).sum(
-                1
-            )
+                                 torch.zeros_like(vals)).sum(1)
             summed_mask = mask.sum(-1).unsqueeze(-1)
             summed_mask = torch.where(
-                summed_mask == 0, torch.ones_like(summed_mask), summed_mask
-            )
+                summed_mask == 0, torch.ones_like(summed_mask), summed_mask)
             summed /= summed_mask
 
-            return summed
+            return [summed, coords, mask]
         else:
             # max pooling
             masked = torch.where(
@@ -50,7 +47,7 @@ class EGNNGlobalPool(nn.Module):
                 * torch.ones_like(vals),
             )
 
-            return masked.max(dim=1)[0]
+            return [masked.max(dim=1)[0], coords, mask]
 
 
 class EGNNBatchNorm(nn.BatchNorm1d):
