@@ -56,8 +56,7 @@ class LieResNet(PointNeuralNetwork):
         return tuple([inp.cuda() for inp in x])
 
     def build_net(self, dim_input, dim_output, ds_frac=1, k=1536, nbhd=np.inf,
-                  act="swish",
-                  bn=True, num_layers=6, mean=True, pool=True, liftsamples=1,
+                  act="swish", bn=True, num_layers=6, pool=True, liftsamples=1,
                   fill=1 / 4, group=SE3, knn=False, cache=False, dropout=0,
                   **kwargs):
         """
@@ -73,7 +72,6 @@ class LieResNet(PointNeuralNetwork):
             bn: whether or not to use batch normalization. Recommended in al
                 cases except dynamical systems.
             num_layers: number of BottleNeck Block layers in the network
-            mean:
             pool:
             liftsamples: number of samples to use in lifting. 1 for all groups
                 with trivial stabilizer. Otherwise 2+
@@ -91,7 +89,7 @@ class LieResNet(PointNeuralNetwork):
             # k = [dim_input] + [k] * (num_layers)
             k = [k] * (num_layers + 1)
         conv = lambda ki, ko, fill: LieConv(
-            ki, ko, mc_samples=nbhd, ds_frac=ds_frac, bn=bn, act=act, mean=mean,
+            ki, ko, mc_samples=nbhd, ds_frac=ds_frac, bn=bn, act=act, mean=True,
             group=group, fill=fill, cache=cache, knn=knn)
         self.layers = nn.ModuleList([
             Pass(nn.Linear(dim_input, k[0]), dim=1),
@@ -101,8 +99,8 @@ class LieResNet(PointNeuralNetwork):
             Pass(nn.ReLU(), dim=1),
             MaskBatchNormNd(k[-1]) if bn else nn.Sequential(),
             Pass(nn.Dropout(p=dropout), dim=1) if dropout else nn.Sequential(),
-            Pass(nn.Linear(k[-1], dim_output), dim=1),
-            GlobalPool(mean=mean) if pool else Expression(lambda x: x[1]),
+            GlobalPool(mean=True) if pool else Expression(lambda x: x[1]),
+            nn.Linear(k[-1], dim_output)
         ])
         self.group = group
         self.liftsamples = liftsamples
