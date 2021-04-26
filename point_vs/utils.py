@@ -6,9 +6,16 @@ together.
 import math
 import shutil
 import time
+from pathlib import Path
 
 import numpy as np
 from matplotlib import pyplot as plt
+
+
+def mkdir(path):
+    path = Path(path).expanduser()
+    path.mkdir(exist_ok=True, parents=True)
+    return path
 
 
 def set_gpu_mode(mode):
