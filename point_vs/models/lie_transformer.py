@@ -72,7 +72,7 @@ class EquivariantTransformer(PointNeuralNetwork):
             ],
             GlobalPool(mean=global_pool_mean) if global_pool else Expression(
                 lambda x: x[1]),
-            GlobalPoolFinal() if pooling_only else nn.Sequential(
+            nn.Linear(dim_hidden[-1], dim_output) if pooling_only else nn.Sequential(
                 norm1,
                 activation_fn[kernel_act](),
                 nn.Linear(dim_hidden[-1], dim_hidden[-1]),
