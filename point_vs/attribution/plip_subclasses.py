@@ -6,8 +6,6 @@ from plip.basic.remote import VisualizerData
 from plip.visualization.pymol import PyMOLVisualizer
 from pymol import cmd, stored
 
-from point_vs.models.point_neural_network import to_numpy
-
 
 class VisualizerDataWithMolecularInfo(VisualizerData):
     """VisualizerData but with the mol, ligand and pli objects stored."""

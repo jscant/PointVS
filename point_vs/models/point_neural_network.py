@@ -42,7 +42,7 @@ class PointNeuralNetwork(nn.Module):
         self.wandb_path = self.save_path / 'wandb_{}'.format(wandb_project)
         self.wandb_run = wandb_run
 
-        self.build_net(**model_kwargs)
+        self.layers = self.build_net(**model_kwargs)
         self.optimiser = torch.optim.Adam(
             self.parameters(), lr=self.lr, weight_decay=weight_decay)
 

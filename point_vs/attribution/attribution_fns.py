@@ -17,20 +17,14 @@ def cam(model, p, v, m, **kwargs):
         Numpy array containing CAM score attributions for each atom
     """
     x = model.group.lift((p, v, m), model.liftsamples)
-    if hasattr(model, 'layers'):
-        layers = model.layers
-    elif hasattr(model, 'net'):
-        layers = model.net
-    else:
-        raise RuntimeError('Network has neither layers nor net attribute.')
-    for layer in layers:
+    for layer in model.layers:
         if layer.__class__.__name__.find('GlobalPool') != -1:
             break
         x = layer(x)
 
     # We can directly look at the contribution of each node by taking the
     # dot product between each node's features and the final FC layer
-    final_layer_weights = to_numpy(layers[-1].weight).T
+    final_layer_weights = to_numpy(model.layers[-1].weight).T
     node_features = to_numpy(x[1].squeeze())
     scores = node_features @ final_layer_weights
     return scores

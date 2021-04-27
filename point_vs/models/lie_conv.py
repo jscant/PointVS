@@ -86,12 +86,11 @@ class LieResNet(PointNeuralNetwork):
         if isinstance(fill, (float, int)):
             fill = [fill] * num_layers
         if isinstance(k, int):
-            # k = [dim_input] + [k] * (num_layers)
             k = [k] * (num_layers + 1)
         conv = lambda ki, ko, fill: LieConv(
             ki, ko, mc_samples=nbhd, ds_frac=ds_frac, bn=bn, act=act, mean=True,
             group=group, fill=fill, cache=cache, knn=knn)
-        self.layers = nn.ModuleList([
+        layers = nn.ModuleList([
             Pass(nn.Linear(dim_input, k[0]), dim=1),
             *[LieConvBottleBlock(k[i], k[i + 1], conv, bn=bn, act=act,
                                  fill=fill[i],
@@ -104,6 +103,8 @@ class LieResNet(PointNeuralNetwork):
         ])
         self.group = group
         self.liftsamples = liftsamples
+
+        return layers
 
     def forward(self, x):
         x = tuple([ten.cuda() for ten in self.group.lift(x, self.liftsamples)])

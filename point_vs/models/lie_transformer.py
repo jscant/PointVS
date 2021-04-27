@@ -64,7 +64,7 @@ class EquivariantTransformer(PointNeuralNetwork):
         else:
             raise ValueError('{} is not a valid norm type.'.format(output_norm))
 
-        self.net = nn.Sequential(
+        layers = nn.Sequential(
             Pass(nn.Linear(dim_input, dim_hidden[0]), dim=1),
             Pass(activation_fn(), dim=1),
             *[
@@ -88,6 +88,8 @@ class EquivariantTransformer(PointNeuralNetwork):
                     f"{lie_algebra_nonlinearity} is not a supported nonlinearity"
                 )
 
+        return layers
+
     def forward(self, x):
         if self.max_sample_norm is None:
             lifted_data = self.group.lift(x, self.liftsamples)
@@ -107,4 +109,4 @@ class EquivariantTransformer(PointNeuralNetwork):
                     self.lie_algebra_nonlinearity(pairs_norm / 7) / pairs_norm
             ).unsqueeze(-1)
 
-        return self.net(lifted_data)
+        return self.layers(lifted_data)

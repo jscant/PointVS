@@ -108,7 +108,7 @@ class EGNNStack(PointNeuralNetwork):
 
     def build_net(self, dim_input, dim_output=1, k=12, act="swish", bn=True,
                   dropout=0.0, num_layers=6, pool=True, **kwargs):
-        egnn = lambda: EGNN(dim=dim_input, m_dim=k, norm_coors=True,
+        egnn = lambda: EGNN(dim=k, m_dim=k, norm_coors=True,
                             edge_dim=0, norm_feats=False, dropout=dropout)
         if act == 'swish':
             activation_class = Swish
@@ -117,11 +117,15 @@ class EGNNStack(PointNeuralNetwork):
         else:
             raise NotImplementedError('{} not a recognised activation'.format(
                 act))
-        self.layers = nn.Sequential(
+        layers = nn.Sequential(
+            Pass(nn.Linear(dim_input, k), dim=1),
+            Pass(activation_class(), dim=1),
             *[EGNNPass(egnn()) for _ in range(num_layers)],
             GlobalPool(mean=True) if pool else nn.Sequential(),
-            nn.Linear(dim_input, dim_output)
+            nn.Linear(k, dim_output)
         )
+
+        return layers
 
     def forward(self, x):
         return self.layers(x)
