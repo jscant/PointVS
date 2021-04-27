@@ -8,7 +8,7 @@ import wandb
 import yaml
 from torch import nn
 
-from point_vs.utils import get_eta, format_time, print_with_overwrite
+from point_vs.utils import get_eta, format_time, print_with_overwrite, mkdir
 
 
 def to_numpy(torch_tensor):
@@ -27,7 +27,7 @@ class PointNeuralNetwork(nn.Module):
         self.final_activation = nn.CrossEntropyLoss()
         self.save_path = Path(save_path).expanduser()
         if not silent:
-            self.save_path.mkdir(parents=True, exist_ok=True)
+            mkdir(self.save_path)
         self.predictions_file = self.save_path / 'predictions.txt'
 
         self.loss_plot_file = self.save_path / 'loss.png'
@@ -202,8 +202,8 @@ class PointNeuralNetwork(nn.Module):
                 y_true_np = to_numpy(y_true)
                 y_pred_np = to_numpy(nn.Sigmoid()(y_pred))
 
-                active_idx = (np.where(y_true_np > 0.5), 1)
-                decoy_idx = (np.where(y_true_np < 0.5), 1)
+                active_idx = (np.where(y_true_np > 0.5),)
+                decoy_idx = (np.where(y_true_np < 0.5),)
 
                 loss = float(self._get_loss(y_true, y_pred))
 
@@ -263,7 +263,7 @@ class PointNeuralNetwork(nn.Module):
             fname = 'ckpt_epoch_{}.pt'.format(self.epoch + 1)
             save_path = self.save_path / 'checkpoints' / fname
 
-        save_path.parent.mkdir(parents=True, exist_ok=True)
+        mkdir(save_path.parent)
         torch.save({
             'learning_rate': self.lr,
             'weight_decay': self.weight_decay,
