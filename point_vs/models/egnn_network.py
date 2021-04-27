@@ -2,14 +2,12 @@ import torch
 from egnn_pytorch import EGNN
 from egnn_pytorch.egnn_pytorch import fourier_encode_dist, exists
 from einops import rearrange, repeat
-from eqv_transformer.utils import Swish
+from eqv_transformer.utils import Swish, GlobalPool
 from lie_conv.masked_batchnorm import MaskBatchNormNd
 from lie_conv.utils import Pass
 from torch import nn, einsum
 
-from point_vs.models.layers import EGNNBatchNorm, EGNNGlobalPool
-from point_vs.models.point_neural_network import PointNeuralNetwork, \
-    GlobalPoolFinal
+from point_vs.models.point_neural_network import PointNeuralNetwork
 
 
 class EnTransformerBlock(EGNN):
@@ -88,12 +86,12 @@ class EGNNPass(nn.Module):
 
     def forward(self, x):
         if len(x) == 2:
-            feats, coors = x
+            coors, feats = x
             mask = None
         else:
-            feats, coors, mask = x
+            coors, feats, mask = x
         feats, coors = self.egnn(feats=feats, coors=coors, mask=mask)
-        return feats, coors, mask
+        return coors, feats, mask
 
 
 class EGNNStack(PointNeuralNetwork):
@@ -106,19 +104,12 @@ class EGNNStack(PointNeuralNetwork):
         return y.cuda()
 
     def _process_inputs(self, x):
-        return x[1].cuda(), x[0].cuda(), x[2].cuda()
+        return [i.cuda() for i in x]
 
-    def build_net(self, dim_input, dim_output=2, k=12, act="swish", bn=True,
-                  dropout=0.0, num_layers=6, pool=True, feats_idx=0,
-                  **kwargs):
+    def build_net(self, dim_input, dim_output=1, k=12, act="swish", bn=True,
+                  dropout=0.0, num_layers=6, pool=True, **kwargs):
         egnn = lambda: EGNN(dim=dim_input, m_dim=k, norm_coors=True,
-                            norm_feats=False, dropout=dropout)
-        bn = False
-        if bn:
-            bn = lambda: EGNNBatchNorm(12)
-            eggn_layers = [(egnn(), bn()) for _ in range(num_layers)]
-        else:
-            eggn_layers = [(egnn(),) for _ in range(num_layers)]
+                            edge_dim=0, norm_feats=False, dropout=dropout)
         if act == 'swish':
             activation_class = Swish
         elif act == 'relu':
@@ -127,27 +118,13 @@ class EGNNStack(PointNeuralNetwork):
             raise NotImplementedError('{} not a recognised activation'.format(
                 act))
         self.layers = nn.Sequential(
-            # Pass(nn.Linear(dim_input, dim_input), dim=feats_idx),
-            # Pass(activation_class(), dim=feats_idx),
-            # *[a for b in eggn_layers for a in b],
-            # Pass(nn.Linear(dim_input, dim_input * 2), dim=feats_idx),
-            # Pass(activation_class(), dim=feats_idx),
-            # Pass(nn.Linear(dim_input * 2, dim_input), dim=feats_idx),
             *[EGNNPass(egnn()) for _ in range(num_layers)],
-            EGNNGlobalPool(
-                dim=feats_idx, tensor_dim=1,
-                mean=True) if pool else nn.Sequential(),
-            Pass(GlobalPoolFinal(), dim=feats_idx)
-            #Pass(nn.Linear(dim_input, dim_input * 2), dim=feats_idx),
-            #Pass(activation_class(), dim=feats_idx),
-            #Pass(nn.Linear(dim_input * 2, dim_input), dim=feats_idx),
-            #Pass(activation_class(), dim=feats_idx),
-            #Pass(GlobalPoolFinal(), dim=feats_idx),
-            #Pass(GlobalPoolFinal(), dim=feats_idx)
+            GlobalPool(mean=True) if pool else nn.Sequential(),
+            nn.Linear(dim_input, dim_output)
         )
 
     def forward(self, x):
-        return self.layers(x)[0]
+        return self.layers(x)
 
     @staticmethod
     def get_min_max(network):

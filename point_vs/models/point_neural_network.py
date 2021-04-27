@@ -8,11 +8,8 @@ import wandb
 import yaml
 from torch import nn
 
-from point_vs.utils import get_eta, format_time, print_with_overwrite, mkdir
-
-
-def to_numpy(torch_tensor):
-    return torch_tensor.cpu().detach().numpy()
+from point_vs.utils import get_eta, format_time, print_with_overwrite, mkdir, \
+    to_numpy
 
 
 class PointNeuralNetwork(nn.Module):
