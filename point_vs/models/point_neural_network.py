@@ -245,7 +245,7 @@ class PointNeuralNetwork(nn.Module):
 
                 predictions += '\n'.join(['{0} | {1:.7f} {2} {3}'.format(
                     int(y_true_np[i]),
-                    y_pred_np[i, 1],
+                    y_pred_np[i],
                     receptors[i],
                     ligands[i]) for i in range(len(receptors))]) + '\n'
 
