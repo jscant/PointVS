@@ -9,16 +9,34 @@ import time
 from pathlib import Path
 
 import numpy as np
+import torch
 from matplotlib import pyplot as plt
 
 
+def _set_precision(precision):
+    """Set global torch precision to either 'double' or 'float'."""
+    if precision == 'double':
+        torch.set_default_dtype(torch.float64)
+        torch.set_default_tensor_type(torch.DoubleTensor)
+    else:
+        torch.set_default_dtype(torch.float32)
+        torch.set_default_tensor_type(torch.FloatTensor)
+
+
+def to_numpy(torch_tensor):
+    """Switch from a torch tensor to a numpy array (on cpu)."""
+    return torch_tensor.cpu().detach().numpy()
+
+
 def mkdir(path):
+    """Make a new directory, including parents."""
     path = Path(path).expanduser()
     path.mkdir(exist_ok=True, parents=True)
     return path
 
 
 def set_gpu_mode(mode):
+    """Global usage of GPU."""
     global _use_gpu
     _use_gpu = mode
     if mode:
