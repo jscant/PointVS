@@ -198,8 +198,9 @@ class PointNeuralNetwork(nn.Module):
                 x = self._process_inputs(x)
                 y_true = self._get_y_true(y_true).cuda()
                 y_pred = self.forward_pass(x)
-                y_true_np = y_true.cpu().detach().numpy()
-                y_pred_np = nn.Softmax(dim=1)(y_pred).cpu().detach().numpy()
+
+                y_true_np = to_numpy(y_true)
+                y_pred_np = to_numpy(nn.Sigmoid()(y_pred))
 
                 active_idx = (np.where(y_true_np > 0.5), 1)
                 decoy_idx = (np.where(y_true_np < 0.5), 1)
