@@ -3,8 +3,6 @@
 import argparse
 from pathlib import PosixPath
 
-import numpy as np
-
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -100,6 +98,6 @@ def parse_args():
     parser.add_argument('--pooling_only', action='store_true',
                         help='Only do global pooling after graph layers (no '
                              'linear layers)')
-    parser.add_argument('--fill', type=float, default=1.0,
+    parser.add_argument('--fill', type=float, default=0.75,
                         help='LieTransformer fill parameter')
     return parser.parse_args()
