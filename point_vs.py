@@ -165,8 +165,7 @@ if __name__ == '__main__':
     if args.load_weights is not None:
         with open(args.load_weights.parents[1] / 'model_kwargs.yaml',
                   'r') as f:
-            model_kwargs = yaml.load(
-                f, Loader=yaml.FullLoader)
+            model_kwargs = yaml.load(f, Loader=yaml.Loader)
 
     wandb_init_kwargs = {
         'project': args.wandb_project, 'allow_val_change': True,
