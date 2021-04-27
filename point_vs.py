@@ -186,7 +186,6 @@ if __name__ == '__main__':
         model.optimiser.load_state_dict(checkpoint['optimiser_state_dict'])
         model.epoch = checkpoint['epoch']
         model.losses = checkpoint['losses']
-        model.bce_loss = checkpoint['bce_loss']
 
     try:
         wandb.watch(model)
