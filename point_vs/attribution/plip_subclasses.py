@@ -6,6 +6,8 @@ from plip.basic.remote import VisualizerData
 from plip.visualization.pymol import PyMOLVisualizer
 from pymol import cmd, stored
 
+from point_vs.models.point_neural_network import to_numpy
+
 
 class VisualizerDataWithMolecularInfo(VisualizerData):
     """VisualizerData but with the mol, ligand and pli objects stored."""
@@ -58,7 +60,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
         v = torch.unsqueeze(F.one_hot(torch.as_tensor(
             df.types.to_numpy()), input_dim), 0).float()
 
-        model = model.eval()
+        model = model.eval().cuda()
         model_labels = attribution_fn(
             model, p.cuda(), v.cuda(), m.cuda(), bs=bs)
 

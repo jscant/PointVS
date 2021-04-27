@@ -17,14 +17,20 @@ def cam(model, p, v, m, **kwargs):
         Numpy array containing CAM score attributions for each atom
     """
     x = model.group.lift((p, v, m), model.liftsamples)
-    for layer in model.layers:
-        if layer.__class__.__name__ == 'GlobalPool':
+    if hasattr(model, 'layers'):
+        layers = model.layers
+    elif hasattr(model, 'net'):
+        layers = model.net
+    else:
+        raise RuntimeError('Network has neither layers nor net attribute.')
+    for layer in layers:
+        if layer.__class__.__name__.find('GlobalPool') != -1:
             break
         x = layer(x)
 
     # We can directly look at the contribution of each node by taking the
     # dot product between each node's features and the final FC layer
-    final_layer_weights = to_numpy(model.layers[-1].weight).T
+    final_layer_weights = to_numpy(layers[-1].weight).T
     node_features = to_numpy(x[1].squeeze())
     scores = node_features @ final_layer_weights
     return scores
@@ -47,9 +53,9 @@ def masking(model, p, v, m, bs=16):
     """
     scores = np.zeros((m.size(1),))
     original_score = float(to_numpy(torch.sigmoid(model((p, v, m)))))
-    p_input_matrix = torch.zeros(bs, p.size(1) - 1, p.size(2))
-    v_input_matrix = torch.zeros(bs, v.size(1) - 1, v.size(2))
-    m_input_matrix = torch.ones(bs, m.size(1) - 1).bool()
+    p_input_matrix = torch.zeros(bs, p.size(1) - 1, p.size(2)).cuda()
+    v_input_matrix = torch.zeros(bs, v.size(1) - 1, v.size(2)).cuda()
+    m_input_matrix = torch.ones(bs, m.size(1) - 1).bool().cuda()
     for i in range(p.size(1) // bs):
         print(i * bs)
         for j in range(bs):
