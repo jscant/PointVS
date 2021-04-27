@@ -3,11 +3,10 @@ from eqv_transformer.eqv_attention import GlobalPool, \
     EquivariantTransformerBlock
 from eqv_transformer.utils import Swish
 from lie_conv.lieGroups import SE3
-from lie_conv.utils import Expression, Pass
+from lie_conv.utils import Pass
 from torch import nn
 
-from point_vs.models.point_neural_network import PointNeuralNetwork, \
-    GlobalPoolFinal
+from point_vs.models.point_neural_network import PointNeuralNetwork
 
 
 class EquivariantTransformer(PointNeuralNetwork):
@@ -43,11 +42,12 @@ class EquivariantTransformer(PointNeuralNetwork):
             attention_fn=attention_fn, feature_embed_dim=feature_embed_dim,
         )
 
-        activation_fn = {
+        activation_fns = {
             'swish': Swish,
             'relu': nn.ReLU,
             'softplus': nn.Softplus,
         }
+        activation_fn = activation_fns[act]
 
         if output_norm == 'batch':
             norm1 = nn.BatchNorm1d(dim_hidden[-1])
@@ -66,23 +66,13 @@ class EquivariantTransformer(PointNeuralNetwork):
 
         self.net = nn.Sequential(
             Pass(nn.Linear(dim_input, dim_hidden[0]), dim=1),
+            Pass(activation_fn(), dim=1),
             *[
                 attention_block(dim_hidden[i], num_heads[i])
                 for i in range(num_layers)
             ],
-            GlobalPool(mean=global_pool_mean) if global_pool else Expression(
-                lambda x: x[1]),
-            nn.Linear(dim_hidden[-1], dim_output) if pooling_only else nn.Sequential(
-                norm1,
-                activation_fn[kernel_act](),
-                nn.Linear(dim_hidden[-1], dim_hidden[-1]),
-                norm2,
-                activation_fn[kernel_act](),
-                nn.Linear(dim_hidden[-1], dim_hidden[-1]),
-                norm3,
-                activation_fn[kernel_act](),
-                nn.Linear(dim_hidden[-1], dim_output),
-            )
+            GlobalPool(mean=global_pool_mean),
+            nn.Linear(dim_hidden[-1], dim_output)
         )
 
         self.group = group
