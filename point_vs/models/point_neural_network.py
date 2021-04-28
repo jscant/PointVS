@@ -16,7 +16,7 @@ class PointNeuralNetwork(nn.Module):
 
     def __init__(self, save_path, learning_rate, weight_decay=None,
                  wandb_project=None, wandb_run=None, silent=False,
-                 **model_kwargs):
+                 use_1cycle=False, **model_kwargs):
         super().__init__()
         self.batch = 0
         self.epoch = 0
@@ -45,6 +45,8 @@ class PointNeuralNetwork(nn.Module):
         self.layers = self.build_net(**model_kwargs)
         self.optimiser = torch.optim.Adam(
             self.parameters(), lr=self.lr, weight_decay=weight_decay)
+
+        self.use_1cycle = use_1cycle
 
         if not silent:
             with open(save_path / 'model_kwargs.yaml', 'w') as f:
@@ -86,12 +88,20 @@ class PointNeuralNetwork(nn.Module):
         log_interval = 10
         global_iter = 0
         self.train()
+        print()
+        print()
         if data_loader.batch_size == 1:
             aggrigation_interval = 32
         else:
             aggrigation_interval = 1
         decoy_mean_pred, active_mean_pred = [], []
         loss = 0.0
+        if self.use_1cycle:
+            scheduler = torch.optim.lr_scheduler.OneCycleLR(
+                self.optimiser, max_lr=0.001, steps_per_epoch=len(data_loader),
+                epochs=epochs)
+        else:
+            scheduler = None
         for self.epoch in range(epochs):
             for self.batch, (x, y_true, ligands, receptors) in enumerate(
                     data_loader):
@@ -121,6 +131,7 @@ class PointNeuralNetwork(nn.Module):
                     loss = float(loss)
                     self.optimiser.step()
                     self.losses.append(loss)
+                    lr = self.optimiser.param_groups[0]['lr']
 
                     if not (reported_batch + 1) % log_interval or \
                             self.batch == total_iters - 1:
@@ -139,18 +150,26 @@ class PointNeuralNetwork(nn.Module):
                             decoy_mean_pred),
                         'Mean active prediction (train)': np.mean(
                             active_mean_pred),
+                        'Examples seen (train)':
+                            self.epoch * len(data_loader) +
+                            data_loader.batch_size * self.batch,
+                        'Learning rate (train)': lr
                     }
                     try:
                         wandb.log(wandb_update_dict)
                     except wandb.errors.error.Error:
                         pass  # wandb has not been initialised so ignore
 
+                    if scheduler is not None:
+                        scheduler.step()
+
                     print_with_overwrite(
                         (
                             'Epoch:',
                             '{0}/{1}'.format(self.epoch + 1, epochs),
                             '|', 'Batch:', '{0}/{1}'.format(
-                                reported_batch, len(data_loader))),
+                                reported_batch, len(data_loader)),
+                            'LR:', '{0:.3e}'.format(lr)),
                         ('Time elapsed:', time_elapsed, '|',
                          'Time remaining:', eta),
                         ('Loss: {0:.4f}'.format(loss), '|',
@@ -269,6 +288,14 @@ class PointNeuralNetwork(nn.Module):
             'model_state_dict': self.state_dict(),
             'optimiser_state_dict': self.optimiser.state_dict()
         }, save_path)
+
+    def load_weights(self, checkpoint_file):
+        checkpoint = torch.load(str(Path(checkpoint_file).expanduser()))
+        self.load_state_dict(checkpoint['model_state_dict'])
+        self.optimiser.load_state_dict(checkpoint['optimiser_state_dict'])
+        self.epoch = checkpoint['epoch']
+        self.losses = checkpoint['losses']
+        print('Sucesfully loaded weights from ', checkpoint_file)
 
     def save_loss(self, save_interval):
         """Save the loss information to disk.

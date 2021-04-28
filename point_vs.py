@@ -157,7 +157,6 @@ if __name__ == '__main__':
         'feature_embed_dim': None,
         'max_sample_norm': None,
         'lie_algebra_nonlinearity': None,
-        'pooling_only': args.pooling_only
     }
 
     args_to_record.update(model_kwargs)
@@ -178,14 +177,11 @@ if __name__ == '__main__':
 
     model_class = model_classes[args.model]
     model = model_class(
-        save_path, args.learning_rate, args.weight_decay, **model_kwargs)
+        save_path, args.learning_rate, args.weight_decay,
+        use_1cycle=args.use_1cycle, **model_kwargs)
 
     if args.load_weights is not None:
-        checkpoint = torch.load(args.load_weights)
-        model.load_state_dict(checkpoint['model_state_dict'])
-        model.optimiser.load_state_dict(checkpoint['optimiser_state_dict'])
-        model.epoch = checkpoint['epoch']
-        model.losses = checkpoint['losses']
+        model.load_weights(args.load_weights)
 
     try:
         wandb.watch(model)
