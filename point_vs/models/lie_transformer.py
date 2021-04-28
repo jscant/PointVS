@@ -66,7 +66,6 @@ class EquivariantTransformer(PointNeuralNetwork):
 
         layers = nn.Sequential(
             Pass(nn.Linear(dim_input, dim_hidden[0]), dim=1),
-            Pass(activation_fn(), dim=1),
             *[
                 attention_block(dim_hidden[i], num_heads[i])
                 for i in range(num_layers)
@@ -84,9 +83,8 @@ class EquivariantTransformer(PointNeuralNetwork):
             if lie_algebra_nonlinearity == 'tanh':
                 self.lie_algebra_nonlinearity = nn.Tanh()
             else:
-                raise ValueError(
-                    f"{lie_algebra_nonlinearity} is not a supported nonlinearity"
-                )
+                raise ValueError('{} is not a supported nonlinearity'.format(
+                    lie_algebra_nonlinearity))
 
         return layers
 
