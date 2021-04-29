@@ -106,39 +106,38 @@ class EGNNStack(PointNeuralNetwork):
     def _process_inputs(self, x):
         return [i.cuda() for i in x]
 
-    def build_net(self, dim_input, dim_output=1, k=12, act="swish", bn=True,
+    def build_net(self, dim_input, dim_output=1, k=12, nbhd=0,
                   dropout=0.0, num_layers=6, pool=True, **kwargs):
-        egnn = lambda: EGNN(dim=k, m_dim=k, norm_coors=True,
-                            edge_dim=0, norm_feats=False, dropout=dropout)
-        if act == 'swish':
-            activation_class = Swish
-        elif act == 'relu':
-            activation_class = nn.ReLU
-        else:
-            raise NotImplementedError('{} not a recognised activation'.format(
-                act))
-        layers = nn.Sequential(
+        egnn = lambda: EGNN(dim=k, m_dim=12, norm_coors=True,
+                            fourier_features=16, edge_dim=0, norm_feats=True,
+                            dropout=dropout, update_coors=True, init_eps=1e-2,
+                            num_nearest_neighbors=nbhd)
+
+        return nn.Sequential(
             Pass(nn.Linear(dim_input, k), dim=1),
-            Pass(activation_class(), dim=1),
             *[EGNNPass(egnn()) for _ in range(num_layers)],
             GlobalPool(mean=True) if pool else nn.Sequential(),
             nn.Linear(k, dim_output)
         )
 
-        return layers
-
     def forward(self, x):
         return self.layers(x)
 
-    @staticmethod
-    def get_min_max(network):
+    def _get_min_max(self):
+        network = self.layers
         for layer in network:
+            if isinstance(layer, nn.Linear):
+                print('Linear:',
+                      float(torch.min(layer.weight)),
+                      float(torch.max(layer.weight)))
             if isinstance(layer, Pass):
                 if isinstance(layer.module, nn.Linear):
                     print('Linear:',
                           float(torch.min(layer.module.weight)),
                           float(torch.max(layer.module.weight)))
-            elif isinstance(layer, EGNN):
+            elif isinstance(layer, EGNNPass):
+                layer = layer.egnn
+                print()
                 for network_type, network_name in zip(
                         (layer.edge_mlp, layer.node_mlp, layer.coors_mlp),
                         ('EGNN-edge', 'EGNN-node', 'EGNN-coors')):
