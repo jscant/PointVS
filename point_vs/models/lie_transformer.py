@@ -1,7 +1,6 @@
 import torch
 from eqv_transformer.eqv_attention import GlobalPool, \
     EquivariantTransformerBlock
-from eqv_transformer.utils import Swish
 from lie_conv.lieGroups import SE3
 from lie_conv.utils import Pass
 from torch import nn
@@ -19,15 +18,12 @@ class EquivariantTransformer(PointNeuralNetwork):
         return tuple([ten.cuda() for ten in x])
 
     def build_net(self, dim_input, dim_output, dim_hidden, num_layers,
-                  num_heads, act='relu', global_pool=True,
-                  global_pool_mean=True,
-                  group=SE3(0.2), liftsamples=1, block_norm="layer_pre",
-                  output_norm="none", kernel_norm="none", kernel_type="mlp",
-                  kernel_dim=16, kernel_act="swish", nbhd=0, fill=1.0,
-                  attention_fn="norm_exp", feature_embed_dim=None,
+                  num_heads, global_pool_mean=True, group=SE3(0.2),
+                  liftsamples=1, block_norm="layer_pre", kernel_norm="none",
+                  kernel_type="mlp", kernel_dim=16, kernel_act="swish", nbhd=0,
+                  fill=1.0, attention_fn="norm_exp", feature_embed_dim=None,
                   max_sample_norm=None, lie_algebra_nonlinearity=None,
-                  pooling_only=False,
-                  dropout=0, **kwargs):
+                  **kwargs):
 
         if isinstance(dim_hidden, int):
             dim_hidden = [dim_hidden] * (num_layers + 1)
@@ -41,28 +37,6 @@ class EquivariantTransformer(PointNeuralNetwork):
             kernel_act=kernel_act, mc_samples=nbhd, fill=fill,
             attention_fn=attention_fn, feature_embed_dim=feature_embed_dim,
         )
-
-        activation_fns = {
-            'swish': Swish,
-            'relu': nn.ReLU,
-            'softplus': nn.Softplus,
-        }
-        activation_fn = activation_fns[act]
-
-        if output_norm == 'batch':
-            norm1 = nn.BatchNorm1d(dim_hidden[-1])
-            norm2 = nn.BatchNorm1d(dim_hidden[-1])
-            norm3 = nn.BatchNorm1d(dim_hidden[-1])
-        elif output_norm == 'layer':
-            norm1 = nn.LayerNorm(dim_hidden[-1])
-            norm2 = nn.LayerNorm(dim_hidden[-1])
-            norm3 = nn.LayerNorm(dim_hidden[-1])
-        elif output_norm == 'none':
-            norm1 = nn.Sequential()
-            norm2 = nn.Sequential()
-            norm3 = nn.Sequential()
-        else:
-            raise ValueError('{} is not a valid norm type.'.format(output_norm))
 
         layers = nn.Sequential(
             Pass(nn.Linear(dim_input, dim_hidden[0]), dim=1),
