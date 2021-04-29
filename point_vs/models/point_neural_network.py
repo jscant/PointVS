@@ -13,6 +13,7 @@ from point_vs.utils import get_eta, format_time, print_with_overwrite, mkdir, \
 
 
 class PointNeuralNetwork(nn.Module):
+    """Base (abstract) class for all point cloud based binary classifiers."""
 
     def __init__(self, save_path, learning_rate, weight_decay=None,
                  wandb_project=None, wandb_run=None, silent=False,
@@ -98,8 +99,8 @@ class PointNeuralNetwork(nn.Module):
         loss = 0.0
         if self.use_1cycle:
             scheduler = torch.optim.lr_scheduler.OneCycleLR(
-                self.optimiser, max_lr=0.001, steps_per_epoch=len(data_loader),
-                epochs=epochs)
+                self.optimiser, max_lr=self.lr,
+                steps_per_epoch=len(data_loader), epochs=epochs)
         else:
             scheduler = None
         for self.epoch in range(epochs):
