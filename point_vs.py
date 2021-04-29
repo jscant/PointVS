@@ -176,6 +176,10 @@ if __name__ == '__main__':
             wandb.run.name = args.wandb_run
 
     model_class = model_classes[args.model]
+    if model_class is None:
+        print('Required libraries for {} not found. Aborting.'.format(
+            args.model))
+        exit(1)
     model = model_class(
         save_path, args.learning_rate, args.weight_decay,
         use_1cycle=args.use_1cycle, **model_kwargs)
