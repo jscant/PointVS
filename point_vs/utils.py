@@ -4,13 +4,35 @@ together.
 """
 
 import math
+import multiprocessing as mp
 import shutil
 import time
+import types
 from pathlib import Path
 
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
+
+
+def no_return_parallelise(func, *args, cpus=-1):
+    cpus = mp.cpu_count() if cpus == -1 else cpus
+    indices_to_multiply = []
+    iterable_len = 1
+    args = list(args)
+    for idx in range(len(args)):
+        if not isinstance(args[idx], (tuple, list, types.GeneratorType)):
+            indices_to_multiply.append(idx)
+        elif iterable_len == 1:
+            iterable_len = len(args[idx])
+        elif iterable_len != len(args[idx]):
+            raise ValueError('Iterable args must have the same length')
+    for idx in indices_to_multiply:
+        args[idx] = [args[idx]] * iterable_len
+
+    inputs = list(zip(*args))
+    with mp.get_context('spawn').Pool(processes=cpus) as pool:
+        pool.starmap(func, inputs)
 
 
 def _set_precision(precision):

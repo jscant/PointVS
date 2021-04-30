@@ -25,7 +25,7 @@ from torch.utils.data import DataLoader
 from point_vs import utils
 
 try:
-    from point_vs.models.egnn_network import EGNNStack
+    from point_vs.models.egnn_network import EGNN
 except (ModuleNotFoundError, OSError):
     EGNNStack = None
 from point_vs.models.lie_conv import LieResNet
@@ -89,7 +89,7 @@ if __name__ == '__main__':
 
     model_classes = {
         'lieconv': LieResNet,
-        'egnn': EGNNStack,
+        'egnn': EGNN,
         'lietransformer': EquivariantTransformer
     }
 
@@ -157,6 +157,7 @@ if __name__ == '__main__':
         'feature_embed_dim': None,
         'max_sample_norm': None,
         'lie_algebra_nonlinearity': None,
+        'fourier_features': args.fourier_features
     }
 
     args_to_record.update(model_kwargs)
@@ -180,6 +181,7 @@ if __name__ == '__main__':
         print('Required libraries for {} not found. Aborting.'.format(
             args.model))
         exit(1)
+
     model = model_class(
         save_path, args.learning_rate, args.weight_decay,
         use_1cycle=args.use_1cycle, **model_kwargs)

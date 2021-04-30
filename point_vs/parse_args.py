@@ -99,4 +99,8 @@ def parse_args():
                         help='LieTransformer fill parameter')
     parser.add_argument('--use_1cycle', action='store_true',
                         help='Use 1cycle learning rate scheduling')
+    parser.add_argument('--fourier_features', type=int, default=0,
+                        help='(EGNN) Number of fourier terms to use when '
+                             'encoding distances (default is not to use '
+                             'fourier distance encoding)')
     return parser.parse_args()
