@@ -136,8 +136,8 @@ class LieConvDataset(torch.utils.data.Dataset):
         self.labels = labels
         self.data_only = data_only
 
-        # lambda functions can't be pickled
-        self.rot = rot
+        # apply random rotations to coordinates?
+        self.transformation = random_rotation if self.rot else lambda x: x
 
     def __len__(self):
         """Returns the total size of the dataset."""
@@ -165,14 +165,11 @@ class LieConvDataset(torch.utils.data.Dataset):
         struct = make_box(centre_on_ligand(
             concat_structs(rec_fname, lig_fname)),
             radius=10, relative_to_ligand=False)
-        if self.rot:
-            p = torch.from_numpy(
-                np.expand_dims(random_rotation(
-                    struct[struct.columns[:3]].to_numpy()), 0))
-        else:
-            p = torch.from_numpy(
-                np.expand_dims(
-                    struct[struct.columns[:3]].to_numpy(), 0))
+
+        p = torch.from_numpy(
+            np.expand_dims(self.transformation(
+                struct[struct.columns[:3]].to_numpy()), 0)
+
         v = torch.unsqueeze(make_bit_vector(struct.types.to_numpy(), 11), 0)
         m = torch.from_numpy(np.ones((1, len(struct))))
 
