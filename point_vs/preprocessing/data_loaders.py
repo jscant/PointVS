@@ -168,7 +168,7 @@ class LieConvDataset(torch.utils.data.Dataset):
 
         p = torch.from_numpy(
             np.expand_dims(self.transformation(
-                struct[struct.columns[:3]].to_numpy()), 0)
+                struct[struct.columns[:3]].to_numpy()), 0))
 
         v = torch.unsqueeze(make_bit_vector(struct.types.to_numpy(), 11), 0)
         m = torch.from_numpy(np.ones((1, len(struct))))
