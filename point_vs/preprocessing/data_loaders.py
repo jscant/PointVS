@@ -137,7 +137,7 @@ class LieConvDataset(torch.utils.data.Dataset):
         self.data_only = data_only
 
         # apply random rotations to coordinates?
-        self.transformation = random_rotation if self.rot else lambda x: x
+        self.transformation = random_rotation if rot else lambda x: x
 
     def __len__(self):
         """Returns the total size of the dataset."""
