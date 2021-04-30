@@ -68,7 +68,7 @@ class PointNeuralNetwork(nn.Module):
     def _process_inputs(self, x):
         return x.cuda()
 
-    def _get_loss(self, y_true, y_pred):
+    def _get_loss(self, y_pred, y_true):
         return self.cross_entropy(y_pred, y_true)
 
     def forward_pass(self, x):
@@ -103,25 +103,29 @@ class PointNeuralNetwork(nn.Module):
                 steps_per_epoch=len(data_loader), epochs=epochs)
         else:
             scheduler = None
+        reported_decoy_pred = reported_active_pred = 0.5
         for self.epoch in range(epochs):
             for self.batch, (x, y_true, ligands, receptors) in enumerate(
                     data_loader):
 
                 x = self._process_inputs(x)
-                y_true = self._get_y_true(y_true).cuda()
-                y_pred = self.forward_pass(x)
+                y_true = self._get_y_true(y_true).reshape(-1).cuda()
+                y_pred = self.forward_pass(x).reshape(-1)
 
-                y_true_np = to_numpy(y_true)
-                y_pred_np = to_numpy(nn.Sigmoid()(y_pred))
+                y_true_np = to_numpy(y_true).reshape((-1,))
+                y_pred_np = to_numpy(nn.Sigmoid()(y_pred)).reshape((-1,))
 
                 active_idx = (np.where(y_true_np > 0.5),)
                 decoy_idx = (np.where(y_true_np < 0.5),)
 
-                loss += self._get_loss(y_true, y_pred)
+                loss += self._get_loss(y_pred, y_true)
 
-                if len(active_idx[0][0]):
+                is_actives = bool(sum(y_true_np))
+                is_decoys = not bool(np.product(y_true_np))
+
+                if is_actives:
                     active_mean_pred.append(np.mean(y_pred_np[active_idx]))
-                if len(decoy_idx[0][0]):
+                if is_decoys:
                     decoy_mean_pred.append(np.mean(y_pred_np[decoy_idx]))
 
                 if not (self.batch + 1) % aggrigation_interval:
@@ -142,15 +146,18 @@ class PointNeuralNetwork(nn.Module):
                     eta = get_eta(start_time, global_iter, total_iters)
                     time_elapsed = format_time(time.time() - start_time)
 
+                    if len(active_mean_pred):
+                        reported_active_pred = np.mean(active_mean_pred)
+                    if len(decoy_mean_pred):
+                        reported_decoy_pred = np.mean(decoy_mean_pred)
+
                     wandb_update_dict = {
                         'Time remaining (train)': eta,
                         'Binary crossentropy (train)': loss,
                         'Batch (train)':
                             (self.epoch * len(data_loader) + reported_batch),
-                        'Mean decoy prediction (train)': np.mean(
-                            decoy_mean_pred),
-                        'Mean active prediction (train)': np.mean(
-                            active_mean_pred),
+                        'Mean decoy prediction (train)': reported_decoy_pred,
+                        'Mean active prediction (train)': reported_active_pred,
                         'Examples seen (train)':
                             self.epoch * len(data_loader) +
                             data_loader.batch_size * self.batch,
@@ -174,10 +181,8 @@ class PointNeuralNetwork(nn.Module):
                         ('Time elapsed:', time_elapsed, '|',
                          'Time remaining:', eta),
                         ('Loss: {0:.4f}'.format(loss), '|',
-                         'Mean active: {0:.4f}'.format(np.mean(
-                             active_mean_pred)), '|',
-                         'Mean decoy: {0:.4f}'.format(np.mean(
-                             decoy_mean_pred)))
+                         'Mean active: {0:.4f}'.format(reported_active_pred),
+                         '|', 'Mean decoy: {0:.4f}'.format(reported_decoy_pred))
                     )
 
                     loss = 0.0
@@ -213,32 +218,32 @@ class PointNeuralNetwork(nn.Module):
                     data_loader):
 
                 x = self._process_inputs(x)
-                y_true = self._get_y_true(y_true).cuda()
-                y_pred = self.forward_pass(x)
+                y_true = self._get_y_true(y_true).reshape(-1).cuda()
+                y_pred = self.forward_pass(x).reshape(-1)
 
-                y_true_np = to_numpy(y_true)
-                y_pred_np = to_numpy(nn.Sigmoid()(y_pred))
+                y_true_np = to_numpy(y_true).reshape((-1,))
+                y_pred_np = to_numpy(nn.Sigmoid()(y_pred)).reshape((-1,))
+
+                is_actives = bool(sum(y_true_np))
+                is_decoys = not bool(np.product(y_true_np))
 
                 active_idx = (np.where(y_true_np > 0.5),)
                 decoy_idx = (np.where(y_true_np < 0.5),)
-
-                loss = float(self._get_loss(y_true, y_pred))
 
                 eta = get_eta(start_time, self.batch, len(data_loader))
                 time_elapsed = format_time(time.time() - start_time)
 
                 wandb_update_dict = {
                     'Time remaining (validation)': eta,
-                    'Binary crossentropy (validation)': loss,
                     'Batch': self.batch + 1
                 }
 
-                if len(active_idx[0][0]):
+                if is_actives:
                     active_mean_pred = np.mean(y_pred_np[active_idx])
                     wandb_update_dict.update({
                         'Mean active prediction (validation)': active_mean_pred
                     })
-                if len(decoy_idx[0][0]):
+                if is_decoys:
                     decoy_mean_pred = np.mean(y_pred_np[decoy_idx])
                     wandb_update_dict.update({
                         'Mean decoy prediction (validation)': decoy_mean_pred,
@@ -255,8 +260,7 @@ class PointNeuralNetwork(nn.Module):
                         self.batch + 1, len(data_loader))),
                     ('Time elapsed:', time_elapsed, '|',
                      'Time remaining:', eta),
-                    ('Loss: {0:.4f}'.format(loss), '|',
-                     'Mean active: {0:.4f}'.format(active_mean_pred), '|',
+                    ('Mean active: {0:.4f}'.format(active_mean_pred), '|',
                      'Mean decoy: {0:.4f}'.format(decoy_mean_pred))
                 )
 
