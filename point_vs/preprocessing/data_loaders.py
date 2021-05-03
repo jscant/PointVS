@@ -9,16 +9,35 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from torch.utils.data import SubsetRandomSampler, WeightedRandomSampler
+from torch.utils.data import DataLoader
+from torch.utils.data import WeightedRandomSampler
 
 from point_vs.preprocessing.preprocessing import centre_on_ligand, make_box, \
     concat_structs, make_bit_vector
 
 
 def random_rotation(x):
+    """Apply a random rotation to a set of 3D coordinates."""
     M = np.random.randn(3, 3)
     Q, _ = np.linalg.qr(M)
     return x @ Q
+
+
+def get_data_loader(*data_roots, receptors=None, batch_size=32,
+                    radius=6, rot=True, feature_dim=12, mode='train'):
+    """Give a DataLoader from a list of receptors and data roots."""
+    ds_kwargs = {
+        'receptors': receptors,
+        'radius': radius,
+        'rot': rot
+    }
+    ds = multiple_source_dataset(
+        LieConvDataset, *data_roots, balanced=True, **ds_kwargs)
+    collate = get_collate_fn(feature_dim)
+    sampler = ds.sampler if mode == 'train' else None
+    return DataLoader(
+        ds, batch_size, False, sampler=sampler, num_workers=0,
+        collate_fn=collate, drop_last=False)
 
 
 def multiple_source_dataset(loader_class, *base_paths, receptors=None,
@@ -164,7 +183,7 @@ class LieConvDataset(torch.utils.data.Dataset):
             '{}*.parquet'.format(rec_name)))
         struct = make_box(centre_on_ligand(
             concat_structs(rec_fname, lig_fname)),
-            radius=10, relative_to_ligand=False)
+            radius=self.radius, relative_to_ligand=False)
 
         p = torch.from_numpy(
             np.expand_dims(self.transformation(

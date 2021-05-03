@@ -20,7 +20,6 @@ import warnings
 import torch
 import yaml
 from lie_conv.lieGroups import SE3
-from torch.utils.data import DataLoader
 
 from point_vs import utils
 
@@ -31,8 +30,7 @@ except (ModuleNotFoundError, OSError):
 from point_vs.models.lie_conv import LieResNet
 from point_vs.models.lie_transformer import EquivariantTransformer
 from point_vs.parse_args import parse_args
-from point_vs.preprocessing.data_loaders import multiple_source_dataset, \
-    LieConvDataset, get_collate_fn
+from point_vs.preprocessing.data_loaders import get_data_loader
 
 try:
     import wandb
@@ -42,23 +40,6 @@ except ImportError:
     wandb = None
 
 warnings.filterwarnings("ignore", category=UserWarning)
-
-
-def get_data_loader(*data_roots, receptors=None, batch_size=32,
-                    radius=6, rot=True, feature_dim=12, mode='train'):
-    ds_kwargs = {
-        'receptors': receptors,
-        'radius': radius,
-        'rot': rot
-    }
-    ds = multiple_source_dataset(
-        LieConvDataset, *data_roots, balanced=True, **ds_kwargs)
-    collate = get_collate_fn(feature_dim)
-    sampler = ds.sampler if mode == 'train' else None
-    return DataLoader(
-        ds, batch_size, False, sampler=sampler, num_workers=0,
-        collate_fn=collate)
-
 
 if __name__ == '__main__':
     args = parse_args()
