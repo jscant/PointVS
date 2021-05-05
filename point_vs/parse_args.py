@@ -103,4 +103,6 @@ def parse_args():
                         help='(EGNN) Number of fourier terms to use when '
                              'encoding distances (default is not to use '
                              'fourier distance encoding)')
+    parser.add_argument('--norm_coords', action='store_true',
+                      help='(EGNN) Normalise coordinate vectors')
     return parser.parse_args()

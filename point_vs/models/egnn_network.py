@@ -36,10 +36,11 @@ class EGNN(PointNeuralNetwork):
         return [i.cuda() for i in x]
 
     def build_net(self, dim_input, dim_output=1, k=12, nbhd=0,
-                  dropout=0.0, num_layers=6, fourier_features=16, **kwargs):
+                  dropout=0.0, num_layers=6, fourier_features=16,
+                  norm_coords=True, **kwargs):
         egnn = lambda: EGNNLayer(
-            dim=k, m_dim=12, norm_coors=True, norm_feats=True, dropout=dropout,
-            fourier_features=fourier_features, init_eps=1e-2,
+            dim=k, m_dim=12, norm_coors=norm_coords, norm_feats=True,
+            dropout=dropout, fourier_features=fourier_features, init_eps=1e-2,
             num_nearest_neighbors=nbhd)
 
         return nn.Sequential(
@@ -54,24 +55,40 @@ class EGNN(PointNeuralNetwork):
 
     def _get_min_max(self):
         network = self.layers
+        res = ''
+        min_ = 1e7
+        max_ = -1e7
+        min_abs = 1e7
         for layer in network:
             if isinstance(layer, nn.Linear):
-                print('Linear:',
-                      float(torch.min(layer.weight)),
-                      float(torch.max(layer.weight)))
+                min_ = min(min_, float(torch.min(layer.weight)))
+                max_ = max(max_, float(torch.max(layer.weight)))
+                min_abs = min(min_abs, float(torch.min(torch.abs(layer.weight))))
+                res += 'Linear: {0}, {1} {2}\n'.format(
+                    float(torch.min(layer.weight)),
+                    float(torch.max(layer.weight)),
+                    float(torch.min(torch.abs(layer.weight))))
             if isinstance(layer, Pass):
                 if isinstance(layer.module, nn.Linear):
-                    print('Linear:',
-                          float(torch.min(layer.module.weight)),
-                          float(torch.max(layer.module.weight)))
+                    min_ = min(min_, float(torch.min(layer.module.weight)))
+                    max_ = max(max_, float(torch.max(layer.module.weight)))
+                    min_abs = min(min_abs, float(torch.min(torch.abs(layer.module.weight))))
+                    res += 'Linear:{0} {1} {2}\n'.format(
+                        float(torch.min(layer.module.weight)),
+                        float(torch.max(layer.module.weight)),
+                        float(torch.min(torch.abs(layer.module.weight))))
             elif isinstance(layer, EGNNPass):
                 layer = layer.egnn
-                print()
                 for network_type, network_name in zip(
                         (layer.edge_mlp, layer.node_mlp, layer.coors_mlp),
                         ('EGNN-edge', 'EGNN-node', 'EGNN-coors')):
                     for sublayer in network_type:
                         if isinstance(sublayer, nn.Linear):
-                            print(network_name,
-                                  float(torch.min(sublayer.weight)),
-                                  float(torch.max(sublayer.weight)))
+                            max_ = max(max_, float(torch.max(sublayer.weight)))
+                            min_ = min(min_, float(torch.min(sublayer.weight)))
+                            min_abs = min(min_abs, float(torch.min(torch.abs(sublayer.weight))))
+                            res += network_name + ': {0} {1} {2}\n'.format(
+                                float(torch.min(sublayer.weight)),
+                                float(torch.max(sublayer.weight)),
+                                float(torch.min(torch.abs(sublayer.weight))))
+        return res[:-1], min_, max_, min_abs

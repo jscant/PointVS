@@ -138,7 +138,8 @@ if __name__ == '__main__':
         'feature_embed_dim': None,
         'max_sample_norm': None,
         'lie_algebra_nonlinearity': None,
-        'fourier_features': args.fourier_features
+        'fourier_features': args.fourier_features,
+        'norm_coords': args.norm_cords,
     }
 
     args_to_record.update(model_kwargs)
