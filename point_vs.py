@@ -139,7 +139,7 @@ if __name__ == '__main__':
         'max_sample_norm': None,
         'lie_algebra_nonlinearity': None,
         'fourier_features': args.fourier_features,
-        'norm_coords': args.norm_cords,
+        'norm_coords': args.norm_coords,
     }
 
     args_to_record.update(model_kwargs)
