@@ -137,7 +137,7 @@ class PointNeuralNetwork(nn.Module):
                     loss = float(loss)
                     if math.isnan(loss):
                         if hasattr(self, '_get_min_max'):
-                            print(self._get_min_max)
+                            print(self._get_min_max())
                         raise RuntimeError('We have hit a NaN loss value.')
                     self.optimiser.step()
                     self.losses.append(loss)
