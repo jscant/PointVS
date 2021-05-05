@@ -1,3 +1,4 @@
+import math
 import time
 from abc import abstractmethod
 from pathlib import Path
@@ -100,7 +101,7 @@ class PointNeuralNetwork(nn.Module):
         if self.use_1cycle:
             scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 self.optimiser, max_lr=self.lr,
-                steps_per_epoch=epochs*len(data_loader), epochs=1)
+                steps_per_epoch=epochs * len(data_loader), epochs=1)
         else:
             scheduler = None
         reported_decoy_pred = reported_active_pred = 0.5
@@ -134,6 +135,10 @@ class PointNeuralNetwork(nn.Module):
                     reported_batch = (self.batch + 1) // aggrigation_interval
                     loss.backward()
                     loss = float(loss)
+                    if math.isnan(loss):
+                        if hasattr(self, '_get_min_max'):
+                            print(self._get_min_max)
+                        raise RuntimeError('We have hit a NaN loss value.')
                     self.optimiser.step()
                     self.losses.append(loss)
                     lr = self.optimiser.param_groups[0]['lr']
