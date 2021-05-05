@@ -100,7 +100,7 @@ class PointNeuralNetwork(nn.Module):
         if self.use_1cycle:
             scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 self.optimiser, max_lr=self.lr,
-                steps_per_epoch=len(data_loader), epochs=epochs)
+                steps_per_epoch=epochs*len(data_loader), epochs=1)
         else:
             scheduler = None
         reported_decoy_pred = reported_active_pred = 0.5
