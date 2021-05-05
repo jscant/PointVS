@@ -699,29 +699,29 @@ class DistanceCalculator:
             # but including this here to make it equivalent to the cpp code
             return "NumTypes"
 
-    def mol_calculate_interactions(self, mol):
-        """Return dataframe with interactions from plip mol object"""
+    def featurise_interaction(self, mol):
+        """Return dataframe with interactions from one particular plip site."""
         all_ligand_indices = [list(ligand.can_to_pdb.values()) for ligand in
                               mol.ligands]
         all_ligand_indices = [idx for idx_list in all_ligand_indices for idx in
                               idx_list]
 
-        return self.featurise_interaction(mol, all_ligand_indices)
-
-    def featurise_interaction(self, mol, all_ligand_indices):
-        """Return dataframe with interactions from one particular plip site."""
         xs, ys, zs, types, atomic_nums, atomids = [], [], [], [], [], []
+        types_addition = []
         keep_atoms, sequential_indices = [], []
         obabel_to_sequential = defaultdict(lambda: len(obabel_to_sequential))
+        max_types_value = max(self.type_map.values()) + 1
         for atomid, atom in mol.atoms.items():
+            resname = atom.OBAtom.GetResidue().GetName().upper()
             if atom.atomicnum > 1:
-                keep_atoms.append(atomid)
-                # Book keeping for DSSP
-                chain = atom.OBAtom.GetResidue().GetChain()
-                residue_id = str(atom.OBAtom.GetResidue().GetIdx())
-                residue_identifier = ':'.join([chain, residue_id])
-                sequential_indices.append(
-                    obabel_to_sequential[residue_identifier])
+                if resname in RESIDUE_IDS or atomid in all_ligand_indices:
+                    keep_atoms.append(atomid)
+                    # Book keeping for DSSP
+                    chain = atom.OBAtom.GetResidue().GetChain()
+                    residue_id = str(atom.OBAtom.GetResidue().GetIdx())
+                    residue_identifier = ':'.join([chain, residue_id])
+                    sequential_indices.append(
+                        obabel_to_sequential[residue_identifier])
 
             atomids.append(atomid)
 
@@ -731,6 +731,10 @@ class DistanceCalculator:
             else:
                 smina_type_int = self.atom_types.index(smina_type)
             type_int = self.type_map[smina_type_int]
+            if resname in RESIDUE_IDS and atomid not in all_ligand_indices:
+                types_addition.append(max_types_value)
+            else:
+                types_addition.append(0)
 
             x, y, z = [float('{:.3f}'.format(i)) for i in atom.coords]
             xs.append(x)
@@ -743,6 +747,8 @@ class DistanceCalculator:
         ys = np.array(ys, dtype=float)
         zs = np.array(zs, dtype=float)
         types = np.array(types, dtype=int)
+        types_addition = np.array(types_addition, dtype=int)
+        types += types_addition
         atomids = np.array(atomids, dtype=int)
         atomic_nums = np.array(atomic_nums, dtype=int)
         sequential_indices = np.array(sequential_indices, dtype=int)

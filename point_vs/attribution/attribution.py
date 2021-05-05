@@ -4,13 +4,12 @@ import argparse
 import urllib
 from pathlib import Path
 
-import torch
 import yaml
 from plip.basic.supplemental import extract_pdbid
 from plip.exchange.webservices import fetch_pdb
-
 from point_vs.attribution.attribution_fns import masking, cam
 from point_vs.attribution.process_pdb import process_pdb
+from point_vs.models.egnn_network import EGNN
 from point_vs.models.lie_conv import LieResNet
 from point_vs.models.lie_transformer import EquivariantTransformer
 from point_vs.utils import mkdir
@@ -49,7 +48,7 @@ def download_pdb_file(pdbid, output_dir):
 
 
 def attribute(args):
-    output_dir = mkdir(args.output_dir)
+    output_dir = mkdir(Path(args.output_dir, args.attribution_type, args.pdbid))
     pdbpath = download_pdb_file(args.pdbid, output_dir)
 
     model_path = Path(args.model).expanduser()
@@ -63,14 +62,15 @@ def attribute(args):
     bs = cmd_line_args['batch_size']
     model_class = {
         'lietransformer': EquivariantTransformer,
-        'lieconv': LieResNet
+        'lieconv': LieResNet,
+        'egnn': EGNN
     }
+
     model_class = model_class[model_type]
-    model = model_class(Path(), learning_rate=0.001, weight_decay=0,
+    model = model_class(Path(), learning_rate=0, weight_decay=0,
                         silent=True, **model_kwargs)
 
-    checkpoint = torch.load(model_path)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    model.load_weights(model_path)
     model.eval()
 
     attribution_fn = {'masking': masking, 'cam': cam}[args.attribution_type]

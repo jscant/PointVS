@@ -16,7 +16,12 @@ def cam(model, p, v, m, **kwargs):
     Returns:
         Numpy array containing CAM score attributions for each atom
     """
-    x = model.group.lift((p, v, m), model.liftsamples)
+    if hasattr(model, 'group') and hasattr(model.group, 'lift'):
+        x = model.group.lift((p, v, m), model.liftsamples)
+        liftsamples = model.liftsamples
+    else:
+        x = p, v, m
+        liftsamples = 1
     for layer in model.layers:
         if layer.__class__.__name__.find('GlobalPool') != -1:
             break
@@ -27,7 +32,9 @@ def cam(model, p, v, m, **kwargs):
     final_layer_weights = to_numpy(model.layers[-1].weight).T
     node_features = to_numpy(x[1].squeeze())
     scores = node_features @ final_layer_weights
-    return scores
+    avg_scores = [np.mean(scores[n:n + liftsamples]) for n in
+                  range(len(scores) // liftsamples)]
+    return np.array(avg_scores)
 
 
 def masking(model, p, v, m, bs=16):

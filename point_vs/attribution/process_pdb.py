@@ -98,7 +98,7 @@ def visualize_in_pymol(
     vis.show_metal()  # Metal Coordination
 
     dt = DistanceCalculator()
-    vis.colour_b_factors(
+    vis.colour_b_factors_pdb(
         model, attribution_fn=attribution_fn,
         pdb_file=pdb_file, dt=dt, chain=chain, quiet=True,
         input_dim=input_dim, radius=radius, bs=bs)
