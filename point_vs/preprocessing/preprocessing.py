@@ -91,7 +91,11 @@ def concat_structs(rec, lig):
     rec_struct = pd.read_parquet(rec)
     lig_struct = lig_struct[lig_struct.types != 10]
     rec_struct = rec_struct[rec_struct.types != 21]
-    return lig_struct.append(rec_struct, ignore_index=True)
+    concatted_structs = lig_struct.append(rec_struct, ignore_index=True)
+    if 'atomic_number' in concatted_structs.columns:
+        if sum(concatted_structs['atomic_number'].isna()):
+            del concatted_structs['atomic_number']
+    return concatted_structs
 
 
 def plot_struct(struct):
