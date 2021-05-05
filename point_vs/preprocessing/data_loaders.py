@@ -5,15 +5,15 @@ github.com/con-schneider
 
 The dataloader for LieConv is my own work.
 """
+import multiprocessing as mp
 from pathlib import Path
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
-from torch.utils.data import WeightedRandomSampler
-
 from point_vs.preprocessing.preprocessing import centre_on_ligand, make_box, \
     concat_structs, make_bit_vector
+from torch.utils.data import DataLoader
+from torch.utils.data import WeightedRandomSampler
 
 
 def random_rotation(x):
@@ -32,12 +32,12 @@ def get_data_loader(*data_roots, receptors=None, batch_size=32,
         'rot': rot
     }
     ds = multiple_source_dataset(
-        LieConvDataset, *data_roots, balanced=True, **ds_kwargs)
+        PointCloudDataset, *data_roots, balanced=True, **ds_kwargs)
     collate = get_collate_fn(feature_dim)
     sampler = ds.sampler if mode == 'train' else None
     return DataLoader(
-        ds, batch_size, False, sampler=sampler, num_workers=0,
-        collate_fn=collate, drop_last=False)
+        ds, batch_size, False, sampler=sampler, num_workers=mp.cpu_count(),
+        collate_fn=collate, drop_last=False, pin_memory=True)
 
 
 def multiple_source_dataset(loader_class, *base_paths, receptors=None,
@@ -45,7 +45,7 @@ def multiple_source_dataset(loader_class, *base_paths, receptors=None,
     """Concatenate mulitple datasets into one, preserving balanced sampling.
 
     Arguments:
-        loader_class: one of either LieConvLoader or SE3TransformerLoader,
+        loader_class: one of either PointCloudDataset or SE3TransformerLoader,
             inheriting from Datset. This class should have in its constructor a
             list of binary labels associated with each item, stored in
             <class>.labels.
@@ -66,7 +66,7 @@ def multiple_source_dataset(loader_class, *base_paths, receptors=None,
         if base_path is not None:
             dataset = loader_class(base_path, receptors=receptors, **kwargs)
             labels += list(dataset.labels)
-            filenames += list(dataset.filenames)
+            filenames += dataset.filenames
             datasets.append(dataset)
     labels = np.array(labels)
     class_sample_count = np.array(
@@ -97,7 +97,7 @@ def one_hot(numerical_category, num_classes):
     return one_hot_array
 
 
-class LieConvDataset(torch.utils.data.Dataset):
+class PointCloudDataset(torch.utils.data.Dataset):
     """Class for feeding structure parquets into network."""
 
     def __init__(self, base_path, radius=12, receptors=None, data_only=False,
@@ -179,8 +179,12 @@ class LieConvDataset(torch.utils.data.Dataset):
         lig_fname = self.filenames[item]
         label = self.labels[item]
         rec_name = lig_fname.parent.name.split('_')[0]
-        rec_fname = next((self.base_path / 'receptors').glob(
-            '{}*.parquet'.format(rec_name)))
+        try:
+            rec_fname = next((self.base_path / 'receptors').glob(
+                '{}*.parquet'.format(rec_name)))
+        except StopIteration:
+            raise RuntimeError('Receptor for ligand {} not found'.format(
+                lig_fname))
         struct = make_box(centre_on_ligand(
             concat_structs(rec_fname, lig_fname)),
             radius=self.radius, relative_to_ligand=False)
