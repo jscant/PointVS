@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from plip.basic import config
 from plip.basic.supplemental import create_folder_if_not_exists, start_pymol
 from plip.structure.preparation import PDBComplex
@@ -10,7 +12,7 @@ from point_vs.attribution.plip_subclasses import \
 
 
 def visualize_in_pymol(
-        model, attribution_fn, pdb_file, plcomplex, input_dim, radius=12,
+        model, attribution_fn, plcomplex, input_dim, output_dir, radius=12,
         bs=16):
     """Visualizes the given Protein-Ligand complex at one site in PyMOL.
 
@@ -97,11 +99,14 @@ def visualize_in_pymol(
     vis.show_wbridges()  # Water Bridges
     vis.show_metal()  # Metal Coordination
 
+    results_fname = Path(output_dir, '{0}_{1}_results.txt'.format(
+        pdbid.upper(), '_'.join(
+            [hetid, plcomplex.chain, plcomplex.position]))).expanduser()
+
     dt = DistanceCalculator()
     vis.colour_b_factors_pdb(
-        model, attribution_fn=attribution_fn,
-        pdb_file=pdb_file, dt=dt, chain=chain, quiet=True,
-        input_dim=input_dim, radius=radius, bs=bs)
+        model, attribution_fn=attribution_fn, dt=dt,
+        results_fname=results_fname, input_dim=input_dim, radius=radius, bs=bs)
 
     vis.refinements()
 
@@ -129,7 +134,6 @@ def visualize_in_pymol(
         filename = '%s_%s' % (
             pdbid.upper(),
             "_".join([hetid, plcomplex.chain, plcomplex.position]))
-        print(filename)
         vis.save_session(plcomplex.mol.output_path, override=filename)
     if config.PICS:
         vis.save_picture(config.OUTPATH, filename)
@@ -150,7 +154,8 @@ def process_pdb(
         mol.interaction_sets)
                  if not len(mol.interaction_sets[site].interacting_res) == 0]
 
-    [visualize_in_pymol(model, attribution_fn=attribution_fn, pdb_file=pdbfile,
-                        plcomplex=plcomplex, input_dim=input_dim, radius=radius,
-                        bs=bs)
+    [visualize_in_pymol(model, attribution_fn=attribution_fn,
+                        output_dir=outpath, plcomplex=plcomplex,
+                        input_dim=input_dim, radius=radius, bs=bs)
      for plcomplex in complexes]
+    print()

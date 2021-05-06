@@ -699,16 +699,49 @@ class DistanceCalculator:
             # but including this here to make it equivalent to the cpp code
             return "NumTypes"
 
-    def featurise_interaction(self, mol):
-        """Return dataframe with interactions from one particular plip site."""
+    def mol_calculate_interactions(self, mol, pl_interaction):
+        """Return dataframe with interactions from plip mol object"""
+        interaction_info = {}
+
+        # Process interactions
+        hbonds_lig_donors = pl_interaction.hbonds_ldon
+        hbonds_rec_donors = pl_interaction.hbonds_pdon
+        interaction_info['rec_acceptors'] = {
+            '{0:.3f} {1:.3f} {2:.3f}'.format(*hbond.a.coords): 1
+            for hbond in hbonds_lig_donors}
+        interaction_info['lig_donors'] = {
+            '{0:.3f} {1:.3f} {2:.3f}'.format(*hbond.d.coords): 1
+            for hbond in hbonds_lig_donors}
+        interaction_info['rec_donors'] = {
+            '{0:.3f} {1:.3f} {2:.3f}'.format(*hbond.d.coords): 1
+            for hbond in hbonds_rec_donors}
+        interaction_info['lig_acceptors'] = {
+            '{0:.3f} {1:.3f} {2:.3f}'.format(*hbond.a.coords): 1
+            for hbond in hbonds_rec_donors}
+        pi_stacking_atoms = [interaction.proteinring.atoms for interaction
+                             in pl_interaction.pistacking]
+        pi_stacking_atoms += [interaction.ligandring.atoms for interaction
+                              in pl_interaction.pistacking]
+        pi_stacking_atoms = [
+            atom for ring in pi_stacking_atoms for atom in ring]
+        interaction_info['pi_stacking'] = {
+            '{0:.3f} {1:.3f} {2:.3f}'.format(
+                *atom.coords): 1 for atom in pi_stacking_atoms
+        }
+
         all_ligand_indices = [list(ligand.can_to_pdb.values()) for ligand in
                               mol.ligands]
         all_ligand_indices = [idx for idx_list in all_ligand_indices for idx in
                               idx_list]
 
+        return self.featurise_interaction(
+            mol, interaction_info, all_ligand_indices)
+
+    def featurise_interaction(self, mol, interaction_dict, all_ligand_indices):
+        """Return dataframe with interactions from one particular plip site."""
         xs, ys, zs, types, atomic_nums, atomids = [], [], [], [], [], []
+        keep_atoms = []
         types_addition = []
-        keep_atoms, sequential_indices = [], []
         obabel_to_sequential = defaultdict(lambda: len(obabel_to_sequential))
         max_types_value = max(self.type_map.values()) + 1
         for atomid, atom in mol.atoms.items():
@@ -718,10 +751,8 @@ class DistanceCalculator:
                     keep_atoms.append(atomid)
                     # Book keeping for DSSP
                     chain = atom.OBAtom.GetResidue().GetChain()
-                    residue_id = str(atom.OBAtom.GetResidue().GetIdx())
+                    residue_id = str(atom.OBAtom.GetResidue().GetNum())
                     residue_identifier = ':'.join([chain, residue_id])
-                    sequential_indices.append(
-                        obabel_to_sequential[residue_identifier])
 
             atomids.append(atomid)
 
@@ -747,15 +778,30 @@ class DistanceCalculator:
         ys = np.array(ys, dtype=float)
         zs = np.array(zs, dtype=float)
         types = np.array(types, dtype=int)
-        types_addition = np.array(types_addition, dtype=int)
-        types += types_addition
         atomids = np.array(atomids, dtype=int)
         atomic_nums = np.array(atomic_nums, dtype=int)
-        sequential_indices = np.array(sequential_indices, dtype=int)
+        types_addition = np.array(types_addition, dtype=int)
+        types += types_addition
 
-        mask = np.zeros((len(types),), dtype=np.int32)
+        pistacking = np.zeros((len(types),), dtype=np.int32)
+        hba = np.zeros_like(pistacking)
+        hbd = np.zeros_like(pistacking)
+
+        for i in range(len(xs)):
+            coords = '{0:.3f} {1:.3f} {2:.3f}'.format(xs[i], ys[i], zs[i])
+            hba[i] = interaction_dict['lig_acceptors'].get(
+                coords, interaction_dict['rec_acceptors'].get(coords, 0))
+            hbd[i] = interaction_dict['lig_donors'].get(
+                coords, interaction_dict['rec_donors'].get(coords, 0))
+            pistacking[i] = interaction_dict['pi_stacking'].get(
+                coords, 0)
+
+        mask = np.zeros_like(pistacking)
         mask[keep_atoms] = 1
 
+        pistacking = pistacking[np.where(keep_atoms)]
+        hba = hba[np.where(keep_atoms)]
+        hbd = hbd[np.where(keep_atoms)]
         xs = xs[np.where(keep_atoms)]
         ys = ys[np.where(keep_atoms)]
         zs = zs[np.where(keep_atoms)]
@@ -769,7 +815,8 @@ class DistanceCalculator:
         df['y'] = ys
         df['z'] = zs
         df['atomic_number'] = atomic_nums
-        df['sequential_indices'] = sequential_indices
-
         df['types'] = types
+        df['pistacking'] = pistacking
+        df['hba'] = hba
+        df['hbd'] = hbd
         return df

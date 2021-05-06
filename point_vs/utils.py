@@ -11,8 +11,17 @@ import types
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import torch
 from matplotlib import pyplot as plt
+
+
+def print_df(df):
+    """Print pandas dataframe in its entirity (with no truncation)."""
+    with pd.option_context('display.max_colwidth', None):
+        with pd.option_context('display.max_rows', None):
+            with pd.option_context('display.max_columns', None):
+                print(df)
 
 
 def no_return_parallelise(func, *args, cpus=-1):

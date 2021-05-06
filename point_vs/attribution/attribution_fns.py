@@ -32,6 +32,8 @@ def cam(model, p, v, m, **kwargs):
     final_layer_weights = to_numpy(model.layers[-1].weight).T
     node_features = to_numpy(x[1].squeeze())
     scores = node_features @ final_layer_weights
+    if liftsamples == 1:
+        return scores
     avg_scores = [np.mean(scores[n:n + liftsamples]) for n in
                   range(len(scores) // liftsamples)]
     return np.array(avg_scores)
