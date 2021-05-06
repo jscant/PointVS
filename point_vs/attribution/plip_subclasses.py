@@ -24,7 +24,7 @@ class VisualizerDataWithMolecularInfo(VisualizerData):
 class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
 
     def colour_b_factors_pdb(
-            self, model, dt, input_dim, attribution_fn, results_fname,
+            self, model, parser, input_dim, attribution_fn, results_fname,
             radius=12, bs=16):
 
         def change_bfactors(bfactors):
@@ -61,7 +61,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                 positions.append(atom.coords)
             return np.mean(np.array(positions), axis=0)
 
-        df = dt.mol_calculate_interactions(
+        df = parser.mol_calculate_interactions(
             self.plcomplex.mol, self.plcomplex.pli)
 
         centre_coords = find_ligand_centre(self.plcomplex.ligand)

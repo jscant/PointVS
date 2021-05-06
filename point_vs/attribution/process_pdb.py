@@ -6,7 +6,7 @@ from plip.structure.preparation import PDBComplex
 from plipcmd import logger
 from pymol import cmd
 
-from point_vs.attribution.pdb_to_parquet import DistanceCalculator
+from point_vs.attribution.interaction_parser import PDBInteractionParser
 from point_vs.attribution.plip_subclasses import \
     PyMOLVisualizerWithBFactorColouring, VisualizerDataWithMolecularInfo
 
@@ -103,9 +103,9 @@ def visualize_in_pymol(
         pdbid.upper(), '_'.join(
             [hetid, plcomplex.chain, plcomplex.position]))).expanduser()
 
-    dt = DistanceCalculator()
+    parser = PDBInteractionParser()
     vis.colour_b_factors_pdb(
-        model, attribution_fn=attribution_fn, dt=dt,
+        model, attribution_fn=attribution_fn, parser=parser,
         results_fname=results_fname, input_dim=input_dim, radius=radius, bs=bs)
 
     vis.refinements()
