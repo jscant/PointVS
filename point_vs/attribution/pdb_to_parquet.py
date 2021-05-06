@@ -737,7 +737,8 @@ class DistanceCalculator:
         return self.featurise_interaction(
             mol, interaction_info, all_ligand_indices)
 
-    def featurise_interaction(self, mol, interaction_dict, all_ligand_indices):
+    def featurise_interaction(self, mol, interaction_dict, all_ligand_indices,
+                              include_noncovalent_bonds=True):
         """Return dataframe with interactions from one particular plip site."""
         xs, ys, zs, types, atomic_nums, atomids = [], [], [], [], [], []
         keep_atoms = []
@@ -810,13 +811,15 @@ class DistanceCalculator:
         atomids = atomids[np.where(keep_atoms)]
 
         df = pd.DataFrame()
-        df['atom_id'] = atomids
+        if include_noncovalent_bonds:
+            df['atom_id'] = atomids
         df['x'] = xs
         df['y'] = ys
         df['z'] = zs
         df['atomic_number'] = atomic_nums
         df['types'] = types
-        df['pistacking'] = pistacking
-        df['hba'] = hba
-        df['hbd'] = hbd
+        if include_noncovalent_bonds:
+            df['pistacking'] = pistacking
+            df['hba'] = hba
+            df['hbd'] = hbd
         return df
