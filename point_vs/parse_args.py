@@ -59,8 +59,6 @@ def parse_args():
                         help='Name of run for wandb logging.')
     parser.add_argument('--layers', type=int, default=6,
                         help='Number of layers in LieResNet')
-    parser.add_argument('--channels_in', '-chin', type=int, default=12,
-                        help='Input channels')
     parser.add_argument('--liftsamples', type=int, default=1,
                         help='liftsamples parameter in LieConv')
     parser.add_argument('--radius', type=int, default=6,
@@ -104,5 +102,11 @@ def parse_args():
                              'encoding distances (default is not to use '
                              'fourier distance encoding)')
     parser.add_argument('--norm_coords', action='store_true',
-                      help='(EGNN) Normalise coordinate vectors')
+                        help='(EGNN) Normalise coordinate vectors')
+    parser.add_argument('--use_atomic_numbers', action='store_true',
+                        help='Use atomic numbers rather than smina types')
+    parser.add_argument('--compact', action='store_true',
+                        help='Use compact rather than true one-hot encodings')
+    parser.add_argument('--hydrogens', action='store_true',
+                        help='Include polar hydrogens')
     return parser.parse_args()

@@ -88,20 +88,20 @@ if __name__ == '__main__':
     else:
         test_receptors = args.test_receptors
 
-    mask = False if args.model == 'egnn' else True
     train_dl = get_data_loader(
         args.train_data_root, args.translated_actives,
-        batch_size=args.batch_size,
-        receptors=train_receptors, radius=args.radius, rot=True,
-        mode='train')
+        batch_size=args.batch_size, compact=args.compact, radius=args.radius,
+        use_atomic_numbers=args.use_atomic_numbers, rot=True,
+        polar_hydrogens=args.hydrogens, receptors=train_receptors, mode='train')
 
     # Is a validation set specified?
     test_dl = None
     if args.test_data_root is not None:
         test_dl = get_data_loader(
-            args.test_data_root, receptors=test_receptors,
-            batch_size=args.batch_size, radius=args.radius, rot=False,
-            mode='val')
+            args.test_data_root, receptors=test_receptors, compact=args.compact,
+            use_atomic_numbers=args.use_atomic_numbers, radius=args.radius,
+            polar_hydrogens=args.hydrogens, batch_size=args.batch_size,
+            rot=False, mode='val')
 
     args_to_record = vars(args)
 
@@ -109,7 +109,6 @@ if __name__ == '__main__':
         'act': args.activation,
         'bn': True,
         'cache': False,
-        'chin': args.channels_in,
         'ds_frac': 1.0,
         'fill': args.fill,
         'group': SE3(0.2),
@@ -121,7 +120,7 @@ if __name__ == '__main__':
         'num_layers': args.layers,
         'pool': True,
         'dropout': args.dropout,
-        'dim_input': 12,
+        'dim_input': train_dl.dataset.feature_dim,
         'dim_output': 1,
         'dim_hidden': args.channels,  # == 32
         'num_heads': 8,

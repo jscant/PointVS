@@ -47,21 +47,28 @@ def make_box(struct, radius=4, relative_to_ligand=True):
     return result[result.columns[:-2]]
 
 
-def make_bit_vector(atom_types, n_atom_types):
+def make_bit_vector(atom_types, n_atom_types, compact=True):
     """Make one-hot bit vector from indices, with switch for structure type.
 
     Arguments:
         atom_types: ids for each type of atom
         n_atom_types: number of different atom types in dataset
+        compact: instead of a true one hot encoding (with two bits for each
+            element: rec and lig), use one-hot encoding for each element then
+            use a final bit to denote whether the atom is part of the ligand or
+            the receptor
 
     Returns:
-        One-hot bit vector (torch tensor) of atom ids, including leftmost bit
-        which indicates the structure (ligand == 0, receptor == 1).
+        One-hot bit vector (torch tensor) of atom ids.
     """
-    indices = torch.from_numpy(atom_types % n_atom_types).long()
-    one_hot = F.one_hot(indices, num_classes=n_atom_types + 1)
-    type_bit = torch.from_numpy((atom_types // n_atom_types)).int()
-    one_hot[:, -1] = type_bit
+    if compact:
+        indices = torch.from_numpy(atom_types % n_atom_types).long()
+        one_hot = F.one_hot(indices, num_classes=n_atom_types + 1)
+        type_bit = torch.from_numpy((atom_types // n_atom_types)).int()
+        one_hot[:, -1] = type_bit
+    else:
+        one_hot = F.one_hot(
+            torch.from_numpy(atom_types), num_classes=n_atom_types * 2)
     return one_hot
 
 
@@ -92,9 +99,6 @@ def concat_structs(rec, lig):
     lig_struct = lig_struct[lig_struct.types != 10]
     rec_struct = rec_struct[rec_struct.types != 21]
     concatted_structs = lig_struct.append(rec_struct, ignore_index=True)
-    if 'atomic_number' in concatted_structs.columns:
-        if sum(concatted_structs['atomic_number'].isna()):
-            del concatted_structs['atomic_number']
     return concatted_structs
 
 
