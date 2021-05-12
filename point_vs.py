@@ -139,6 +139,7 @@ if __name__ == '__main__':
         'lie_algebra_nonlinearity': None,
         'fourier_features': args.fourier_features,
         'norm_coords': args.norm_coords,
+        'norm_feats': args.norm_feats,
     }
 
     args_to_record.update(model_kwargs)
