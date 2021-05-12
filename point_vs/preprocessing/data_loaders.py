@@ -26,7 +26,7 @@ def random_rotation(x):
 
 def get_data_loader(*data_roots, receptors=None, batch_size=32, compact=True,
                     use_atomic_numbers=False, radius=6, rot=True,
-                    polar_hydrogens=True, feature_dim=12, mode='train'):
+                    polar_hydrogens=True, mode='train'):
     """Give a DataLoader from a list of receptors and data roots."""
     ds_kwargs = {
         'receptors': receptors,

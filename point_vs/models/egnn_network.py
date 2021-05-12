@@ -37,9 +37,9 @@ class EGNN(PointNeuralNetwork):
 
     def build_net(self, dim_input, dim_output=1, k=12, nbhd=0,
                   dropout=0.0, num_layers=6, fourier_features=16,
-                  norm_coords=True, **kwargs):
+                  norm_coords=True, norm_feats=False, **kwargs):
         egnn = lambda: EGNNLayer(
-            dim=k, m_dim=12, norm_coors=norm_coords, norm_feats=True,
+            dim=k, m_dim=16, norm_coors=norm_coords, norm_feats=norm_feats,
             dropout=dropout, fourier_features=fourier_features, init_eps=1e-2,
             num_nearest_neighbors=nbhd)
 

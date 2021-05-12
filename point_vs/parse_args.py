@@ -103,6 +103,8 @@ def parse_args():
                              'fourier distance encoding)')
     parser.add_argument('--norm_coords', action='store_true',
                         help='(EGNN) Normalise coordinate vectors')
+    parser.add_argument('--norm_feats', action='store_true',
+                        help='(EGNN) Normalise feature vectors')
     parser.add_argument('--use_atomic_numbers', action='store_true',
                         help='Use atomic numbers rather than smina types')
     parser.add_argument('--compact', action='store_true',

@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 from openbabel import openbabel
 
-from point_vs.utils import mkdir
+from point_vs.utils import mkdir, no_return_parallelise
 
 try:
     from openbabel import pybel
@@ -690,7 +690,6 @@ class PDBFileParser:
                     continue
                 else:
                     type_int = max(self.type_map.values()) + 1
-                    print('Polar hydrogen,', type_int)
             else:
                 smina_type = self.obatom_to_smina_type(atom)
                 if smina_type == "NumTypes":
@@ -715,16 +714,36 @@ class PDBFileParser:
                          add_polar_hydrogens=True):
         mols = self.read_file(input_file)
         output_path = mkdir(output_path)
-        for mol in mols:
-            df = self.obmol_to_parquet(mol, add_polar_hydrogens)
+        pdbid = Path(input_file).name.split('_')[0]
+        for idx, mol in enumerate(mols):
             if output_fname is None:
-                output_fname = Path(
-                    mol.OBMol.GetTitle()).name.split('.')[0] + '.parquet'
-            output_fname = output_path / output_fname
-            df.to_parquet(output_fname)
+                fname = Path(
+                    mol.OBMol.GetTitle()).name.split('.')[0]
+            else:
+                fname = output_path / output_fname
+                print(fname)
+            df = self.obmol_to_parquet(mol, add_polar_hydrogens)
+            df.to_parquet(fname)
 
 
 if __name__ == '__main__':
+
+    pdb_parser = PDBFileParser('ligand')
+    inp, out, fnames = [], [], []
+    for sdf in Path('data/translated_actives/sdf').expanduser().glob('**/*.sdf'):
+        pdbid = Path(sdf.parent.name).stem.split('_')[0]
+        ad = ['actives', 'decoys'][str(sdf).find('active') == -1]
+        ad = 'decoys'
+        out_path = Path('data/translated_actives_new/ligands/{0}_{1}'.format(
+            pdbid, ad
+        ))
+        out_fname = '{}.parquet'.format(Path(sdf.name).stem)
+        inp.append(sdf)
+        out.append(out_path)
+        fnames.append(out_fname)
+    no_return_parallelise(pdb_parser.file_to_parquets, inp, out, fnames)
+    exit(1)
+
     parser = argparse.ArgumentParser()
     parser.add_argument('input_file', type=str,
                         help='Input file, any of sdf, pdb or mol2 format '
