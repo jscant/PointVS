@@ -52,21 +52,22 @@ class EGNN(PointNeuralNetwork):
 
         # Thinner MLPs for updating coords, edges and nodes
         if thin_mlps:
+            dropout = lambda: nn.Dropout(
+                dropout) if dropout > 0 else nn.Identity()
             for layer in egnn_layers:
-                dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
                 layer.edge_mlp = nn.Sequential(
                     nn.Linear(edge_input_dim, m_dim),
-                    dropout,
+                    dropout(),
                     SiLU(),
                 )
                 layer.node_mlp = nn.Sequential(
                     nn.Linear(k + m_dim, k),
-                    dropout,
+                    dropout(),
                     SiLU(),
                 )
                 layer.coors_mlp = nn.Sequential(
                     nn.Linear(m_dim, 1),
-                    dropout,
+                    dropout(),
                     SiLU(),
                 )
 
