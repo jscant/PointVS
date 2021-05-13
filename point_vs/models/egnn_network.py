@@ -1,5 +1,5 @@
-import torch
 from egnn_pytorch import EGNN as EGNNLayer
+from egnn_pytorch.egnn_pytorch import SiLU
 from eqv_transformer.utils import GlobalPool
 from lie_conv.utils import Pass
 from torch import nn
@@ -37,58 +37,45 @@ class EGNN(PointNeuralNetwork):
 
     def build_net(self, dim_input, dim_output=1, k=12, nbhd=0,
                   dropout=0.0, num_layers=6, fourier_features=16,
-                  norm_coords=True, norm_feats=False, **kwargs):
+                  norm_coords=True, norm_feats=False, thin_mlps=False,
+                  **kwargs):
+
+        m_dim = 12
         egnn = lambda: EGNNLayer(
-            dim=k, m_dim=16, norm_coors=norm_coords, norm_feats=norm_feats,
-            dropout=dropout, fourier_features=fourier_features, init_eps=1e-2,
-            num_nearest_neighbors=nbhd)
+            dim=k, m_dim=m_dim, norm_coors=norm_coords, norm_feats=norm_feats,
+            dropout=dropout, fourier_features=fourier_features,
+            num_nearest_neighbors=nbhd, init_eps=1e-2)
+
+        edge_input_dim = (fourier_features * 2) + (k * 2) + 1
+
+        egnn_layers = [EGNNPass(egnn()) for _ in range(num_layers)]
+
+        # Thinner MLPs for updating coords, edges and nodes
+        if thin_mlps:
+            for layer in egnn_layers:
+                dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
+                layer.edge_mlp = nn.Sequential(
+                    nn.Linear(edge_input_dim, m_dim),
+                    dropout,
+                    SiLU(),
+                )
+                layer.node_mlp = nn.Sequential(
+                    nn.Linear(k + m_dim, k),
+                    dropout,
+                    SiLU(),
+                )
+                layer.coors_mlp = nn.Sequential(
+                    nn.Linear(m_dim, 1),
+                    dropout,
+                    SiLU(),
+                )
 
         return nn.Sequential(
             Pass(nn.Linear(dim_input, k), dim=1),
-            *[EGNNPass(egnn()) for _ in range(num_layers)],
+            *egnn_layers,
             GlobalPool(mean=True),
             nn.Linear(k, dim_output)
         )
 
     def forward(self, x):
         return self.layers(x)
-
-    def _get_min_max(self):
-        network = self.layers
-        res = ''
-        min_ = 1e7
-        max_ = -1e7
-        min_abs = 1e7
-        for layer in network:
-            if isinstance(layer, nn.Linear):
-                min_ = min(min_, float(torch.min(layer.weight)))
-                max_ = max(max_, float(torch.max(layer.weight)))
-                min_abs = min(min_abs, float(torch.min(torch.abs(layer.weight))))
-                res += 'Linear: {0}, {1} {2}\n'.format(
-                    float(torch.min(layer.weight)),
-                    float(torch.max(layer.weight)),
-                    float(torch.min(torch.abs(layer.weight))))
-            if isinstance(layer, Pass):
-                if isinstance(layer.module, nn.Linear):
-                    min_ = min(min_, float(torch.min(layer.module.weight)))
-                    max_ = max(max_, float(torch.max(layer.module.weight)))
-                    min_abs = min(min_abs, float(torch.min(torch.abs(layer.module.weight))))
-                    res += 'Linear:{0} {1} {2}\n'.format(
-                        float(torch.min(layer.module.weight)),
-                        float(torch.max(layer.module.weight)),
-                        float(torch.min(torch.abs(layer.module.weight))))
-            elif isinstance(layer, EGNNPass):
-                layer = layer.egnn
-                for network_type, network_name in zip(
-                        (layer.edge_mlp, layer.node_mlp, layer.coors_mlp),
-                        ('EGNN-edge', 'EGNN-node', 'EGNN-coors')):
-                    for sublayer in network_type:
-                        if isinstance(sublayer, nn.Linear):
-                            max_ = max(max_, float(torch.max(sublayer.weight)))
-                            min_ = min(min_, float(torch.min(sublayer.weight)))
-                            min_abs = min(min_abs, float(torch.min(torch.abs(sublayer.weight))))
-                            res += network_name + ': {0} {1} {2}\n'.format(
-                                float(torch.min(sublayer.weight)),
-                                float(torch.max(sublayer.weight)),
-                                float(torch.min(torch.abs(sublayer.weight))))
-        return res[:-1], min_, max_, min_abs

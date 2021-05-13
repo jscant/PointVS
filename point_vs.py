@@ -140,6 +140,7 @@ if __name__ == '__main__':
         'fourier_features': args.fourier_features,
         'norm_coords': args.norm_coords,
         'norm_feats': args.norm_feats,
+        'thin_mlps': args.thin_mlps,
     }
 
     args_to_record.update(model_kwargs)

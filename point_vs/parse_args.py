@@ -109,6 +109,9 @@ def parse_args():
                         help='Use atomic numbers rather than smina types')
     parser.add_argument('--compact', action='store_true',
                         help='Use compact rather than true one-hot encodings')
+    parser.add_argument('--thin_mlps', action='store_true',
+                        help='(EGNN) Use single layer MLPs for edge, node and '
+                             'coord updates')
     parser.add_argument('--hydrogens', action='store_true',
                         help='Include polar hydrogens')
     return parser.parse_args()
