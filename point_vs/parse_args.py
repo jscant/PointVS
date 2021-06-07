@@ -114,4 +114,10 @@ def parse_args():
                              'coord updates')
     parser.add_argument('--hydrogens', action='store_true',
                         help='Include polar hydrogens')
+    parser.add_argument('--augmented_actives', type=int, default=0,
+                        help='Number of randomly rotated actives to be '
+                             'included as decoys during training')
+    parser.add_argument('--min_aug_angle', type=float, default=30,
+                        help='Minimum angle of rotation for augmented actives '
+                             'as specified in the augmented_actives argument')
     return parser.parse_args()

@@ -92,6 +92,8 @@ if __name__ == '__main__':
         args.train_data_root, args.translated_actives,
         batch_size=args.batch_size, compact=args.compact, radius=args.radius,
         use_atomic_numbers=args.use_atomic_numbers, rot=True,
+        augmented_actives=args.augmented_actives,
+        min_aug_angle=args.min_aug_angle,
         polar_hydrogens=args.hydrogens, receptors=train_receptors, mode='train')
 
     # Is a validation set specified?

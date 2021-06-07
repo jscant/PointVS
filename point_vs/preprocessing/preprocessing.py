@@ -8,6 +8,24 @@ import torch.nn.functional as F
 from matplotlib import pyplot as plt
 
 
+def random_rotation(x):
+    """Apply a random rotation to a set of 3D coordinates."""
+    M = np.random.randn(3, 3)
+    Q, _ = np.linalg.qr(M)
+    return x @ Q
+
+
+def angle_3d(v1, v2):
+    """Calculate the angle between two 3d vectors"""
+    v1, v2 = v1.reshape((-1, 3)), v2.reshape((-1, 3))
+    if np.product(v1) * np.product(v2) <= 1e-6:
+        v1, v2 = v1 + 10, v2 + 10
+    dot = np.einsum('ij, ij -> i', v1, v2)[0]
+    cos = dot / (np.linalg.norm(v1) * np.linalg.norm(v2))
+    angle = np.arccos(np.clip(cos, -1.0, 1.0))
+    return angle
+
+
 def make_box(struct, radius=4, relative_to_ligand=True):
     """Truncates receptor atoms which are too far away from the ligand.
 
@@ -92,12 +110,25 @@ def centre_on_ligand(struct):
     return struct
 
 
-def concat_structs(rec, lig):
+def concat_structs(rec, lig, min_lig_rotation=0):
     """Concatenate the receptor and ligand parquet structures."""
+    min_lig_rotation = np.pi * min_lig_rotation / 180
     lig_struct = pd.read_parquet(lig)
     rec_struct = pd.read_parquet(rec)
-    lig_struct = lig_struct[lig_struct.types != 10]
-    rec_struct = rec_struct[rec_struct.types != 21]
+    if min_lig_rotation:
+        lig_coords_init = np.vstack(
+            [lig_struct.x, lig_struct.y, lig_struct.z]).T
+        orig_vector = lig_coords_init[0, :]
+        candidate_vector = orig_vector
+        candidate_coords = lig_coords_init
+        while angle_3d(orig_vector, candidate_vector) < min_lig_rotation:
+            candidate_coords = random_rotation(lig_coords_init)
+            candidate_vector = candidate_coords[0, :]
+        lig_struct.x = candidate_coords[:, 0]
+        lig_struct.y = candidate_coords[:, 1]
+        lig_struct.z = candidate_coords[:, 2]
+    # lig_struct = lig_struct[lig_struct.types != 10]
+    # rec_struct = rec_struct[rec_struct.types != 21]
     concatted_structs = lig_struct.append(rec_struct, ignore_index=True)
     return concatted_structs
 
