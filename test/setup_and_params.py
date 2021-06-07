@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from lie_conv.lieGroups import SE3
 
-from point_vs.preprocessing.data_loaders import random_rotation
+from point_vs.preprocessing.preprocessing import uniform_random_rotation
 from point_vs.utils import to_numpy, _set_precision
 
 
@@ -66,7 +66,11 @@ MODEL_KWARGS = {
 N_SAMPLES = 10
 ORIGINAL_COORDS = torch.rand(1, 100, 3).cuda()
 ROTATED_COORDS = [
-    torch.from_numpy(random_rotation(to_numpy(ORIGINAL_COORDS))).float().cuda()
+    torch.from_numpy(
+        uniform_random_rotation(
+            to_numpy(
+                ORIGINAL_COORDS.reshape(
+                    (100, 3))))).reshape(1, 100, 3).float().cuda()
     for _ in range(N_SAMPLES)]
 FEATS = torch.rand(1, 100, 12).cuda()
 MASK = torch.ones(1, 100).bool().cuda()

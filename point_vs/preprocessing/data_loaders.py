@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data import WeightedRandomSampler
 
 from point_vs.preprocessing.preprocessing import centre_on_ligand, make_box, \
-    concat_structs, make_bit_vector, random_rotation
+    concat_structs, make_bit_vector, uniform_random_rotation
 
 
 def get_data_loader(*data_roots, receptors=None, batch_size=32, compact=True,
@@ -186,7 +186,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
         self.labels = labels
 
         # apply random rotations to ALL coordinates?
-        self.transformation = random_rotation if rot else lambda x: x
+        self.transformation = uniform_random_rotation if rot else lambda x: x
 
         # H C N O F P S Cl
         recognised_atomic_numbers = (6, 7, 8, 9, 15, 16, 17)

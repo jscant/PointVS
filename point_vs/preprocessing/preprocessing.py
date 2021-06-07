@@ -8,20 +8,50 @@ import torch.nn.functional as F
 from matplotlib import pyplot as plt
 
 
-def random_rotation(x):
-    """Apply a random rotation to a set of 3D coordinates."""
-    M = np.random.randn(3, 3)
-    Q, _ = np.linalg.qr(M)
-    return x @ Q
+def generate_random_z_axis_rotation():
+    """Generate random rotation matrix about the z axis (NOT UNIFORM)."""
+    R = np.eye(3)
+    x1 = np.random.rand()
+    R[0, 0] = R[1, 1] = np.cos(2 * np.pi * x1)
+    R[0, 1] = -np.sin(2 * np.pi * x1)
+    R[1, 0] = np.sin(2 * np.pi * x1)
+    return R
+
+
+def uniform_random_rotation(x):
+    """Apply a random rotation in 3D, with a distribution uniform over the
+    sphere.
+
+    Algorithm taken from "Fast Random Rotation Matrices" (James Avro, 1992):
+    citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.53.1357&rep=rep1&type=pdf
+    """
+
+    # There are two random variables in [0, 1) here (naming is same as paper)
+    x2 = 2 * np.pi * np.random.rand()
+    x3 = np.random.rand()
+
+    # Rotation of all points around x axis using matrix
+    R = generate_random_z_axis_rotation()
+    v = np.array([
+        np.cos(x2) * np.sqrt(x3),
+        np.sin(x2) * np.sqrt(x3),
+        np.sqrt(1 - x3)
+    ])
+    H = np.eye(3) - (2 * np.outer(v, v))
+    M = -(H @ R)
+    x = x.reshape((-1, 3))
+    mean_coord = np.mean(x, axis=0)
+    return ((x - mean_coord) @ M) + mean_coord @ M
 
 
 def angle_3d(v1, v2):
     """Calculate the angle between two 3d vectors"""
     v1, v2 = v1.reshape((-1, 3)), v2.reshape((-1, 3))
-    if np.product(v1) * np.product(v2) <= 1e-6:
-        v1, v2 = v1 + 10, v2 + 10
     dot = np.einsum('ij, ij -> i', v1, v2)[0]
-    cos = dot / (np.linalg.norm(v1) * np.linalg.norm(v2))
+
+    # Angle is undefined if either vector is zero, avoid div0 errors
+    denom = max(1e-7, np.linalg.norm(v1) * np.linalg.norm(v2))
+    cos = dot / denom
     angle = np.arccos(np.clip(cos, -1.0, 1.0))
     return angle
 
@@ -122,7 +152,7 @@ def concat_structs(rec, lig, min_lig_rotation=0):
         candidate_vector = orig_vector
         candidate_coords = lig_coords_init
         while angle_3d(orig_vector, candidate_vector) < min_lig_rotation:
-            candidate_coords = random_rotation(lig_coords_init)
+            candidate_coords = uniform_random_rotation(lig_coords_init)
             candidate_vector = candidate_coords[0, :]
         lig_struct.x = candidate_coords[:, 0]
         lig_struct.y = candidate_coords[:, 1]
@@ -131,6 +161,9 @@ def concat_structs(rec, lig, min_lig_rotation=0):
     # rec_struct = rec_struct[rec_struct.types != 21]
     concatted_structs = lig_struct.append(rec_struct, ignore_index=True)
     return concatted_structs
+
+
+"""Everything below is for debugging (ignore)"""
 
 
 def plot_struct(struct):
@@ -176,3 +209,59 @@ def plot_struct(struct):
     set_axes_equal(ax)
     plt.savefig('/home/scantleb-admin/Desktop/point_cloud.png')
     plt.show()
+
+
+def set_axes_equal(ax):
+    """Make axes of 3D plot have equal scale so that spheres appear as spheres,
+    cubes as cubes, etc..  This is one possible solution to Matplotlib's
+    ax.set_aspect('equal') and ax.axis('equal') not working for 3D.
+
+    Arguments:
+        ax: a matplotlib axis, e.g., as output from plt.gca().
+
+    (From stackoverflow)
+    """
+
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
+
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
+
+    # The plot bounding box is a sphere in the sense of the infinity
+    # norm, hence I call half the max range the plot radius.
+    plot_radius = 0.5 * max([x_range, y_range, z_range])
+
+    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+
+
+if __name__ == '__main__':
+    random_coords = np.random.rand(30, 3)
+    vecs = []
+    angles = []
+    for i in range(300):
+        rot = uniform_random_rotation(random_coords)
+        vecs.append(rot[0, :])
+        angles.append(180 * angle_3d(random_coords[0, :], rot[0, :]) / np.pi)
+
+    vecs = np.array(vecs)
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    x, y, z = vecs[:, 0], vecs[:, 1], vecs[:, 2]
+    ax.scatter(x, y, z, marker='o', s=20)
+    ax.scatter(*random_coords[0, :], c='r', s=20, marker='o')
+    ax.set_box_aspect((np.ptp(x), np.ptp(y), np.ptp(z)))
+    set_axes_equal(ax)
+
+    plt.savefig('sphere.png')
+    plt.show()
+    plt.clf()
+    plt.hist(angles, bins=50)
+    plt.savefig('angles.png')
