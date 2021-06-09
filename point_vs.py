@@ -179,6 +179,7 @@ if __name__ == '__main__':
     except ValueError:
         pass
 
-    model.optimise(train_dl, epochs=args.epochs)
+    if args.epochs:
+        model.optimise(train_dl, epochs=args.epochs)
     if test_dl is not None:
         model.test(test_dl)
