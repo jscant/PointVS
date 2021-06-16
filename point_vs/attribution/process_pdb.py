@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pandas import DataFrame
 from plip.basic import config
 from plip.basic.supplemental import create_folder_if_not_exists, start_pymol
 from plip.structure.preparation import PDBComplex
@@ -9,11 +10,12 @@ from pymol import cmd
 from point_vs.attribution.interaction_parser import PDBInteractionParser
 from point_vs.attribution.plip_subclasses import \
     PyMOLVisualizerWithBFactorColouring, VisualizerDataWithMolecularInfo
+from point_vs.utils import mkdir
 
 
 def visualize_in_pymol(
-        model, attribution_fn, plcomplex, input_dim, output_dir, radius=12,
-        bs=16):
+        model, attribution_fn, plcomplex, output_dir, model_args,
+        only_process=None):
     """Visualizes the given Protein-Ligand complex at one site in PyMOL.
 
     This function is based on the origina plip.visualization.vizualise_in_pymol
@@ -104,9 +106,13 @@ def visualize_in_pymol(
             [hetid, plcomplex.chain, plcomplex.position]))).expanduser()
 
     parser = PDBInteractionParser()
-    vis.colour_b_factors_pdb(
+    df = vis.colour_b_factors_pdb(
         model, attribution_fn=attribution_fn, parser=parser,
-        results_fname=results_fname, input_dim=input_dim, radius=radius, bs=bs)
+        results_fname=results_fname, model_args=model_args,
+        only_process=only_process)
+
+    if not isinstance(df, DataFrame):
+        return
 
     vis.refinements()
 
@@ -138,11 +144,72 @@ def visualize_in_pymol(
     if config.PICS:
         vis.save_picture(config.OUTPATH, filename)
 
+    return df
 
-def process_pdb(
-        model, attribution_fn, pdbfile, outpath, input_dim, radius=12, bs=16):
+
+def score_pdb(
+        model, attribution_fn, pdbfile, outpath, model_args,
+        only_process=None, quiet=False, save_ligand_sdf=False):
     mol = PDBComplex()
+    outpath = str(Path(outpath).expanduser())
+    pdbfile = str(Path(pdbfile).expanduser())
     mol.output_path = outpath
+
+    mol.load_pdb(pdbfile, as_string=False)
+
+    for ligand in mol.ligands:
+        mol.characterize_complex(ligand)
+
+    mkdir(outpath)
+
+    complexes = [VisualizerDataWithMolecularInfo(mol, site) for site in sorted(
+        mol.interaction_sets)
+                 if not len(mol.interaction_sets[site].interacting_res) == 0]
+
+    if save_ligand_sdf:
+        ligand_outpath = str(Path(outpath, 'crystal_ligand.sdf'))
+        complexes[0].ligand.molecule.write(
+            format='sdf', filename=ligand_outpath, overwrite=True)
+        print('Saved ligand as sdf to', ligand_outpath)
+
+    def score_atoms(
+            model, attribution_fn, plcomplex, model_args, only_process=None):
+
+        vis = PyMOLVisualizerWithBFactorColouring(plcomplex)
+
+        if config.PEPTIDES:
+            vis.ligname = 'PeptideChain%s' % plcomplex.chain
+        if config.INTRA is not None:
+            vis.ligname = 'Intra%s' % plcomplex.chain
+
+        parser = PDBInteractionParser()
+        df = vis.score_atoms(
+            parser, only_process, model, attribution_fn, model_args=model_args,
+            quiet=quiet)
+        return df
+
+    dfs = [score_atoms(
+        model, attribution_fn=attribution_fn, plcomplex=plcomplex,
+        model_args=model_args, only_process=only_process)
+        for plcomplex in complexes]
+    dfs = [df for df in dfs if df is not None]
+    return dfs
+
+
+def score_and_colour_pdb(
+        model, attribution_fn, pdbfile, outpath, model_args, only_process=None):
+    mol = PDBComplex()
+    outpath = str(Path(outpath).expanduser())
+    pdbfile = str(Path(pdbfile).expanduser())
+    mol.output_path = outpath
+
+    # config.NOHYDRO = False
+
+    # basename = Path(pdbfile).name.split('.')[0]
+    # output_path = Path(outpath, '{}_protonated.pdb'.format(basename))
+    # os.system('obabel {0} -O{1} --addpolarh'.format(
+    #    pdbfile, output_path))
+    # logger.info(f'protonated structure written to {output_path}')
     mol.load_pdb(pdbfile, as_string=False)
 
     for ligand in mol.ligands:
@@ -154,8 +221,10 @@ def process_pdb(
         mol.interaction_sets)
                  if not len(mol.interaction_sets[site].interacting_res) == 0]
 
-    [visualize_in_pymol(model, attribution_fn=attribution_fn,
-                        output_dir=outpath, plcomplex=plcomplex,
-                        input_dim=input_dim, radius=radius, bs=bs)
-     for plcomplex in complexes]
-    print()
+    dfs = [visualize_in_pymol(model, attribution_fn=attribution_fn,
+                              output_dir=outpath, plcomplex=plcomplex,
+                              model_args=model_args,
+                              only_process=only_process)
+           for plcomplex in complexes]
+    dfs = [df for df in dfs if df is not None]
+    return dfs

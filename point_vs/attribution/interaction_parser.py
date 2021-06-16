@@ -18,6 +18,7 @@ pdb_to_parquet.py <base_path> <output_path>
     └── receptor_a
         └── receptor.pdb
 """
+import itertools
 from collections import defaultdict
 from urllib.error import HTTPError
 from urllib.request import urlopen
@@ -26,6 +27,7 @@ import numpy as np
 import pandas as pd
 
 from point_vs.preprocessing.pdb_to_parquet import PDBFileParser
+from point_vs.utils import coords_to_string, truncate_float
 
 try:
     from openbabel import pybel
@@ -66,16 +68,16 @@ class PDBInteractionParser(PDBFileParser):
         hbonds_lig_donors = pl_interaction.hbonds_ldon
         hbonds_rec_donors = pl_interaction.hbonds_pdon
         interaction_info['rec_acceptors'] = {
-            '{0:.3f} {1:.3f} {2:.3f}'.format(*hbond.a.coords): 1
+            coords_to_string(hbond.a.coords): 1
             for hbond in hbonds_lig_donors}
         interaction_info['lig_donors'] = {
-            '{0:.3f} {1:.3f} {2:.3f}'.format(*hbond.d.coords): 1
+            coords_to_string(hbond.d.coords): 1
             for hbond in hbonds_lig_donors}
         interaction_info['rec_donors'] = {
-            '{0:.3f} {1:.3f} {2:.3f}'.format(*hbond.d.coords): 1
+            coords_to_string(hbond.d.coords): 1
             for hbond in hbonds_rec_donors}
         interaction_info['lig_acceptors'] = {
-            '{0:.3f} {1:.3f} {2:.3f}'.format(*hbond.a.coords): 1
+            coords_to_string(hbond.a.coords): 1
             for hbond in hbonds_rec_donors}
         pi_stacking_atoms = [interaction.proteinring.atoms for interaction
                              in pl_interaction.pistacking]
@@ -84,35 +86,39 @@ class PDBInteractionParser(PDBFileParser):
         pi_stacking_atoms = [
             atom for ring in pi_stacking_atoms for atom in ring]
         interaction_info['pi_stacking'] = {
-            '{0:.3f} {1:.3f} {2:.3f}'.format(
-                *atom.coords): 1 for atom in pi_stacking_atoms
-        }
+            coords_to_string(atom.coords): 1 for atom in pi_stacking_atoms}
 
-        all_ligand_indices = [list(ligand.can_to_pdb.values()) for ligand in
-                              mol.ligands]
-        all_ligand_indices = [idx for idx_list in all_ligand_indices for idx in
-                              idx_list]
+        # Book-keeping to track ligand atoms by coordinates
+        ligand_mols = [ligand.mol for ligand in mol.ligands]
+        ligand_atoms = [mol.atoms for mol in ligand_mols]
+        ligand_coords = [coords_to_string(atom.coords) for atom in
+                         list(itertools.chain(*ligand_atoms))]
 
         return self.featurise_interaction(
-            mol, interaction_info, all_ligand_indices)
+            mol, interaction_info, ligand_coords)
 
-    def featurise_interaction(self, mol, interaction_dict, all_ligand_indices,
+    def featurise_interaction(self, mol, interaction_dict, all_ligand_coords,
                               include_noncovalent_bonds=True):
         """Return dataframe with interactions from one particular plip site."""
+
+        def keep_atom(atom):
+            coords_str = coords_to_string(atom.coords)
+            if atom.OBAtom.IsNonPolarHydrogen():
+                return False
+            if atom.OBAtom.GetResidue().GetName().upper() in RESIDUE_IDS:
+                return True
+            if coords_str in all_ligand_coords:
+                return True
+            return False
+
         xs, ys, zs, types, atomic_nums, atomids = [], [], [], [], [], []
         keep_atoms = []
         types_addition = []
         obabel_to_sequential = defaultdict(lambda: len(obabel_to_sequential))
         max_types_value = max(self.type_map.values()) + 1
         for atomid, atom in mol.atoms.items():
-            resname = atom.OBAtom.GetResidue().GetName().upper()
-            if atom.atomicnum > 1:
-                if resname in RESIDUE_IDS or atomid in all_ligand_indices:
-                    keep_atoms.append(atomid)
-                    # Book keeping for DSSP
-                    chain = atom.OBAtom.GetResidue().GetChain()
-                    residue_id = str(atom.OBAtom.GetResidue().GetNum())
-                    residue_identifier = ':'.join([chain, residue_id])
+            if keep_atom(atom):
+                keep_atoms.append(atomid)
 
             atomids.append(atomid)
 
@@ -122,12 +128,12 @@ class PDBInteractionParser(PDBFileParser):
             else:
                 smina_type_int = self.atom_types.index(smina_type)
             type_int = self.type_map[smina_type_int]
-            if resname in RESIDUE_IDS and atomid not in all_ligand_indices:
-                types_addition.append(max_types_value)
-            else:
+            if coords_to_string(atom.coords) in all_ligand_coords:
                 types_addition.append(0)
+            else:
+                types_addition.append(max_types_value)
 
-            x, y, z = [float('{:.3f}'.format(i)) for i in atom.coords]
+            x, y, z = [truncate_float(i) for i in atom.coords]
             xs.append(x)
             ys.append(y)
             zs.append(z)
@@ -141,6 +147,7 @@ class PDBInteractionParser(PDBFileParser):
         atomids = np.array(atomids, dtype=int)
         atomic_nums = np.array(atomic_nums, dtype=int)
         types_addition = np.array(types_addition, dtype=int)
+        bp = (types_addition > 0).astype('int')
         types += types_addition
 
         pistacking = np.zeros((len(types),), dtype=np.int32)
@@ -148,7 +155,7 @@ class PDBInteractionParser(PDBFileParser):
         hbd = np.zeros_like(pistacking)
 
         for i in range(len(xs)):
-            coords = '{0:.3f} {1:.3f} {2:.3f}'.format(xs[i], ys[i], zs[i])
+            coords = coords_to_string((xs[i], ys[i], zs[i]))
             hba[i] = interaction_dict['lig_acceptors'].get(
                 coords, interaction_dict['rec_acceptors'].get(coords, 0))
             hbd[i] = interaction_dict['lig_donors'].get(
@@ -160,23 +167,26 @@ class PDBInteractionParser(PDBFileParser):
         mask[keep_atoms] = 1
 
         pistacking = pistacking[np.where(keep_atoms)]
-        hba = hba[np.where(keep_atoms)]
-        hbd = hbd[np.where(keep_atoms)]
-        xs = xs[np.where(keep_atoms)]
-        ys = ys[np.where(keep_atoms)]
-        zs = zs[np.where(keep_atoms)]
-        types = types[np.where(keep_atoms)]
-        atomic_nums = atomic_nums[np.where(keep_atoms)]
-        atomids = atomids[np.where(keep_atoms)]
+        hba = hba[np.where(mask)]
+        hbd = hbd[np.where(mask)]
+        xs = xs[np.where(mask)]
+        ys = ys[np.where(mask)]
+        zs = zs[np.where(mask)]
+        types = types[np.where(mask)]
+        atomic_nums = atomic_nums[np.where(mask)]
+        atomids = atomids[np.where(mask)]
+        bp = bp[np.where(mask)]
 
         df = pd.DataFrame()
         if include_noncovalent_bonds:
             df['atom_id'] = atomids
+
         df['x'] = xs
         df['y'] = ys
         df['z'] = zs
         df['atomic_number'] = atomic_nums
         df['types'] = types
+        df['bp'] = bp
         if include_noncovalent_bonds:
             df['pistacking'] = pistacking
             df['hba'] = hba

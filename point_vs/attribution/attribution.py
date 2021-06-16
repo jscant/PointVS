@@ -7,8 +7,9 @@ from pathlib import Path
 import yaml
 from plip.basic.supplemental import extract_pdbid
 from plip.exchange.webservices import fetch_pdb
+
 from point_vs.attribution.attribution_fns import masking, cam
-from point_vs.attribution.process_pdb import process_pdb
+from point_vs.attribution.process_pdb import score_and_colour_pdb
 from point_vs.models.egnn_network import EGNN
 from point_vs.models.lie_conv import LieResNet
 from point_vs.models.lie_transformer import EquivariantTransformer
@@ -47,19 +48,15 @@ def download_pdb_file(pdbid, output_dir):
     return pdbpath
 
 
-def attribute(args):
-    output_dir = mkdir(Path(args.output_dir, args.attribution_type, args.pdbid))
-    pdbpath = download_pdb_file(args.pdbid, output_dir)
-
-    model_path = Path(args.model).expanduser()
+def load_model(weights_file):
+    model_path = Path(weights_file).expanduser()
     with open(model_path.parents[1] / 'model_kwargs.yaml', 'r') as f:
         model_kwargs = yaml.load(f, Loader=yaml.Loader)
     with open(model_path.parents[1] / 'cmd_args.yaml', 'r') as f:
         cmd_line_args = yaml.load(f, Loader=yaml.Loader)
 
     model_type = cmd_line_args['model']
-    dim_input = model_kwargs['dim_input']
-    bs = cmd_line_args['batch_size']
+
     model_class = {
         'lietransformer': EquivariantTransformer,
         'lieconv': LieResNet,
@@ -73,22 +70,46 @@ def attribute(args):
     model.load_weights(model_path)
     model.eval()
 
+    return model, model_kwargs, cmd_line_args
+
+
+def attribute(args):
+    if args.pdbid is not None:
+        output_dir = mkdir(
+            Path(args.output_dir, args.attribution_type, args.pdbid))
+        pdbpath = download_pdb_file(args.pdbid, output_dir)
+    else:
+        leaf_dir = Path(Path(args.input_file).name).stem
+        output_dir = mkdir(
+            Path(args.output_dir, args.attribution_type, leaf_dir))
+        pdbpath = Path(args.input_file).expanduser()
+
+    model, model_kwargs, cmd_line_args = load_model(args.model)
+
     attribution_fn = {'masking': masking, 'cam': cam}[args.attribution_type]
 
-    process_pdb(model, attribution_fn,
-                str(pdbpath), str(output_dir), input_dim=dim_input,
-                radius=cmd_line_args['radius'], bs=bs)
+    score_and_colour_pdb(model, attribution_fn,
+                         str(pdbpath), str(output_dir),
+                         model_args=cmd_line_args,
+                         only_process=args.only_process)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('attribution_type', type=str,
                         help='Method of graph attribution; just {} for '
-                             'now.'.format(','.join(ALLOWED_METHODS)))
+                             'now.'.format(', '.join(ALLOWED_METHODS)))
     parser.add_argument('model', type=str, help='Saved pytorch model')
-    parser.add_argument('pdbid', type=str, help='PDB ID for structure to '
-                                                'analyse')
     parser.add_argument('output_dir', type=str,
                         help='Directory in which to store results')
+    parser.add_argument('--pdbid', '-p', type=str,
+                        help='PDB ID for structure to analyse')
+    parser.add_argument('--input_file', '-i', type=str,
+                        help='Input PDB file')
+    parser.add_argument('--only_process', '-o', type=str, nargs='?', default=[],
+                        help='Only process ligands with the given 3 letter '
+                             'residue codes (UNK, for example)')
     args = parser.parse_args()
+    if args.pdbid is not None and args.input_file is not None:
+        raise RuntimeError('--pdbid and --input_file are mutually exclusive')
     attribute(args)
