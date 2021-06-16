@@ -110,6 +110,7 @@ if __name__ == '__main__':
                         help='Only process ligands with the given 3 letter '
                              'residue codes (UNK, for example)')
     args = parser.parse_args()
-    if args.pdbid is not None and args.input_file is not None:
-        raise RuntimeError('--pdbid and --input_file are mutually exclusive')
+    if isinstance(args.pdbid, str) + isinstance(args.input_file, str) != 1:
+        raise RuntimeError(
+            'Specify exactly one of either --pdbid or --input_file.')
     attribute(args)
