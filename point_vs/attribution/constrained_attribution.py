@@ -224,22 +224,3 @@ if __name__ == '__main__':
     graph_fname += '.png'
 
     dist_vs_score(df, graph_fname, title)
-
-exit(0)
-dist_vs_score(constrained_attribution(
-    '~/notebooks/data/LieJune2021/LieConv/12L_3aug_flat_lr/checkpoints/ckpt_epoch_1.pt',
-    'data/from_tom/1Q8T.pdb',
-    'data/from_tom/ligands',
-    'constrained_output'), 'lieconv_constrained.png', 'LieConv')
-
-dist_vs_score(constrained_attribution(
-    '~/notebooks/data/LieJune2021/LieTransJune2021/12L_3aug_flat_lr/checkpoints/ckpt_epoch_1.pt',
-    'data/from_tom/1Q8T.pdb',
-    'data/from_tom/ligands',
-    'constrained_output'), 'lietransformer_constrained.png', 'LieTransformer')
-
-dist_vs_score(constrained_attribution(
-    '~/notebooks/data/egnn_rot_aug/36L_12_nbhd/checkpoints/ckpt_epoch_1.pt',
-    'data/from_tom/1Q8T.pdb',
-    'data/from_tom/ligands',
-    'constrained_output'), 'egnn_constrained.png', 'EGNN')
