@@ -67,11 +67,6 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
         atomic_number_to_index = defaultdict(lambda: max_elem_id)
         atomic_number_to_index.update(atomic_number_to_index)
 
-        if compact:
-            feature_dim = max_elem_id + 2
-        else:
-            feature_dim = (max_elem_id + 1) * 2
-
         triplet_code = self.plcomplex.uid.split(':')[0]
         if len(only_process) and triplet_code not in only_process:
             return
