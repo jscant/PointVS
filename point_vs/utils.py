@@ -16,6 +16,84 @@ import torch
 from matplotlib import pyplot as plt
 
 
+class PositionDict(dict):
+    """Helper class for providing a soft coordinate lookup table.
+
+    Keys should be space-separated strings of coordinates ('x y z'). Values
+    can be anything. The precision with which values are retrieved is specified
+    by <eps> in the constructor. The L2 norm is used to measure distance
+    between an unrecognised query and all of the keys in the dictionary. Any
+    query more than <eps> from all keys will raise a KeyError.
+    """
+
+    def __init__(self, coords_to_values_map={}, eps=1e-3):
+        dict.__init__(self, coords_to_values_map)
+        self.eps = eps
+
+    def __getitem__(self, key):
+        try:
+            return dict.__getitem__(self, key)
+        except KeyError:
+            return self.get_closest_atom(key)
+
+    def get(self, key, default=None):
+        try:
+            return self.__getitem__(key)
+        except KeyError:
+            return default
+
+    def get_closest_atom(self, coord_str):
+        def extract_coords(s):
+            return np.array([float(i) for i in s.replace(',', ' ').split()])
+
+        coords = extract_coords(coord_str)
+        for candidate in self.keys():
+            candidate_coords = extract_coords(candidate)
+            dist = np.linalg.norm(coords - candidate_coords)
+            if dist <= self.eps:
+                return dict.__getitem__(self, candidate)
+
+        raise KeyError('No atoms found within {0} Angstroms of query atom with '
+                       'coords {1}'.format(self.eps, coord_str))
+
+
+def truncate_float(x, precision=3, as_str=False):
+    """Return input x truncated to <precision> dp."""
+    str_x = '{{:.{}f}}'.format(precision + 1).format(x)
+    decimal_pos = str_x.find('.')
+    if decimal_pos == -1:
+        if as_str:
+            return str_x
+        return float(x)
+    after_decimal_value = str_x[decimal_pos + 1:decimal_pos + precision + 1]
+    res_str = str_x[:decimal_pos] + '.' + after_decimal_value
+    if as_str:
+        return res_str
+    return float(res_str)
+
+
+def coords_to_string(coords, precision=3, enforce_exact_decimal_places=True):
+    """Return string representation of truncated coordinates."""
+
+    def enforce_decimal_places(s):
+        if not enforce_exact_decimal_places:
+            return s
+        curr_dp = len(s.split('.')[-1])
+        return s + '0' * max(0, precision - curr_dp)
+
+    def fmt(x):
+        x = truncate_float(x, as_str=True)
+        return enforce_decimal_places(x)
+
+    return ' '.join([fmt(x) for x in coords])
+
+
+def ensure_exact_coords(df, precision=3):
+    df.x = df.x.apply(truncate_float, precision=precision)
+    df.y = df.y.apply(truncate_float, precision=precision)
+    df.z = df.z.apply(truncate_float, precision=precision)
+
+
 def print_df(df):
     """Print pandas dataframe in its entirity (with no truncation)."""
     with pd.option_context('display.max_colwidth', None):
