@@ -140,6 +140,9 @@ class PointCloudDataset(torch.utils.data.Dataset):
         super().__init__(**kwargs)
         self.radius = radius
         self.base_path = Path(base_path).expanduser()
+        if not self.base_path.exists():
+            raise FileNotFoundError(
+                'Dataset {} does not exist.'.format(self.base_path))
         self.polar_hydrogens = polar_hydrogens
         self.use_atomic_numbers = use_atomic_numbers
         self.compact = compact
