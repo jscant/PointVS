@@ -17,7 +17,9 @@ def parse_args():
                              'ligands directory.')
     parser.add_argument('save_path', type=PosixPath,
                         help='Directory in which experiment outputs are '
-                             'stored.')
+                             'stored. If wandb_run and wandb_project are '
+                             'specified, save_path/wandb_project/wandb_run '
+                             'will be used to store results.')
     parser.add_argument('--load_weights', '-l', type=PosixPath, required=False,
                         help='Load a model.')
     parser.add_argument('--test_data_root', '-t', type=PosixPath,

@@ -16,6 +16,7 @@ python3 point_vs.py resnet data/small_chembl_test ~/test_output -r 20014 28
 """
 
 import warnings
+from pathlib import Path
 
 import torch
 import yaml
@@ -62,7 +63,14 @@ if __name__ == '__main__':
 
     # No point even attempting any of this without a GPU
     utils.set_gpu_mode(True)
-    save_path = args.save_path.expanduser()
+    if args.wandb_project is None:
+        save_path = args.save_path.expanduser()
+    elif args.wandb_run is None:
+        raise RuntimeError(
+            'wandb_run must be specified if wandb_project is specified.')
+    else:
+        save_path = Path(
+            args.save_path.expanduser(), args.wandb_project, args.wandb_run)
     save_path.mkdir(parents=True, exist_ok=True)
 
     with open(save_path / 'cmd_args.yaml', 'w') as f:
