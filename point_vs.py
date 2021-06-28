@@ -14,7 +14,7 @@ python3 point_vs.py resnet data/small_chembl_test ~/test_output -r 20014 28
 
 <model> can be either of gnina or restnet.
 """
-
+import socket
 import warnings
 from pathlib import Path
 
@@ -72,6 +72,7 @@ if __name__ == '__main__':
         save_path = Path(
             args.save_path, args.wandb_project, args.wandb_run).expanduser()
     save_path.mkdir(parents=True, exist_ok=True)
+    args.hostname = socket.gethostname()
 
     with open(save_path / 'cmd_args.yaml', 'w') as f:
         yaml.dump(vars(args), f)
