@@ -55,7 +55,7 @@ if __name__ == '__main__':
 
     # Load a yaml if required
     if args.load_args is not None:
-        with open(args.load_args.expanduser(), 'r') as f:
+        with open(Path(args.load_args).expanduser(), 'r') as f:
             loaded_args = yaml.full_load(f)
         for key, value in loaded_args.items():
             if hasattr(args, key):
@@ -64,13 +64,13 @@ if __name__ == '__main__':
     # No point even attempting any of this without a GPU
     utils.set_gpu_mode(True)
     if args.wandb_project is None:
-        save_path = args.save_path.expanduser()
+        save_path = Path(args.save_path).expanduser()
     elif args.wandb_run is None:
         raise RuntimeError(
             'wandb_run must be specified if wandb_project is specified.')
     else:
         save_path = Path(
-            args.save_path.expanduser(), args.wandb_project, args.wandb_run)
+            args.save_path, args.wandb_project, args.wandb_run).expanduser()
     save_path.mkdir(parents=True, exist_ok=True)
 
     with open(save_path / 'cmd_args.yaml', 'w') as f:
