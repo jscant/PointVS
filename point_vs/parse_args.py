@@ -1,7 +1,6 @@
 """Set up rather large command line argument list"""
 
 import argparse
-from pathlib import PosixPath
 
 
 def parse_args():
@@ -9,27 +8,27 @@ def parse_args():
     parser.add_argument('model', type=str,
                         help='Type of point cloud network to use: '
                              'lietransformer, lieconv or egnn')
-    parser.add_argument('train_data_root', type=PosixPath,
+    parser.add_argument('train_data_root', type=str,
                         help='Location of structure training *.parquets files. '
                              'Receptors should be in a directory named '
                              'receptors, with ligands located in their '
                              'specific receptor subdirectory under the '
                              'ligands directory.')
-    parser.add_argument('save_path', type=PosixPath,
+    parser.add_argument('save_path', type=str,
                         help='Directory in which experiment outputs are '
                              'stored. If wandb_run and wandb_project are '
                              'specified, save_path/wandb_project/wandb_run '
                              'will be used to store results.')
-    parser.add_argument('--load_weights', '-l', type=PosixPath, required=False,
+    parser.add_argument('--load_weights', '-l', type=str, required=False,
                         help='Load a model.')
-    parser.add_argument('--test_data_root', '-t', type=PosixPath,
+    parser.add_argument('--test_data_root', '-t', type=str,
                         required=False,
                         help='Location of structure test *.parquets files. '
                              'Receptors should be in a directory named '
                              'receptors, with ligands located in their '
                              'specific receptor subdirectory under the '
                              'ligands directory.')
-    parser.add_argument('--translated_actives', type=PosixPath,
+    parser.add_argument('--translated_actives', type=str,
                         help='Directory in which translated actives are stored.'
                              ' If unspecified, no translated actives will be '
                              'used. The use of translated actives are is '
@@ -68,7 +67,7 @@ def parse_args():
                              'receptor atom to be included in input')
     parser.add_argument('--nbhd', type=int, default=32,
                         help='Number of monte carlo samples for integral')
-    parser.add_argument('--load_args', type=PosixPath,
+    parser.add_argument('--load_args', type=str,
                         help='Load yaml file with command line args. Any args '
                              'specified in the file will overwrite other args '
                              'specified on the command line.')
