@@ -145,6 +145,17 @@ def concat_structs(rec, lig, min_lig_rotation=0):
     min_lig_rotation = np.pi * min_lig_rotation / 180
     lig_struct = pd.read_parquet(lig)
     rec_struct = pd.read_parquet(rec)
+    ############################################################################
+    # Uncommenting the following would result in excluding 'other' atoms:
+
+    # lig_struct = lig_struct[lig_struct.types != 10]
+    # lig_struct.types = lig_struct.types.clip(upper=10)
+    # rec_struct = rec_struct[rec_struct.types != 10]
+    # lig_struct.types = rec_struct.types.clip(upper=10)
+    # rec.struct.types += 11 # (replace the analogous line below)
+    ############################################################################
+    rec_struct.types += 12
+
     if min_lig_rotation:
         lig_coords_init = np.vstack(
             [lig_struct.x, lig_struct.y, lig_struct.z]).T
@@ -157,8 +168,7 @@ def concat_structs(rec, lig, min_lig_rotation=0):
         lig_struct.x = candidate_coords[:, 0]
         lig_struct.y = candidate_coords[:, 1]
         lig_struct.z = candidate_coords[:, 2]
-    # lig_struct = lig_struct[lig_struct.types != 10]
-    # rec_struct = rec_struct[rec_struct.types != 21]
+
     concatted_structs = lig_struct.append(rec_struct, ignore_index=True)
     return concatted_structs
 

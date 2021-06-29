@@ -191,34 +191,40 @@ class PointCloudDataset(torch.utils.data.Dataset):
         # apply random rotations to ALL coordinates?
         self.transformation = uniform_random_rotation if rot else lambda x: x
 
-        # H C N O F P S Cl
-        recognised_atomic_numbers = (6, 7, 8, 9, 15, 16, 17)
-        # various metal ions/halogens which share valence properties
-        other_groupings = ((35, 53), (3, 11, 19), (4, 12, 20), (26, 29, 30))
-        atomic_number_to_index = {
-            num: idx for idx, num in enumerate(recognised_atomic_numbers)
-        }
-        for grouping in other_groupings:
-            atomic_number_to_index.update({elem: max(
-                atomic_number_to_index.values()) + 1 for elem in grouping})
-        if self.polar_hydrogens:
-            atomic_number_to_index.update({
-                1: max(atomic_number_to_index.values()) + 1
-            })
+        if use_atomic_numbers:
+            # H C N O F P S Cl
+            recognised_atomic_numbers = (6, 7, 8, 9, 15, 16, 17)
+            # various metal ions/halogens which share valence properties
+            other_groupings = ((35, 53), (3, 11, 19), (4, 12, 20), (26, 29, 30))
+            atomic_number_to_index = {
+                num: idx for idx, num in enumerate(recognised_atomic_numbers)
+            }
+            for grouping in other_groupings:
+                atomic_number_to_index.update({elem: max(
+                    atomic_number_to_index.values()) + 1 for elem in grouping})
+            if self.polar_hydrogens:
+                atomic_number_to_index.update({
+                    1: max(atomic_number_to_index.values()) + 1
+                })
 
-        # +1 to accommodate for unmapped elements
-        self.max_elem_id = max(atomic_number_to_index.values()) + 1
+            # +1 to accommodate for unmapped elements
+            self.max_feature_id = max(atomic_number_to_index.values()) + 1
 
-        # Any other elements not accounted for given a category of their own
-        self.atomic_number_to_index = defaultdict(lambda: self.max_elem_id)
-        self.atomic_number_to_index.update(atomic_number_to_index)
+            # Any other elements not accounted for given a category of their own
+            self.atomic_number_to_index = defaultdict(
+                lambda: self.max_feature_id)
+            self.atomic_number_to_index.update(atomic_number_to_index)
 
-        self.augmented_active_min_angle = augmented_active_min_angle
+            self.augmented_active_min_angle = augmented_active_min_angle
+        elif polar_hydrogens:
+            self.max_feature_id = 11  # FID = 10 if polar hydrogen
+        else:
+            self.max_feature_id = 10  # No polar hydrogens
 
         if compact:
-            self.feature_dim = self.max_elem_id + 2
+            self.feature_dim = self.max_feature_id + 2
         else:
-            self.feature_dim = (self.max_elem_id + 1) * 2
+            self.feature_dim = (self.max_feature_id + 1) * 2
 
     def __len__(self):
         """Return the total size of the dataset."""
@@ -268,13 +274,13 @@ class PointCloudDataset(torch.utils.data.Dataset):
         if self.use_atomic_numbers:
             struct.types = struct['atomic_number'].map(
                 self.atomic_number_to_index) + struct.bp * (
-                                   self.max_elem_id + 1)
+                                   self.max_feature_id + 1)
         p = torch.from_numpy(
             np.expand_dims(self.transformation(
                 struct[struct.columns[:3]].to_numpy()), 0))
 
         v = torch.unsqueeze(make_bit_vector(
-            struct.types.to_numpy(), self.max_elem_id + 1, self.compact), 0)
+            struct.types.to_numpy(), self.max_feature_id + 1, self.compact), 0)
 
         return (p, v, len(struct)), lig_fname, rec_fname, label
 
