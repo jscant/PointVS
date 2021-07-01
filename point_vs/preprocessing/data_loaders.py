@@ -215,7 +215,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
                 lambda: self.max_feature_id)
             self.atomic_number_to_index.update(atomic_number_to_index)
 
-            self.augmented_active_min_angle = augmented_active_min_angle
+            
         elif polar_hydrogens:
             self.max_feature_id = 11  # FID = 10 if polar hydrogen
         else:
@@ -225,6 +225,8 @@ class PointCloudDataset(torch.utils.data.Dataset):
             self.feature_dim = self.max_feature_id + 2
         else:
             self.feature_dim = (self.max_feature_id + 1) * 2
+            
+        self.augmented_active_min_angle = augmented_active_min_angle
 
     def __len__(self):
         """Return the total size of the dataset."""
