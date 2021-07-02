@@ -13,19 +13,27 @@ using voxelisation can be found
 and LieTransformer with SE(3) equivariance to perform
 [virtual screening](https://en.wikipedia.org/wiki/Virtual_screening).
 
-No installation is required (yet). Dependencies are:
-
+A conda installation is provided:
 ```
-pytorch >= 1.7.1
-LieConv
-LieTransformer
-wandb (optional but strongly recommended for easy graphs and logging)
+git clone https://github.com/jscant/PointVS
+cd PointVS
+conda env create -f environment.yml python=3.8
+conda activate pointvs
 ```
+If you would like to use wandb for logging information on loss, performance and
+hyperparameters (recommended), you must first create an account at
+[wandb.ai](https://wandb.ai). You must then log into your account on your local
+machine by opening a python3 console and executing:
+```
+import wandb
+wandb.init()
+```
+and following the onscreen instructions.
 
 A small working example is:
 
 ```
-python3 lieconv_vs.py lieconv data/small_chembl_test experiments/test_output
+python3 point_vs.py egnn data/small_chembl_test experiments/test_output
 ```
 
 The input structures should be in pandas-readable parquet files, with the ligand and receptor in separate files for memory efficiency. The directory structure should be laid out as follows (the names of the folders `ligands` and `receptors` should be preserved, and directories containing ligand structures should be named \<receptor\_name\>\_[actives|decoys], with receptor structures named \<receptor\_name\>.parquet):
