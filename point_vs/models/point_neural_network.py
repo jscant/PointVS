@@ -169,9 +169,13 @@ class PointNeuralNetwork(nn.Module):
                         'Learning rate (train)': lr
                     }
                     try:
-                        wandb.log(wandb_update_dict)
-                    except wandb.errors.error.Error:
-                        pass  # wandb has not been initialised so ignore
+                        try:
+                            wandb.log(wandb_update_dict)
+                        except wandb.errors.error.Error:
+                            pass  # wandb has not been initialised so ignore
+                    except AttributeError:
+                        # New versions of wandb have different structure
+                        pass
 
                     if scheduler is not None:
                         scheduler.step()
@@ -305,7 +309,7 @@ class PointNeuralNetwork(nn.Module):
         self.optimiser.load_state_dict(checkpoint['optimiser_state_dict'])
         self.epoch = checkpoint['epoch']
         self.losses = checkpoint['losses']
-        print('Sucesfully loaded weights from ', checkpoint_file)
+        print('Sucesfully loaded weights from', checkpoint_file)
 
     def save_loss(self, save_interval):
         """Save the loss information to disk.
