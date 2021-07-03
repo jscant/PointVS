@@ -158,7 +158,7 @@ if __name__ == '__main__':
 
     if args.load_weights is not None:
         with open(
-            Path(args.load_weights.parents[1]).expanduser() / 'model_kwargs.yaml',
+            Path(args.load_weights).parents[1].expanduser() / 'model_kwargs.yaml',
                   'r') as f:
             model_kwargs = yaml.load(f, Loader=yaml.Loader)
 
