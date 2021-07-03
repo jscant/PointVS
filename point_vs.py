@@ -157,7 +157,8 @@ if __name__ == '__main__':
     args_to_record.update(model_kwargs)
 
     if args.load_weights is not None:
-        with open(args.load_weights.parents[1] / 'model_kwargs.yaml',
+        with open(
+            Path(args.load_weights.parents[1]).expanduser() / 'model_kwargs.yaml',
                   'r') as f:
             model_kwargs = yaml.load(f, Loader=yaml.Loader)
 
