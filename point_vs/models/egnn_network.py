@@ -1,3 +1,4 @@
+import torch
 from egnn_pytorch import EGNN as EGNNLayer
 from egnn_pytorch.egnn_pytorch import SiLU, CoorsNorm
 from eqv_transformer.utils import GlobalPool
@@ -116,3 +117,49 @@ class EGNN(PointNeuralNetwork):
 
     def forward(self, x):
         return self.layers(x)
+
+    def _get_min_max(self):
+        """For debugging: print min and max value in each layer."""
+        for i in range(3):
+            print()
+        network = self.layers
+        res = ''
+        min_ = 1e7
+        max_ = -1e7
+        min_abs = 1e7
+        for layer in network:
+            if isinstance(layer, nn.Linear):
+                min_ = min(min_, float(torch.min(layer.weight)))
+                max_ = max(max_, float(torch.max(layer.weight)))
+                min_abs = min(min_abs,
+                              float(torch.min(torch.abs(layer.weight))))
+                res += 'Linear: {0}, {1} {2}\n'.format(
+                    float(torch.min(layer.weight)),
+                    float(torch.max(layer.weight)),
+                    float(torch.min(torch.abs(layer.weight))))
+            if isinstance(layer, Pass):
+                if isinstance(layer.module, nn.Linear):
+                    min_ = min(min_, float(torch.min(layer.module.weight)))
+                    max_ = max(max_, float(torch.max(layer.module.weight)))
+                    min_abs = min(min_abs, float(
+                        torch.min(torch.abs(layer.module.weight))))
+                    res += 'Linear:{0} {1} {2}\n'.format(
+                        float(torch.min(layer.module.weight)),
+                        float(torch.max(layer.module.weight)),
+                        float(torch.min(torch.abs(layer.module.weight))))
+            elif isinstance(layer, EGNNPass):
+                layer = layer.egnn
+                for network_type, network_name in zip(
+                        (layer.edge_mlp, layer.node_mlp, layer.coors_mlp),
+                        ('EGNN-edge', 'EGNN-node', 'EGNN-coors')):
+                    for sublayer in network_type:
+                        if isinstance(sublayer, nn.Linear):
+                            max_ = max(max_, float(torch.max(sublayer.weight)))
+                            min_ = min(min_, float(torch.min(sublayer.weight)))
+                            min_abs = min(min_abs, float(
+                                torch.min(torch.abs(sublayer.weight))))
+                            res += network_name + ': {0} {1} {2}\n'.format(
+                                float(torch.min(sublayer.weight)),
+                                float(torch.max(sublayer.weight)),
+                                float(torch.min(torch.abs(sublayer.weight))))
+        return res[:-1], min_, max_, min_abs
