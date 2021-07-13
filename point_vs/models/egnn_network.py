@@ -129,24 +129,24 @@ class EGNN(PointNeuralNetwork):
         min_abs = 1e7
         for layer in network:
             if isinstance(layer, nn.Linear):
-                min_ = min(min_, float(torch.min(layer.weight)))
-                max_ = max(max_, float(torch.max(layer.weight)))
+                min_ = min(min_, float(torch.min(layer.weight.grad)))
+                max_ = max(max_, float(torch.max(layer.weight.grad)))
                 min_abs = min(min_abs,
-                              float(torch.min(torch.abs(layer.weight))))
+                              float(torch.min(torch.abs(layer.weight.grad))))
                 res += 'Linear: {0}, {1} {2}\n'.format(
-                    float(torch.min(layer.weight)),
-                    float(torch.max(layer.weight)),
-                    float(torch.min(torch.abs(layer.weight))))
+                    float(torch.min(layer.weight.grad)),
+                    float(torch.max(layer.weight.grad)),
+                    float(torch.min(torch.abs(layer.weight.grad))))
             if isinstance(layer, Pass):
                 if isinstance(layer.module, nn.Linear):
-                    min_ = min(min_, float(torch.min(layer.module.weight)))
-                    max_ = max(max_, float(torch.max(layer.module.weight)))
+                    min_ = min(min_, float(torch.min(layer.module.weight.grad)))
+                    max_ = max(max_, float(torch.max(layer.module.weight.grad)))
                     min_abs = min(min_abs, float(
-                        torch.min(torch.abs(layer.module.weight))))
+                        torch.min(torch.abs(layer.module.weight.grad))))
                     res += 'Linear:{0} {1} {2}\n'.format(
-                        float(torch.min(layer.module.weight)),
-                        float(torch.max(layer.module.weight)),
-                        float(torch.min(torch.abs(layer.module.weight))))
+                        float(torch.min(layer.module.weight.grad)),
+                        float(torch.max(layer.module.weight.grad)),
+                        float(torch.min(torch.abs(layer.module.weight.grad))))
             elif isinstance(layer, EGNNPass):
                 layer = layer.egnn
                 for network_type, network_name in zip(
@@ -154,12 +154,15 @@ class EGNN(PointNeuralNetwork):
                         ('EGNN-edge', 'EGNN-node', 'EGNN-coors')):
                     for sublayer in network_type:
                         if isinstance(sublayer, nn.Linear):
-                            max_ = max(max_, float(torch.max(sublayer.weight)))
-                            min_ = min(min_, float(torch.min(sublayer.weight)))
+                            max_ = max(max_, float(
+                                torch.max(sublayer.weight.grad)))
+                            min_ = min(min_, float(
+                                torch.min(sublayer.weight.grad)))
                             min_abs = min(min_abs, float(
-                                torch.min(torch.abs(sublayer.weight))))
+                                torch.min(torch.abs(sublayer.weight.grad))))
                             res += network_name + ': {0} {1} {2}\n'.format(
-                                float(torch.min(sublayer.weight)),
-                                float(torch.max(sublayer.weight)),
-                                float(torch.min(torch.abs(sublayer.weight))))
+                                float(torch.min(sublayer.weight.grad)),
+                                float(torch.max(sublayer.weight.grad)),
+                                float(
+                                    torch.min(torch.abs(sublayer.weight.grad))))
         return res[:-1], min_, max_, min_abs
