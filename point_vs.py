@@ -103,6 +103,8 @@ if __name__ == '__main__':
         use_atomic_numbers=args.use_atomic_numbers, rot=False,
         augmented_actives=args.augmented_actives,
         min_aug_angle=args.min_aug_angle,
+        max_relaxed_rmsd=args.max_relaxed_rmsd,
+        min_inactive_rmsd=args.min_inactive_rmsd,
         polar_hydrogens=args.hydrogens, receptors=train_receptors, mode='train')
 
     # Is a validation set specified?
@@ -112,6 +114,8 @@ if __name__ == '__main__':
             args.test_data_root, receptors=test_receptors, compact=args.compact,
             use_atomic_numbers=args.use_atomic_numbers, radius=args.radius,
             polar_hydrogens=args.hydrogens, batch_size=args.batch_size,
+            max_relaxed_rmsd=args.max_relaxed_rmsd,
+            min_inactive_rmsd=args.min_inactive_rmsd,
             rot=False, mode='val')
 
     args_to_record = vars(args)
@@ -133,7 +137,7 @@ if __name__ == '__main__':
         'dropout': args.dropout,
         'dim_input': train_dl.dataset.feature_dim,
         'dim_output': 1,
-        'dim_hidden': args.channels,  # == 32
+        'dim_hidden': args.channels,
         'num_heads': 8,
         'global_pool': True,
         'global_pool_mean': True,

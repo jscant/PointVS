@@ -10,17 +10,20 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import yaml
 from torch.utils.data import DataLoader
 from torch.utils.data import WeightedRandomSampler
 
-from point_vs.preprocessing.preprocessing import centre_on_ligand, make_box, \
+from point_vs.preprocessing.preprocessing import make_box, \
     concat_structs, make_bit_vector, uniform_random_rotation
 
 
 def get_data_loader(*data_roots, receptors=None, batch_size=32, compact=True,
                     use_atomic_numbers=False, radius=6, rot=True,
                     augmented_actives=0, min_aug_angle=30,
-                    polar_hydrogens=True, mode='train'):
+                    polar_hydrogens=True, mode='train',
+                    max_relaxed_rmsd=None,
+                    min_inactive_rmsd=None):
     """Give a DataLoader from a list of receptors and data roots."""
     ds_kwargs = {
         'receptors': receptors,
@@ -31,6 +34,8 @@ def get_data_loader(*data_roots, receptors=None, batch_size=32, compact=True,
         PointCloudDataset, *data_roots, balanced=True, compact=compact,
         polar_hydrogens=polar_hydrogens, augmented_actives=augmented_actives,
         min_aug_angle=min_aug_angle, use_atomic_numbers=use_atomic_numbers,
+        max_relaxed_rmsd=max_relaxed_rmsd,
+        min_inactive_rmsd=min_inactive_rmsd,
         **ds_kwargs)
     collate = get_collate_fn(ds.feature_dim)
     sampler = ds.sampler if mode == 'train' else None
@@ -41,8 +46,9 @@ def get_data_loader(*data_roots, receptors=None, batch_size=32, compact=True,
 
 def multiple_source_dataset(
         loader_class, *base_paths, receptors=None, polar_hydrogens=True,
-        augmented_actives=0, min_aug_angle=30,
-        compact=True, use_atomic_numbers=False, balanced=True, **kwargs):
+        augmented_actives=0, min_aug_angle=30, max_relaxed_rmsd=None,
+        min_inactive_rmsd=None, compact=True, use_atomic_numbers=False,
+        balanced=True, **kwargs):
     """Concatenate mulitple datasets into one, preserving balanced sampling.
 
     Arguments:
@@ -57,10 +63,12 @@ def multiple_source_dataset(
             decoys (per active in the training set)
         min_aug_angle: minimum angle of rotation for each augmented active (as
             specified in augmented_active_count)
-        use_atomic_numbers: use atomic numbers rather than sminatypes
+        max_relaxed_rmsd:
+        min_inactive_rmsd:
         compact: compress 1hot vectors by using a single bit to
             signify whether atoms are from the receptor or ligand rather
             than using two input bits per atom type
+        use_atomic_numbers: use atomic numbers rather than sminatypes
         balanced: whether to sample probabailistically based on class imbalance.
         kwargs: other keyword arguments for loader_class.
 
@@ -79,6 +87,8 @@ def multiple_source_dataset(
                 augmented_active_count=augmented_actives,
                 augmented_active_min_angle=min_aug_angle,
                 polar_hydrogens=polar_hydrogens,
+                max_relaxed_rmsd=max_relaxed_rmsd,
+                min_inactive_rmsd=min_inactive_rmsd,
                 use_atomic_numbers=use_atomic_numbers, **kwargs)
             labels += list(dataset.labels)
             filenames += dataset.filenames
@@ -110,7 +120,8 @@ class PointCloudDataset(torch.utils.data.Dataset):
     def __init__(self, base_path, radius=12, receptors=None,
                  polar_hydrogens=True, use_atomic_numbers=False,
                  compact=True, rot=False, augmented_active_count=0,
-                 augmented_active_min_angle=90, **kwargs):
+                 augmented_active_min_angle=90, max_relaxed_rmsd=None,
+                 min_inactive_rmsd=None, **kwargs):
         """Initialise dataset.
 
         Arguments:
@@ -134,6 +145,8 @@ class PointCloudDataset(torch.utils.data.Dataset):
                 and used as decoys (per active in the training set)
             augmented_active_min_angle: minimum angle of rotation for each
                 augmented active (as specified in augmented_active_count)
+            max_relaxed_rmsd:
+            min_inactive_rmsd:
             kwargs: keyword arguments passed to the parent class (Dataset).
         """
 
@@ -159,20 +172,47 @@ class PointCloudDataset(torch.utils.data.Dataset):
                     '{}*/*.parquet'.format(receptor)))
 
         filenames = sorted(filenames)
-
         labels = []
-        augmented_active_filenames = []
+        aug_fnames = []
+        confirmed_fnames = []
+
+        if max_relaxed_rmsd is not None or min_inactive_rmsd is not None:
+            rmsd_info_fname = Path(self.base_path, 'rmsd_info.yaml')
+            with open(rmsd_info_fname, 'r') as f:
+                rmsd_info = yaml.load(f, Loader=yaml.FullLoader)
+
         for fname in filenames:
-            if str(fname.parent.name).find('active') == -1:
-                labels.append(0)
+            if max_relaxed_rmsd is None or min_inactive_rmsd is None:
+                if str(fname.parent.name).find('active') == -1:
+                    labels.append(0)
+                else:
+                    labels.append(1)
+                    aug_fnames += [fname] * augmented_active_count
             else:
-                labels.append(1)
-                augmented_active_filenames += [fname] * augmented_active_count
+                pdbid = fname.parent.name.split('_')[0]
+                idx = int(Path(fname.name).stem.split('_')[-1])
+                try:
+                    relaxed_rmsd = rmsd_info[pdbid]['relaxed_rmsd']
+                    docked_rsmds = rmsd_info[pdbid]['docked_rmsd']
+                except KeyError:
+                    continue
+                if str(fname.parent.name).find('active') != -1:
+                    if relaxed_rmsd < max_relaxed_rmsd:
+                        labels.append(1)
+                        aug_fnames += [fname] * augmented_active_count
+                    else:
+                        continue
+                elif docked_rsmds[idx] > min_inactive_rmsd and \
+                        relaxed_rmsd < max_relaxed_rmsd:
+                    labels.append(0)
+                else:
+                    continue
+            confirmed_fnames.append(fname)
 
         self.pre_aug_ds_len = len(filenames)
-        self.filenames = filenames + augmented_active_filenames
-        labels += [0] * len(augmented_active_filenames)
+        self.filenames = confirmed_fnames + aug_fnames
 
+        labels += [0] * len(aug_fnames)
         labels = np.array(labels)
         active_count = np.sum(labels)
         class_sample_count = np.array(
@@ -187,6 +227,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
                 self.sample_weights, len(self.sample_weights)
             )
         self.labels = labels
+        print('There are', len(labels), 'training points in', base_path)
 
         # apply random rotations to ALL coordinates?
         self.transformation = uniform_random_rotation if rot else lambda x: x
@@ -215,7 +256,6 @@ class PointCloudDataset(torch.utils.data.Dataset):
                 lambda: self.max_feature_id)
             self.atomic_number_to_index.update(atomic_number_to_index)
 
-            
         elif polar_hydrogens:
             self.max_feature_id = 11  # FID = 10 if polar hydrogen
         else:
@@ -225,7 +265,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
             self.feature_dim = self.max_feature_id + 2
         else:
             self.feature_dim = (self.max_feature_id + 1) * 2
-            
+
         self.augmented_active_min_angle = augmented_active_min_angle
 
     def __len__(self):
@@ -266,8 +306,8 @@ class PointCloudDataset(torch.utils.data.Dataset):
         else:
             aug_angle = self.augmented_active_min_angle
 
-        struct = make_box(centre_on_ligand(
-            concat_structs(rec_fname, lig_fname, min_lig_rotation=aug_angle)),
+        struct = make_box(concat_structs(
+            rec_fname, lig_fname, min_lig_rotation=aug_angle),
             radius=self.radius, relative_to_ligand=False)
 
         if not self.polar_hydrogens:
