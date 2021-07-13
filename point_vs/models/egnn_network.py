@@ -106,7 +106,7 @@ class EGNN(PointNeuralNetwork):
         egnn = lambda: layer_class(
             dim=k, m_dim=m_dim, norm_coors=norm_coords, norm_feats=norm_feats,
             dropout=dropout, fourier_features=fourier_features,
-            num_nearest_neighbors=nbhd, init_eps=5e-4)
+            num_nearest_neighbors=nbhd, init_eps=1)
 
         return nn.Sequential(
             Pass(nn.Linear(dim_input, k), dim=1),
