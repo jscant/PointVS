@@ -140,6 +140,7 @@ class PointNeuralNetwork(nn.Module):
                             print(self._get_min_max())
                         raise RuntimeError('We have hit a NaN loss value.')
                     torch.nn.utils.clip_grad_value_(self.parameters(), 1.0)
+
                     self.optimiser.step()
                     self.losses.append(loss)
                     lr = self.optimiser.param_groups[0]['lr']
