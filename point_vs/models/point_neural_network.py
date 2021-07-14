@@ -46,7 +46,7 @@ class PointNeuralNetwork(nn.Module):
 
         self.layers = self.build_net(**model_kwargs)
         self.optimiser = torch.optim.Adam(
-            self.parameters(), lr=self.lr, weight_decay=weight_decay)
+            self.parameters(), lr=self.lr, weight_decay=weight_decay, eps=1e-3)
 
         self.use_1cycle = use_1cycle
 
@@ -140,7 +140,6 @@ class PointNeuralNetwork(nn.Module):
                             print(self._get_min_max())
                         raise RuntimeError('We have hit a NaN loss value.')
                     torch.nn.utils.clip_grad_value_(self.parameters(), 1.0)
-
                     self.optimiser.step()
                     self.losses.append(loss)
                     lr = self.optimiser.param_groups[0]['lr']
