@@ -106,7 +106,7 @@ class EGNN(PointNeuralNetwork):
         egnn = lambda: layer_class(
             dim=k, m_dim=m_dim, norm_coors=norm_coords, norm_feats=norm_feats,
             dropout=dropout, fourier_features=fourier_features,
-            num_nearest_neighbors=nbhd, init_eps=1)
+            num_nearest_neighbors=nbhd, init_eps=1e-2)
 
         return nn.Sequential(
             Pass(nn.Linear(dim_input, k), dim=1),
@@ -154,15 +154,18 @@ class EGNN(PointNeuralNetwork):
                         ('EGNN-edge', 'EGNN-node', 'EGNN-coors')):
                     for sublayer in network_type:
                         if isinstance(sublayer, nn.Linear):
-                            max_ = max(max_, float(
-                                torch.max(sublayer.weight.grad)))
-                            min_ = min(min_, float(
-                                torch.min(sublayer.weight.grad)))
-                            min_abs = min(min_abs, float(
-                                torch.min(torch.abs(sublayer.weight.grad))))
-                            res += network_name + ': {0} {1} {2}\n'.format(
-                                float(torch.min(sublayer.weight.grad)),
-                                float(torch.max(sublayer.weight.grad)),
-                                float(
+                            try:
+                                max_ = max(max_, float(
+                                    torch.max(sublayer.weight.grad)))
+                                min_ = min(min_, float(
+                                    torch.min(sublayer.weight.grad)))
+                                min_abs = min(min_abs, float(
                                     torch.min(torch.abs(sublayer.weight.grad))))
+                                res += network_name + ': {0} {1} {2}\n'.format(
+                                    float(torch.min(sublayer.weight.grad)),
+                                    float(torch.max(sublayer.weight.grad)),
+                                    float(
+                                        torch.min(torch.abs(sublayer.weight.grad))))
+                            except TypeError:
+                                res += 'NONE_LAYER\n'
         return res[:-1], min_, max_, min_abs
