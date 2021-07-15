@@ -41,11 +41,11 @@ def cdhit_output_to_graph(fname):
     with open(Path(fname).expanduser(), 'r') as f:
         cluster = set()
         for line in f.readlines():
-            if line.startswith('>Cluster') and len(cluster):
+            if line.startswith('>Cluster'):
                 for s in cluster:
                     g[s] += list(cluster.difference({s}))
                 cluster.clear()
-            elif not line.startswith('>Cluster'):
+            else:
                 pdbid = line.split('>')[-1].split('_')[0]
                 cluster.add(pdbid)
                 pdbids.add(pdbid)
