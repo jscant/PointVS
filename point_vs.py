@@ -159,6 +159,7 @@ if __name__ == '__main__':
     }
 
     args_to_record.update(model_kwargs)
+    args_to_record.update({'slurm_job_id': os.getenv('SLURM_JOBID')})
 
     if args.load_weights is not None:
         with open(Path(args.load_weights).parents[1].expanduser() /
