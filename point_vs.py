@@ -14,6 +14,7 @@ python3 point_vs.py resnet data/small_chembl_test ~/test_output -r 20014 28
 
 <model> can be either of gnina or restnet.
 """
+import os
 import socket
 import warnings
 from pathlib import Path
