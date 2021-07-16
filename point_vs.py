@@ -74,6 +74,7 @@ if __name__ == '__main__':
             args.save_path, args.wandb_project, args.wandb_run).expanduser()
     save_path.mkdir(parents=True, exist_ok=True)
     args.hostname = socket.gethostname()
+    args.slurm_jobid = os.getenv('SLURM_JOBID')
 
     with open(save_path / 'cmd_args.yaml', 'w') as f:
         yaml.dump(vars(args), f)
@@ -160,7 +161,6 @@ if __name__ == '__main__':
     }
 
     args_to_record.update(model_kwargs)
-    args_to_record.update({'slurm_job_id': os.getenv('SLURM_JOBID')})
 
     if args.load_weights is not None:
         with open(Path(args.load_weights).parents[1].expanduser() /
