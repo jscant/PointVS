@@ -115,7 +115,7 @@ if __name__ == '__main__':
             use_atomic_numbers=args.use_atomic_numbers, radius=args.radius,
             polar_hydrogens=args.hydrogens, batch_size=args.batch_size,
             max_relaxed_rmsd=args.max_relaxed_rmsd,
-            min_inactive_rmsd=args.min_inactive_rmsd,
+            min_inactive_rmsd=0.0,
             rot=False, mode='val')
 
     args_to_record = vars(args)
@@ -161,9 +161,8 @@ if __name__ == '__main__':
     args_to_record.update(model_kwargs)
 
     if args.load_weights is not None:
-        with open(
-            Path(args.load_weights).parents[1].expanduser() / 'model_kwargs.yaml',
-                  'r') as f:
+        with open(Path(args.load_weights).parents[1].expanduser() /
+                  'model_kwargs.yaml', 'r') as f:
             model_kwargs = yaml.load(f, Loader=yaml.Loader)
 
     wandb_init_kwargs = {
