@@ -26,7 +26,9 @@ class PositionSet(set):
     than <eps> from all keys will be considered outside of the set.
     """
 
-    def __init__(self, coords_set=set(), eps=1e-3):
+    def __init__(self, coords_set=None, eps=1e-3):
+        if coords_set is None:
+            coords_set = set()
         set.__init__(self, coords_set)
         self.eps = eps
 
@@ -58,7 +60,9 @@ class PositionDict(dict):
     query more than <eps> from all keys will raise a KeyError.
     """
 
-    def __init__(self, coords_to_values_map={}, eps=1e-3):
+    def __init__(self, coords_to_values_map=None, eps=1e-3):
+        if coords_to_values_map is None:
+            coords_to_values_map = {}
         dict.__init__(self, coords_to_values_map)
         self.eps = eps
 
@@ -180,6 +184,9 @@ def mkdir(path):
     return path
 
 
+_use_gpu = False
+
+
 def set_gpu_mode(mode):
     """Global usage of GPU."""
     global _use_gpu
@@ -265,14 +272,14 @@ def print_with_overwrite(*s, spacer=' '):
     """
     s = '\n'.join(
         [spacer.join([str(word) for word in substring]) for substring in s])
-    ERASE = '\x1b[2K'
-    UP_ONE = '\x1b[1A'
+    erase = '\x1b[2K'
+    up_one = '\x1b[1A'
     lines = s.split('\n')
     n_lines = len(lines)
     console_width = shutil.get_terminal_size((0, 20)).columns
     for idx in range(n_lines):
         lines[idx] += ' ' * max(0, console_width - len(lines[idx]))
-    print((ERASE + UP_ONE) * (n_lines - 1) + s, end='\r', flush=True)
+    print((erase + up_one) * (n_lines - 1) + s, end='\r', flush=True)
 
 
 def plot_with_smoothing(y, gap=100, figsize=(12, 7.5), ax=None):
