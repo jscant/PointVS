@@ -166,6 +166,7 @@ if __name__ == '__main__':
         with open(Path(args.load_weights).parents[1].expanduser() /
                   'model_kwargs.yaml', 'r') as f:
             model_kwargs = yaml.load(f, Loader=yaml.Loader)
+            model_kwargs['group'] = SE3(0.2)
 
     wandb_init_kwargs = {
         'project': args.wandb_project, 'allow_val_change': True,
