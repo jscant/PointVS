@@ -16,6 +16,38 @@ import torch
 from matplotlib import pyplot as plt
 
 
+class PositionSet(set):
+    """Helper class for providing a set of coordinates with soft lookup.
+
+    Keys should be space-separated strings of coordinates ('x y z'). The
+    precision with which values are retrieved is specified by <eps> in the
+    constructor. The L2 norm is used to measure distance between an
+    unrecognised query and all of the keys in the dictionary. Any query more
+    than <eps> from all keys will be considered outside of the set.
+    """
+
+    def __init__(self, coords_set=set(), eps=1e-3):
+        set.__init__(self, coords_set)
+        self.eps = eps
+
+    def __contains__(self, key):
+        if set.__contains__(self, key):
+            return True
+        return self.get_closest_atom(key)
+
+    def get_closest_atom(self, coord_str):
+        def extract_coords(s):
+            return np.array([float(i) for i in s.replace(',', ' ').split()])
+
+        coords = extract_coords(coord_str)
+        for candidate in self:
+            candidate_coords = extract_coords(candidate)
+            dist = np.linalg.norm(coords - candidate_coords)
+            if dist <= self.eps:
+                return True
+        return False
+
+
 class PositionDict(dict):
     """Helper class for providing a soft coordinate lookup table.
 
@@ -55,6 +87,10 @@ class PositionDict(dict):
 
         raise KeyError('No atoms found within {0} Angstroms of query atom with '
                        'coords {1}'.format(self.eps, coord_str))
+
+
+def ensure_writable(path):
+    mkdir(path.parent)
 
 
 def truncate_float(x, precision=3, as_str=False):
@@ -118,7 +154,7 @@ def no_return_parallelise(func, *args, cpus=-1):
         args[idx] = [args[idx]] * iterable_len
 
     inputs = list(zip(*args))
-    with mp.get_context('spawn').Pool(processes=cpus) as pool:
+    with mp.get_context('forkserver').Pool(processes=cpus) as pool:
         pool.starmap(func, inputs)
 
 
