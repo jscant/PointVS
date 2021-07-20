@@ -2,13 +2,15 @@ from collections import defaultdict
 
 import numpy as np
 import torch
+from einops import repeat
+from pandas import DataFrame
 from plip.basic.remote import VisualizerData
 from plip.visualization.pymol import PyMOLVisualizer
 from pymol import cmd
 
 from point_vs.models.point_neural_network import to_numpy
-from point_vs.preprocessing.preprocessing import make_bit_vector
-from point_vs.utils import coords_to_string, truncate_float, PositionDict
+from point_vs.preprocessing.preprocessing import make_bit_vector, make_box
+from point_vs.utils import coords_to_string, PositionDict
 
 
 class VisualizerDataWithMolecularInfo(VisualizerData):
@@ -28,88 +30,80 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
             self, parser, only_process, model, attribution_fn, model_args,
             quiet=False):
 
-        def find_ligand_centre(ligand):
-            """Calculate the mean coordinates of all ligand atoms."""
-            positions = []
-            for atom in ligand.molecule.atoms:
-                positions.append(atom.coords)
-            mean = np.mean(np.array(positions), axis=0)
-            return np.array([truncate_float(i) for i in mean])
-
         bs = model_args['batch_size']
         radius = model_args['radius']
         polar_hydrogens = model_args['hydrogens']
         compact = model_args['compact']
         use_atomic_numbers = model_args['use_atomic_numbers']
 
+        triplet_code = self.plcomplex.uid.split(':')[0]
+        if len(only_process) and triplet_code not in only_process:
+            return None, None
+
         df = parser.mol_calculate_interactions(
             self.plcomplex.mol, self.plcomplex.pli)
 
-        # H C N O F P S Cl
-        recognised_atomic_numbers = (6, 7, 8, 9, 15, 16, 17)
-        # various metal ions/halogens which share valence properties
-        other_groupings = ((35, 53), (3, 11, 19), (4, 12, 20), (26, 29, 30))
-        atomic_number_to_index = {
-            num: idx for idx, num in enumerate(recognised_atomic_numbers)
-        }
-        for grouping in other_groupings:
-            atomic_number_to_index.update({elem: max(
-                atomic_number_to_index.values()) + 1 for elem in grouping})
-        if polar_hydrogens:
-            atomic_number_to_index.update({
-                1: max(atomic_number_to_index.values()) + 1
-            })
-
-        # +1 to accommodate for unmapped elements
-        max_elem_id = max(atomic_number_to_index.values()) + 1
-
-        # Any other elements not accounted for given a category of their own
-        atomic_number_to_index = defaultdict(lambda: max_elem_id)
-        atomic_number_to_index.update(atomic_number_to_index)
-
-        triplet_code = self.plcomplex.uid.split(':')[0]
-        if len(only_process) and triplet_code not in only_process:
-            return
-
         if not quiet:
             print('Attributing scores to site:', self.plcomplex.uid)
-        mean_x, mean_y, mean_z = find_ligand_centre(self.plcomplex.ligand)
 
-        df['x'] -= mean_x
-        df['y'] -= mean_y
-        df['z'] -= mean_z
-        df['sq_dist'] = df['x'] ** 2 + df['y'] ** 2 + df['z'] ** 2
-        df = df[df.sq_dist < radius ** 2].copy()
-        df['x'] += mean_x
-        df['y'] += mean_y
-        df['z'] += mean_z
-        del df['sq_dist']
+        df = make_box(df, radius=radius, relative_to_ligand=False)
 
+        if use_atomic_numbers:
+            # H C N O F P S Cl
+            recognised_atomic_numbers = (6, 7, 8, 9, 15, 16, 17)
+            # various metal ions/halogens which share valence properties
+            other_groupings = ((35, 53), (3, 11, 19), (4, 12, 20), (26, 29, 30))
+            atomic_number_to_index = {
+                num: idx for idx, num in enumerate(recognised_atomic_numbers)
+            }
+            for grouping in other_groupings:
+                atomic_number_to_index.update({elem: max(
+                    atomic_number_to_index.values()) + 1 for elem in grouping})
+            if polar_hydrogens:
+                atomic_number_to_index.update({
+                    1: max(atomic_number_to_index.values()) + 1
+                })
+
+            # +1 to accommodate for unmapped elements
+            max_feature_id = max(atomic_number_to_index.values()) + 1
+
+            # Any other elements not accounted for given a category of their own
+            atomic_number_to_index = defaultdict(lambda: max_feature_id)
+            atomic_number_to_index.update(atomic_number_to_index)
+            df.types = df['atomic_number'].map(
+                atomic_number_to_index) + df.bp * (max_feature_id + 1)
+
+        elif polar_hydrogens:
+            max_feature_id = 11
+        else:
+            max_feature_id = 10
         if not polar_hydrogens:
             df = df[df['atomic_number'] > 1]
-        if use_atomic_numbers:
-            df.types = df['atomic_number'].map(
-                atomic_number_to_index) + df.bp * (max_elem_id + 1)
 
-        p = torch.from_numpy(
-            np.expand_dims(df[df.columns[1:4]].to_numpy(), 0).astype('float32'))
+        coords = np.vstack([df.x.to_numpy(), df.y.to_numpy(), df.z.to_numpy()]).T
 
-        m = torch.from_numpy(np.ones((1, len(df)))).bool()
+        p = torch.from_numpy(coords).float()
+        p = repeat(p, 'n d -> b n d', b=1)
 
-        v = torch.unsqueeze(make_bit_vector(
-            df.types.to_numpy(), max_elem_id + 1, compact), 0).float()
+        m = torch.from_numpy(np.ones((len(df),))).bool()
+        m = repeat(m, 'n -> b n', b=1)
 
-        model = model.eval().cuda()
-        if not quiet or 1:
-            print('Original score:', float(to_numpy(
-                torch.sigmoid(model((p.cuda(), v.cuda(), m.cuda()))))))
+        v = make_bit_vector(
+            df.types.to_numpy(), max_feature_id + 1, compact).float()
+        v = repeat(v, 'n d -> b n d', b=1)
+
+        model = model.eval().cuda().train()
+        score = float(to_numpy(
+            torch.sigmoid(model((p.cuda(), v.cuda(), m.cuda()))[0, ...])))
+        if not quiet:
+            print('Original score: {:.4}'.format(score))
 
         model_labels = attribution_fn(
             model, p.cuda(), v.cuda(), m.cuda(), bs=bs)
         df['attribution'] = model_labels
         df['any_interaction'] = df['hba'] | df['hbd'] | df['pistacking']
-        df.sort_values(by='attribution', ascending=False, inplace=True)
-        return df
+
+        return score, df
 
     def colour_b_factors_pdb(
             self, model, parser, attribution_fn, results_fname, model_args,
@@ -142,8 +136,10 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                 0, '(all)', 'b=modify_bfactor(x, y, z)', space=space,
                 quiet=True)
 
-        df = self.score_atoms(
+        score, df = self.score_atoms(
             parser, only_process, model, attribution_fn, model_args)
+        if not isinstance(df, DataFrame):
+            return None, None
 
         model_labels = df['attribution'].to_numpy()
         x, y, z = df['x'].to_numpy(), df['y'].to_numpy(), df['z'].to_numpy()
@@ -172,7 +168,5 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
         cmd.spectrum(
             'b', 'red_white_green', minimum=-max_absolute_bfactor,
             maximum=max_absolute_bfactor)
-        cmd.show('sticks', 'b > 0')
         cmd.rebuild()
-
-        return df
+        return score, df

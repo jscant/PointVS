@@ -73,23 +73,25 @@ def make_box(struct, radius=4, relative_to_ligand=True):
     """
 
     def extract_coords(bp):
-        ligand = struct[struct.bp == bp]
+        entity = struct[(struct.bp == bp) & (struct.atomic_number > 1)]
         return np.vstack(
-            [ligand.x.to_numpy(), ligand.y.to_numpy(), ligand.z.to_numpy()]).T
+            [entity.x.to_numpy(), entity.y.to_numpy(), entity.z.to_numpy()]).T
 
     ligand_np = extract_coords(0)
     receptor_np = extract_coords(1)
-
     ligand_centre = np.mean(ligand_np, axis=0)
+
     struct['sq_dist'] = ((struct.x - ligand_centre[0]) ** 2 +
                          (struct.y - ligand_centre[1]) ** 2 +
                          (struct.z - ligand_centre[2]) ** 2)
 
     if not relative_to_ligand:
-        struct = struct[struct.sq_dist < radius ** 2].copy()
+        struct = struct[(struct.sq_dist < radius ** 2) | (struct.bp == 0)].copy()
+        del struct['sq_dist']
         return struct
 
-    struct = struct[struct.sq_dist < 10].copy()
+    struct = struct[struct.sq_dist < 12].copy()
+    del struct['sq_dist']
     ligand = struct[struct.bp == 0].copy()
     receptor = struct[struct.bp == 1].copy()
     ligand_np = extract_coords(0)
@@ -105,7 +107,8 @@ def make_box(struct, radius=4, relative_to_ligand=True):
     receptor['include'] = include
     receptor = receptor[receptor.include == 1]
     result = ligand.append(receptor, ignore_index=True)
-    return result[result.columns[:-2]]
+    del result['include']
+    return result
 
 
 def make_bit_vector(atom_types, n_atom_types, compact=True):

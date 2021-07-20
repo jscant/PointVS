@@ -60,12 +60,17 @@ def score_structure(rec, lig, pdb_output_fname, model, model_args,
     merge_structures(rec, lig, output_fname=pdb_output_fname)
     attribution_fn = {'masking': masking, 'cam': cam}[attribution_type]
 
-    return score_pdb(model, attribution_fn, pdb_output_fname, output_path,
-                     model_args=model_args, only_process=['UNK'],
-                     quiet=True)[0]
+    try:
+        return score_pdb(model, attribution_fn, pdb_output_fname, output_path,
+                         model_args=model_args, only_process=['UNK'],
+                         quiet=True)[0]
+    except IndexError:
+        return
 
 
 def extract_xyz_to_score_map(df):
+    if df is None:
+        return
     xs, ys, zs = df['x'].to_numpy(), df['y'].to_numpy(), df['z'].to_numpy()
     scores = df['attribution'].to_numpy()
     xyz_to_score = {}
@@ -101,7 +106,7 @@ def constrained_attribution(model_weights, rec_pdb, lig_input_dir,
     for lig in Path(lig_input_dir).expanduser().glob('*.sdf'):
         print(lig)
         concat_pdb_fname = pdb_output_dir / (lig.name.split('.')[0] + '.pdb')
-        path_to_xyz_scores[str(lig)] = extract_xyz_to_score_map(score_structure(
+        xyz_to_score_map = extract_xyz_to_score_map(score_structure(
             rec=rec_pdb,
             lig=lig,
             pdb_output_fname=concat_pdb_fname,
@@ -110,7 +115,9 @@ def constrained_attribution(model_weights, rec_pdb, lig_input_dir,
             output_path=output_dir,
             attribution_type=attribution_type
         ))
-        mols[str(lig)] = Chem.SDMolSupplier(str(lig), True, False)[0]
+        if xyz_to_score_map is not None:
+            path_to_xyz_scores[str(lig)] = xyz_to_score_map
+            mols[str(lig)] = Chem.SDMolSupplier(str(lig), True, False)[0]
 
     maximum_common_substructure = Chem.MolFromSmarts(
         FindMCS(list(mols.values())).smartsString)
@@ -120,10 +127,11 @@ def constrained_attribution(model_weights, rec_pdb, lig_input_dir,
         mol = mols[path]
         matches = mol.GetSubstructMatches(maximum_common_substructure)
         if len(matches) != 1:
-            raise AttributeError(
-                'There are {0} substructures matches for ligand {1}; there '
-                'should be exactly one per ligand.'.format(len(matches),
-                                                           path))
+            print('There are {0} substructures matches for ligand {1}; there '
+                  'should be exactly one per ligand. Skippping.'.format(
+                len(matches), path))
+            continue
+
         indices = matches[0]
         conf = mol.GetConformer()
         xyz_to_scores = PositionDict(path_to_xyz_scores[path], eps=0.01)
@@ -154,7 +162,7 @@ def dist_vs_score(scores_dict, output_fname, title):
                 np.array([float(i) for i in coords.split()]))
             atomic_numbers[atom_idx] = score_struct.atomic_number
 
-    rows = (len(scores) // 4) + min(1, len(scores) % 4)
+    rows = max(1, (len(scores) // 4) + min(1, len(scores) % 4))
     fig, axes = plt.subplots(
         rows, 4, sharex=True, sharey=True, squeeze=True, figsize=(25, 5 * rows))
     axes = axes.reshape((-1, 1)).squeeze()
@@ -193,7 +201,7 @@ def dist_vs_score(scores_dict, output_fname, title):
             atom_idx, atomic_numbers[atom_idx]))
 
     plt.title(title)
-    plt.savefig(Path(output_fname).expanduser())
+    plt.savefig(Path(output_fname).expanduser(), dpi=300)
     plt.show()
 
 
@@ -223,4 +231,4 @@ if __name__ == '__main__':
     graph_fname = 'output' if title == '' else title.lower().replace(' ', '_')
     graph_fname += '.png'
 
-    dist_vs_score(df, graph_fname, title)
+    dist_vs_score(df, Path(args.output_dir).expanduser() / graph_fname, title)

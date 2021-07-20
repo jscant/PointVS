@@ -106,22 +106,20 @@ def visualize_in_pymol(
             [hetid, plcomplex.chain, plcomplex.position]))).expanduser()
 
     parser = PDBInteractionParser()
-    df = vis.colour_b_factors_pdb(
+    score, df = vis.colour_b_factors_pdb(
         model, attribution_fn=attribution_fn, parser=parser,
         results_fname=results_fname, model_args=model_args,
         only_process=only_process)
 
     if not isinstance(df, DataFrame):
-        return
+        return None, None
 
     vis.refinements()
-
     vis.zoom_to_ligand()
-
     vis.selections_cleanup()
-
     vis.selections_group()
     vis.additional_cleanup()
+
     if config.DNARECEPTOR:
         # Rename Cartoon selection to Line selection and change repr.
         cmd.set_name('%sCartoon' % plcomplex.pdbid, '%sLines' % plcomplex.pdbid)
@@ -144,7 +142,7 @@ def visualize_in_pymol(
     if config.PICS:
         vis.save_picture(config.OUTPATH, filename)
 
-    return df
+    return score, df
 
 
 def score_pdb(
@@ -183,7 +181,7 @@ def score_pdb(
             vis.ligname = 'Intra%s' % plcomplex.chain
 
         parser = PDBInteractionParser()
-        df = vis.score_atoms(
+        score, df = vis.score_atoms(
             parser, only_process, model, attribution_fn, model_args=model_args,
             quiet=quiet)
         return df
@@ -202,14 +200,6 @@ def score_and_colour_pdb(
     outpath = str(Path(outpath).expanduser())
     pdbfile = str(Path(pdbfile).expanduser())
     mol.output_path = outpath
-
-    # config.NOHYDRO = False
-
-    # basename = Path(pdbfile).name.split('.')[0]
-    # output_path = Path(outpath, '{}_protonated.pdb'.format(basename))
-    # os.system('obabel {0} -O{1} --addpolarh'.format(
-    #    pdbfile, output_path))
-    # logger.info(f'protonated structure written to {output_path}')
     mol.load_pdb(pdbfile, as_string=False)
 
     for ligand in mol.ligands:
@@ -221,10 +211,16 @@ def score_and_colour_pdb(
         mol.interaction_sets)
                  if not len(mol.interaction_sets[site].interacting_res) == 0]
 
-    dfs = [visualize_in_pymol(model, attribution_fn=attribution_fn,
-                              output_dir=outpath, plcomplex=plcomplex,
-                              model_args=model_args,
-                              only_process=only_process)
-           for plcomplex in complexes]
-    dfs = [df for df in dfs if df is not None]
+    dfs = {
+        plcomplex.uid: visualize_in_pymol(
+            model,
+            attribution_fn=attribution_fn,
+            output_dir=outpath,
+            plcomplex=plcomplex,
+            model_args=model_args,
+            only_process=only_process)
+        for plcomplex in complexes
+    }
+    dfs = {lig_id: (score, df) for lig_id, (score, df)
+           in dfs.items() if df is not None}
     return dfs

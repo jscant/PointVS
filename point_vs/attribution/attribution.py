@@ -4,16 +4,23 @@ import argparse
 import urllib
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use('agg')
+
 import yaml
+from matplotlib import pyplot as plt
 from plip.basic.supplemental import extract_pdbid
 from plip.exchange.webservices import fetch_pdb
-
+from sklearn.metrics import average_precision_score, \
+    precision_recall_curve
+from lie_conv.lieGroups import SE3
 from point_vs.attribution.attribution_fns import masking, cam
 from point_vs.attribution.process_pdb import score_and_colour_pdb
 from point_vs.models.egnn_network import EGNN
 from point_vs.models.lie_conv import LieResNet
 from point_vs.models.lie_transformer import EquivariantTransformer
-from point_vs.utils import mkdir
+from point_vs.utils import mkdir, ensure_writable
 
 ALLOWED_METHODS = ('masking', 'cam')
 
@@ -52,6 +59,7 @@ def load_model(weights_file):
     model_path = Path(weights_file).expanduser()
     with open(model_path.parents[1] / 'model_kwargs.yaml', 'r') as f:
         model_kwargs = yaml.load(f, Loader=yaml.Loader)
+    model_kwargs['group'] = SE3(0.2)
     with open(model_path.parents[1] / 'cmd_args.yaml', 'r') as f:
         cmd_line_args = yaml.load(f, Loader=yaml.Loader)
 
@@ -68,9 +76,38 @@ def load_model(weights_file):
                         silent=True, **model_kwargs)
 
     model.load_weights(model_path)
-    model.eval()
+    model = model.eval()
 
     return model, model_kwargs, cmd_line_args
+
+
+def precision_recall(df, save_path=None):
+    attributions = df['attribution'].to_numpy()
+    attribution_range = max(attributions) - min(attributions)
+    normalised_attributions = (attributions -
+                               min(attributions)) / attribution_range
+    interactions = df['any_interaction'].to_numpy()
+    # interactions = (df['hbd'] | df['hba']).to_numpy()
+    random_average_precision = sum(interactions) / len(interactions)
+    average_precision = average_precision_score(
+        interactions, normalised_attributions)
+    print('Average precision (random classifier): {:.3f}'.format(
+        random_average_precision))
+    print('Average precision (neural network)   : {:.3f}'.format(
+        average_precision))
+    precision, recall, thresholds = precision_recall_curve(
+        interactions, normalised_attributions)
+    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+    ax.plot(recall, precision, 'k-')
+    ax.set_title('Precision-recall plot')
+    ax.set_xlabel('Recall')
+    ax.set_ylabel('Precision')
+    ax.set_xlim([-0.05, 1.05])
+    ax.set_ylim([-0.05, 1.05])
+    if save_path is not None:
+        ensure_writable(save_path)
+        plt.savefig(str(Path(save_path).expanduser()), dpi=100)
+    return random_average_precision, average_precision
 
 
 def attribute(args):
@@ -88,10 +125,20 @@ def attribute(args):
 
     attribution_fn = {'masking': masking, 'cam': cam}[args.attribution_type]
 
-    score_and_colour_pdb(model, attribution_fn,
-                         str(pdbpath), str(output_dir),
-                         model_args=cmd_line_args,
-                         only_process=args.only_process)
+    dfs = score_and_colour_pdb(model, attribution_fn,
+                               str(pdbpath), str(output_dir),
+                               model_args=cmd_line_args,
+                               only_process=args.only_process)
+    precision_str = 'pdbid,lig:chain:res,rnd_avg_precision,model_avg_precision,score\n'
+    for lig_id, (score, df) in dfs.items():
+        r_ap, ap = precision_recall(
+            df, save_path=Path(output_dir, 'precision_recall_{}.png'.format(
+                lig_id.replace(':', '_'))))
+        precision_str += '{0},{1},{2:.4f},{3:.4f},{4:.4f}\n'.format(
+            args.pdbid, lig_id, r_ap, ap, score)
+        print()
+    with open(output_dir / 'average_precisions.txt', 'w') as f:
+        f.write(precision_str)
 
 
 if __name__ == '__main__':

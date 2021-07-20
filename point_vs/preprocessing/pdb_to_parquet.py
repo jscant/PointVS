@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 from openbabel import openbabel
 
-from point_vs.utils import mkdir, no_return_parallelise
+from point_vs.utils import mkdir, no_return_parallelise, coords_to_string, PositionSet
 
 try:
     from openbabel import pybel
@@ -533,7 +533,7 @@ class PDBFileParser:
             ['Oxygen', 'OxygenXSAcceptor'],
             ['OxygenXSDonor', 'OxygenXSDonorAcceptor'],
             ['Sulfur', 'SulfurAcceptor'],
-            ['Phosphorus'],
+            ['Phosphorus'],  # == 9
         ]
         out_dict = {}
         generic = []
@@ -545,7 +545,7 @@ class PDBFileParser:
             if i not in out_dict.keys():
                 generic.append(i)
 
-        generic_type = len(types)
+        generic_type = len(types)  # == 10
         for other_type in generic:
             out_dict[other_type] = generic_type
         return out_dict
@@ -681,8 +681,10 @@ class PDBFileParser:
 
         return molecules
 
-    def obmol_to_parquet(self, mol, add_polar_hydrogens):
-        xs, ys, zs, atomic_nums, types = [], [], [], [], []
+    def get_coords_and_types_info(
+            self, mol, all_ligand_coords=None, add_polar_hydrogens=True):
+        xs, ys, zs, atomic_nums, types, bp = [], [], [], [], [], []
+        max_types_value = max(self.type_map.values()) + 2
         for atom in mol:
             atomic_num = atom.atomicnum
             if atomic_num == 1:
@@ -697,12 +699,23 @@ class PDBFileParser:
                 else:
                     smina_type_int = self.atom_types.index(smina_type)
                 type_int = self.type_map[smina_type_int]
+            if isinstance(all_ligand_coords, PositionSet):
+                if coords_to_string(atom.coords) in all_ligand_coords:
+                    bp.append(0)
+                else:
+                    type_int += max_types_value
+                    bp.append(1)
             x, y, z = atom.coords
             xs.append(x)
             ys.append(y)
             zs.append(z)
             types.append(type_int)
             atomic_nums.append(atomic_num)
+        return xs, ys, zs, types, atomic_nums, bp
+
+    def obmol_to_parquet(self, mol, add_polar_hydrogens):
+        xs, ys, zs, types, atomic_nums, _ = self.get_coords_and_types_info(
+            mol, add_polar_hydrogens=add_polar_hydrogens)
         df = pd.DataFrame()
         df['x'], df['y'], df['z'] = xs, ys, zs
         df['atomic_number'] = atomic_nums
@@ -714,33 +727,54 @@ class PDBFileParser:
                          add_polar_hydrogens=True):
         mols = self.read_file(input_file)
         output_path = mkdir(output_path)
-        pdbid = Path(input_file).name.split('_')[0]
+        output_fname = Path(output_fname)
         for idx, mol in enumerate(mols):
             if output_fname is None:
                 fname = Path(
                     mol.OBMol.GetTitle()).name.split('.')[0]
             else:
+                # fname = Path(
+                #    output_path,
+                #    (output_fname.stem + '_{}'.format(
+                #        idx) + output_fname.suffix))
                 fname = output_path / output_fname
                 print(fname)
             df = self.obmol_to_parquet(mol, add_polar_hydrogens)
+            print(len(df))
+            raise
             df.to_parquet(fname)
 
 
 if __name__ == '__main__':
 
+    # pdb_parser = PDBFileParser('receptor')
     pdb_parser = PDBFileParser('ligand')
     inp, out, fnames = [], [], []
-    for sdf in Path('data/translated_actives/sdf').expanduser().glob('**/*.sdf'):
+    for idx, sdf in enumerate(Path('data/fake_ds').expanduser().glob(
+            '**/minimised.sdf')):
+        """
+        if sdf.stem.endswith('poses'):
+            ad = 'decoys'
+        elif sdf.stem.endswith('minimised'):
+            ad = 'actives'
+        else:
+            continue
+        """
         pdbid = Path(sdf.parent.name).stem.split('_')[0]
-        ad = ['actives', 'decoys'][str(sdf).find('active') == -1]
-        ad = 'decoys'
-        out_path = Path('data/translated_actives_new/ligands/{0}_{1}'.format(
-            pdbid, ad
-        ))
-        out_fname = '{}.parquet'.format(Path(sdf.name).stem)
+        # out_path = Path('data/scpdb/parquets/{0}_{1}'.format(
+        #    pdbid, ad
+        # ))
+        out_path = Path('data/scpdb/ligands')
+        # out_fname = '{}.parquet'.format(Path(sdf.name).stem)
+        out_fname = '{}.parquet'.format(pdbid)
+        # if Path(out_path, out_fname).is_file():
+        #    continue
         inp.append(sdf)
         out.append(out_path)
         fnames.append(out_fname)
+        # if not (idx + 1) % 60:
+        #    no_return_parallelise(pdb_parser.file_to_parquets, inp, out, fnames)
+        #    inp, out, fnames = [], [], []
     no_return_parallelise(pdb_parser.file_to_parquets, inp, out, fnames)
     exit(1)
 
