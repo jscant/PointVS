@@ -17,29 +17,17 @@ class Ranking:
         return len(np.where(self.placements == 0)[0]) / len(self.placements)
 
     def __str__(self):
-        if self.scores is not None and self.top_ranked_rmsds is None:
-            return ('Mean placement of relaxed xtal structure: {0:0.5f}\n' + \
-                    'Mean score of relaxed xtal structure: {1:0.5f}\n' + \
-                    'Fraction of correctly identified poses: {2:0.5f}').format(
-                np.mean(self.placements) + 1,
-                np.mean(self.scores),
-                self.get_frac_correct())
-        if self.scores is None and self.top_ranked_rmsds is not None:
-            return ('Mean placement of relaxed xtal structure: {0:0.5f}\n' + \
-                    'Mean RMSD of top ranked structure: {1:0.5f}\n' + \
-                    'Fraction of correctly identified poses: {2:0.5f}').format(
-                np.mean(self.placements) + 1,
-                np.mean(self.top_ranked_rmsds),
-                self.get_frac_correct())
-        elif self.scores is not None and self.top_ranked_rmsds is not None:
-            return ('Mean placement of relaxed xtal structure: {0:0.5f}\n' + \
-                    'Mean score of relaxed xtal structure: {1:0.5f}\n' + \
-                    'Mean RMSD of top ranked structure: {2:0.5f}\n' + \
-                    'Fraction of correctly identified poses: {3:0.5f}').format(
-                np.mean(self.placements) + 1,
-                np.mean(self.scores),
-                np.mean(self.top_ranked_rmsds),
-                self.get_frac_correct())
+        res = 'Mean placement of relaxed xtal structure: {0:0.5f}\n'.format(
+            np.mean(self.placements) + 1)
+        if self.scores is not None:
+            res += 'Mean score of relaxed xtal structure: {0:0.5f}\n'.format(
+                np.mean(self.scores))
+        if self.top_ranked_rmsds is not None:
+            'Mean score of relaxed xtal structure: {0:0.5f}\n'.format(
+                np.mean(self.scores))
+        res += 'Fraction of correctly identified poses: {0:0.5f}'.format(
+            self.get_frac_correct())    
+        return res
 
     def get_mean_placement(self):
         return np.mean(self.placements) + 1
