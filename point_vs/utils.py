@@ -13,7 +13,17 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn as nn
 from matplotlib import pyplot as plt
+
+
+def get_layer_shapes(model):
+    """Return a list of the shapes of all linear layers in a model."""
+    shapes = []
+    for layer in model:
+        if isinstance(layer, nn.Linear):
+            shapes.append(layer._parameters['weight'].shape)
+    return shapes
 
 
 class PositionSet(set):
