@@ -107,6 +107,7 @@ if __name__ == '__main__':
         min_aug_angle=args.min_aug_angle,
         max_relaxed_rmsd=args.max_relaxed_rmsd,
         min_inactive_rmsd=args.min_inactive_rmsd,
+        include_relaxed=args.include_relaxed,
         polar_hydrogens=args.hydrogens, receptors=train_receptors, mode='train')
 
     # Is a validation set specified?
@@ -118,6 +119,7 @@ if __name__ == '__main__':
             polar_hydrogens=args.hydrogens, batch_size=args.batch_size,
             max_relaxed_rmsd=args.max_relaxed_rmsd,
             min_inactive_rmsd=0.0,
+            include_relaxed=args.include_relaxed,
             rot=False, mode='val')
 
     args_to_record = vars(args)

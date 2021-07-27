@@ -1,9 +1,6 @@
 """
-The dataloader for SE(3)Transformer is heavily edited from
-a script developed for similar reasons by Constantin Schneider
-github.com/con-schneider
-
-The dataloader for LieConv is my own work.
+DataLoaders to take parquet directories and create feature vectors suitable
+for use by models found in this project.
 """
 from collections import defaultdict
 from pathlib import Path
@@ -23,7 +20,7 @@ def get_data_loader(*data_roots, receptors=None, batch_size=32, compact=True,
                     augmented_actives=0, min_aug_angle=30,
                     polar_hydrogens=True, mode='train',
                     max_relaxed_rmsd=None,
-                    min_inactive_rmsd=None):
+                    min_inactive_rmsd=None, include_relaxed=False):
     """Give a DataLoader from a list of receptors and data roots."""
     ds_kwargs = {
         'receptors': receptors,
@@ -34,7 +31,7 @@ def get_data_loader(*data_roots, receptors=None, batch_size=32, compact=True,
         PointCloudDataset, *data_roots, balanced=True, compact=compact,
         polar_hydrogens=polar_hydrogens, augmented_actives=augmented_actives,
         min_aug_angle=min_aug_angle, use_atomic_numbers=use_atomic_numbers,
-        max_relaxed_rmsd=max_relaxed_rmsd,
+        max_relaxed_rmsd=max_relaxed_rmsd, include_relaxed=include_relaxed,
         min_inactive_rmsd=min_inactive_rmsd,
         **ds_kwargs)
     collate = get_collate_fn(ds.feature_dim)
@@ -48,6 +45,7 @@ def multiple_source_dataset(
         loader_class, *base_paths, receptors=None, polar_hydrogens=True,
         augmented_actives=0, min_aug_angle=30, max_relaxed_rmsd=None,
         min_inactive_rmsd=None, compact=True, use_atomic_numbers=False,
+        include_relaxed=False,
         balanced=True, **kwargs):
     """Concatenate mulitple datasets into one, preserving balanced sampling.
 
@@ -63,8 +61,12 @@ def multiple_source_dataset(
             decoys (per active in the training set)
         min_aug_angle: minimum angle of rotation for each augmented active (as
             specified in augmented_active_count)
-        max_relaxed_rmsd:
-        min_inactive_rmsd:
+        max_relaxed_rmsd: (pose selection) maximum rmsd between relaxed
+            crystal structure and crystal structure
+        min_inactive_rmsd: (pose selection) minimum rmsd between redocked
+            and relaxed crystal structure
+        include_relaxed: (pose selection) include the relaxed crystal
+            structure as an active
         compact: compress 1hot vectors by using a single bit to
             signify whether atoms are from the receptor or ligand rather
             than using two input bits per atom type
@@ -89,6 +91,7 @@ def multiple_source_dataset(
                 polar_hydrogens=polar_hydrogens,
                 max_relaxed_rmsd=max_relaxed_rmsd,
                 min_inactive_rmsd=min_inactive_rmsd,
+                include_relaxed=include_relaxed,
                 use_atomic_numbers=use_atomic_numbers, **kwargs)
             labels += list(dataset.labels)
             filenames += dataset.filenames
@@ -121,7 +124,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
                  polar_hydrogens=True, use_atomic_numbers=False,
                  compact=True, rot=False, augmented_active_count=0,
                  augmented_active_min_angle=90, max_relaxed_rmsd=None,
-                 min_inactive_rmsd=None, **kwargs):
+                 min_inactive_rmsd=None, include_relaxed=False, **kwargs):
         """Initialise dataset.
 
         Arguments:
@@ -145,11 +148,16 @@ class PointCloudDataset(torch.utils.data.Dataset):
                 and used as decoys (per active in the training set)
             augmented_active_min_angle: minimum angle of rotation for each
                 augmented active (as specified in augmented_active_count)
-            max_relaxed_rmsd:
-            min_inactive_rmsd:
+            max_relaxed_rmsd: (pose selection) maximum rmsd between relaxed
+                crystal structure and crystal structure
+            min_inactive_rmsd: (pose selection) minimum rmsd between redocked
+                and relaxed crystal structure
+            include_relaxed: (pose selection) include the relaxed crystal
+                structure as an active
             kwargs: keyword arguments passed to the parent class (Dataset).
         """
 
+        assert not ((max_relaxed_rmsd is None) != (min_inactive_rmsd is None))
         super().__init__(**kwargs)
         self.radius = radius
         self.base_path = Path(base_path).expanduser()
@@ -193,18 +201,22 @@ class PointCloudDataset(torch.utils.data.Dataset):
                 idx = int(Path(fname.name).stem.split('_')[-1])
                 try:
                     relaxed_rmsd = rmsd_info[pdbid]['relaxed_rmsd']
-                    docked_rsmds = rmsd_info[pdbid]['docked_rmsd']
+                    docked_rmsds = rmsd_info[pdbid]['docked_rmsd']
                 except KeyError:
                     continue
                 if str(fname.parent.name).find('active') != -1:
-                    if relaxed_rmsd < max_relaxed_rmsd:
+                    if include_relaxed and relaxed_rmsd < max_relaxed_rmsd:
                         labels.append(1)
                         aug_fnames += [fname] * augmented_active_count
                     else:
                         continue
-                elif docked_rsmds[idx] > min_inactive_rmsd and \
-                        relaxed_rmsd < max_relaxed_rmsd:
-                    labels.append(0)
+                elif relaxed_rmsd < max_relaxed_rmsd:
+                    if docked_rmsds[idx] > min_inactive_rmsd:
+                        labels.append(0)
+                    elif docked_rmsds[idx] < 1.0:
+                        labels.append(1)
+                    else:
+                        continue
                 else:
                     continue
             confirmed_fnames.append(fname)

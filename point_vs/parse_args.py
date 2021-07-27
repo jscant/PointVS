@@ -129,4 +129,7 @@ def parse_args():
                         help='(Pose selection) maximum non-aligned RMSD '
                              'between relaxed crystal pose and inactive '
                              ' redocked poses')
+    parser.add_argument('--include_relaxed', action='store_true',
+                        help='(Pose selection) include relaxed crystal '
+                             'structure in training set')
     return parser.parse_args()
