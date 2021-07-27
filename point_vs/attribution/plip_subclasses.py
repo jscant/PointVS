@@ -92,7 +92,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
             df.types.to_numpy(), max_feature_id + 1, compact).float()
         v = repeat(v, 'n d -> b n d', b=1)
 
-        model = model.eval().cuda().train()
+        model = model.eval().cuda()
         score = float(to_numpy(
             torch.sigmoid(model((p.cuda(), v.cuda(), m.cuda()))[0, ...])))
         if not quiet:
