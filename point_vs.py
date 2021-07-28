@@ -117,7 +117,7 @@ if __name__ == '__main__':
             use_atomic_numbers=args.use_atomic_numbers, radius=args.radius,
             polar_hydrogens=args.hydrogens, batch_size=args.batch_size,
             max_active_rms_distance=args.max_relaxed_rmsd,
-            min_inactive_rms_distance=0.0,
+            min_inactive_rms_distance=args.min_relaxed_rmsdt,
             rot=False, mode='val')
 
     args_to_record = vars(args)
