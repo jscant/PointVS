@@ -60,10 +60,10 @@ def multiple_source_dataset(
             decoys (per active in the training set)
         min_aug_angle: minimum angle of rotation for each augmented active (as
             specified in augmented_active_count)
-        max_active_rms_distance: (pose selection) maximum rmsd between relaxed
-            crystal structure and crystal structure
+        max_active_rms_distance: (pose selection) maximum rmsd between active
+            docked and crystal structures
         min_inactive_rms_distance: (pose selection) minimum rmsd between
-            redocked and relaxed crystal structure
+            inactive docked and crystal structures
         compact: compress 1hot vectors by using a single bit to
             signify whether atoms are from the receptor or ligand rather
             than using two input bits per atom type
@@ -86,7 +86,7 @@ def multiple_source_dataset(
                 augmented_active_count=augmented_actives,
                 augmented_active_min_angle=min_aug_angle,
                 polar_hydrogens=polar_hydrogens,
-                max_relaxed_rms_distance=max_active_rms_distance,
+                max_active_rms_distance=max_active_rms_distance,
                 min_inactive_rms_distance=min_inactive_rms_distance,
                 use_atomic_numbers=use_atomic_numbers, **kwargs)
             labels += list(dataset.labels)
