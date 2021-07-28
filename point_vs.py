@@ -105,9 +105,8 @@ if __name__ == '__main__':
         use_atomic_numbers=args.use_atomic_numbers, rot=False,
         augmented_actives=args.augmented_actives,
         min_aug_angle=args.min_aug_angle,
-        max_relaxed_rmsd=args.max_relaxed_rmsd,
-        min_inactive_rmsd=args.min_inactive_rmsd,
-        include_relaxed=args.include_relaxed,
+        max_active_rms_distance=args.max_active_rmsd,
+        min_inactive_rms_distance=args.min_inactive_rmsd,
         polar_hydrogens=args.hydrogens, receptors=train_receptors, mode='train')
 
     # Is a validation set specified?
@@ -117,9 +116,8 @@ if __name__ == '__main__':
             args.test_data_root, receptors=test_receptors, compact=args.compact,
             use_atomic_numbers=args.use_atomic_numbers, radius=args.radius,
             polar_hydrogens=args.hydrogens, batch_size=args.batch_size,
-            max_relaxed_rmsd=args.max_relaxed_rmsd,
-            min_inactive_rmsd=0.0,
-            include_relaxed=args.include_relaxed,
+            max_active_rms_distance=args.max_relaxed_rmsd,
+            min_inactive_rms_distance=0.0,
             rot=False, mode='val')
 
     args_to_record = vars(args)

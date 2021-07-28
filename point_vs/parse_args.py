@@ -121,15 +121,12 @@ def parse_args():
     parser.add_argument('--min_aug_angle', type=float, default=30,
                         help='Minimum angle of rotation for augmented actives '
                              'as specified in the augmented_actives argument')
-    parser.add_argument('--max_relaxed_rmsd', type=float,
+    parser.add_argument('--max_active_rmsd', type=float,
                         help='(Pose selection) maximum non-aligned RMSD '
-                             'between the original crystal pose and the pose '
-                             'relaxed using AutoDock Vina (Angstroms)')
+                             'between the original crystal pose and active '
+                             'redocked poses')
     parser.add_argument('--min_inactive_rmsd', type=float,
-                        help='(Pose selection) maximum non-aligned RMSD '
-                             'between relaxed crystal pose and inactive '
-                             ' redocked poses')
-    parser.add_argument('--include_relaxed', action='store_true',
-                        help='(Pose selection) include relaxed crystal '
-                             'structure in training set')
+                        help='(Pose selection) minimum non-aligned RMSD '
+                             'between original crystal pose and inactive '
+                             'redocked poses')
     return parser.parse_args()
