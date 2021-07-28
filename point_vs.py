@@ -116,8 +116,8 @@ if __name__ == '__main__':
             args.test_data_root, receptors=test_receptors, compact=args.compact,
             use_atomic_numbers=args.use_atomic_numbers, radius=args.radius,
             polar_hydrogens=args.hydrogens, batch_size=args.batch_size,
-            max_active_rms_distance=args.max_relaxed_rmsd,
-            min_inactive_rms_distance=args.min_relaxed_rmsdt,
+            max_active_rms_distance=args.max_active_rmsd,
+            min_inactive_rms_distance=args.min_active_rmsd,
             rot=False, mode='val')
 
     args_to_record = vars(args)
