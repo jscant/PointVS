@@ -7,12 +7,12 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import yaml
 from torch.utils.data import DataLoader
 from torch.utils.data import WeightedRandomSampler
 
 from point_vs.preprocessing.preprocessing import make_box, \
     concat_structs, make_bit_vector, uniform_random_rotation
+from point_vs.utils import load_yaml
 
 
 def get_data_loader(*data_roots, receptors=None, batch_size=32, compact=True,
@@ -185,8 +185,9 @@ class PointCloudDataset(torch.utils.data.Dataset):
         if max_active_rms_distance is not None \
                 or min_inactive_rms_distance is not None:
             rmsd_info_fname = Path(self.base_path, 'rmsd_info.yaml')
-            with open(rmsd_info_fname, 'r') as f:
-                rmsd_info = yaml.load(f, Loader=yaml.FullLoader)
+            rmsd_info = load_yaml(rmsd_info_fname)
+            for key, value in rmsd_info['1m2r']['docked_wrt_crystal'].items():
+                print(key + 1, value)
 
         for fname in filenames:
             if max_active_rms_distance is None or \
