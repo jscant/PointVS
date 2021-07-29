@@ -75,7 +75,7 @@ class PointNeuralNetwork(nn.Module):
     def forward_pass(self, x):
         return self.forward(x).squeeze()
 
-    def optimise(self, data_loader, epochs=1):
+    def optimise(self, data_loader, epochs=1, epoch_end_validation_set=None):
         """Train the network.
 
         Trains the neural network. Displays training information and plots the
@@ -84,6 +84,8 @@ class PointNeuralNetwork(nn.Module):
         Arguments:
             data_loader: pytorch DataLoader object for training
             epochs: number of complete training cycles
+            epoch_end_validation_set: DataLoader on which to perform inference
+                at the end of each epoch (if supplied)
         """
         start_time = time.time()
         total_iters = epochs * len(data_loader)
@@ -200,6 +202,15 @@ class PointNeuralNetwork(nn.Module):
 
             # save after each epoch
             self.save()
+
+            # end of epoch validation if requested
+            if epoch_end_validation_set is not None and self.epoch < epochs - 1:
+                epoch_end_predictions_fname = Path(
+                    self.predictions_file.parent,
+                    'predictions_epoch_{}.txt'.format(self.epoch + 1))
+                self.test(
+                    epoch_end_validation_set,
+                    predictions_file=epoch_end_predictions_fname)
 
     def test(self, data_loader, predictions_file=None):
         """Use trained network to perform inference on the test set.

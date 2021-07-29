@@ -14,7 +14,20 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
+import yaml
 from matplotlib import pyplot as plt
+
+
+def save_yaml(d, fname):
+    """Save a dictionary in yaml format."""
+    with open(Path(fname).expanduser(), 'w') as f:
+        yaml.dump(d, stream=f)
+
+
+def load_yaml(fname):
+    """Load a yaml dictionary"""
+    with open(Path(fname).expanduser(), 'r') as f:
+        return yaml.load(f, Loader=yaml.FullLoader)
 
 
 def get_layer_shapes(model):

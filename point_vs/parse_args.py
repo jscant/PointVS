@@ -129,4 +129,7 @@ def parse_args():
                         help='(Pose selection) minimum non-aligned RMSD '
                              'between original crystal pose and inactive '
                              'redocked poses')
+    parser.add_argument('--val_on_epoch_end', '-v', action='store_true',
+                        help='Run inference ion the validation set at the end '
+                             'of every epoch during training')
     return parser.parse_args()

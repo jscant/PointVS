@@ -24,6 +24,7 @@ import yaml
 from lie_conv.lieGroups import SE3
 
 from point_vs import utils
+from point_vs.utils import load_yaml
 
 try:
     from point_vs.models.egnn_network import EGNN
@@ -56,8 +57,7 @@ if __name__ == '__main__':
 
     # Load a yaml if required
     if args.load_args is not None:
-        with open(Path(args.load_args).expanduser(), 'r') as f:
-            loaded_args = yaml.full_load(f)
+        loaded_args = load_yaml(Path(args.load_args).expanduser())
         for key, value in loaded_args.items():
             if hasattr(args, key):
                 setattr(args, key, value)
@@ -163,10 +163,8 @@ if __name__ == '__main__':
     args_to_record.update(model_kwargs)
 
     if args.load_weights is not None:
-        with open(Path(args.load_weights).parents[1].expanduser() /
-                  'model_kwargs.yaml', 'r') as f:
-            model_kwargs = yaml.load(f, Loader=yaml.Loader)
-            model_kwargs['group'] = SE3(0.2)
+        model_kwargs = load_yaml(model_kwargs.yaml)
+        model_kwargs['group'] = SE3(0.2)
 
     wandb_init_kwargs = {
         'project': args.wandb_project, 'allow_val_change': True,
@@ -196,6 +194,7 @@ if __name__ == '__main__':
         pass
 
     if args.epochs:
-        model.optimise(train_dl, epochs=args.epochs)
+        model.optimise(
+            train_dl, epochs=args.epochs, epoch_end_validation_set=test_dl)
     if test_dl is not None:
         model.test(test_dl)
