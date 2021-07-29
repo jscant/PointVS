@@ -186,8 +186,6 @@ class PointCloudDataset(torch.utils.data.Dataset):
                 or min_inactive_rms_distance is not None:
             rmsd_info_fname = Path(self.base_path, 'rmsd_info.yaml')
             rmsd_info = load_yaml(rmsd_info_fname)
-            for key, value in rmsd_info['1m2r']['docked_wrt_crystal'].items():
-                print(key + 1, value)
 
         for fname in filenames:
             if max_active_rms_distance is None or \
