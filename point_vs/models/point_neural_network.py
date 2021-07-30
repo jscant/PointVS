@@ -107,7 +107,7 @@ class PointNeuralNetwork(nn.Module):
         else:
             scheduler = None
         reported_decoy_pred = reported_active_pred = 0.5
-        for self.epoch in range(epochs):
+        for self.epoch in range(self.epoch, epochs):
             for self.batch, (x, y_true, ligands, receptors) in enumerate(
                     data_loader):
 
