@@ -4,39 +4,27 @@ import numpy as np
 class Ranking:
     """Simple struct and print class for ranking results."""
 
-    def __init__(self, fname, placements, scores=None, top_ranked_rmsds=None):
-        self.placements = np.array(placements)
-        self.scores = None if scores is None else np.array(scores)
-        self.top_ranked_rmsds = None if top_ranked_rmsds is None else np.array(
-            top_ranked_rmsds)
+    def __init__(self, fname, sorted_scores_and_rmsds):
         self.fname = fname
+        self.sorted_scores_and_rmsds = sorted_scores_and_rmsds
 
-    def get_frac_correct(self):
-        """Calculate the fraction of targets for which the correct pose is
-        identified."""
-        return len(np.where(self.placements == 0)[0]) / len(self.placements)
+    def get_top_n(self, n, threshold=2.0):
+        in_top_n = 0
+        for idx, info in enumerate(self.sorted_scores_and_rmsds):
+            top_n_rmsd = info[:n, -1]
+            if len(np.where(top_n_rmsd <= threshold)[0]):
+                in_top_n += 1
+        return in_top_n / len(self.sorted_scores_and_rmsds)
 
     def __str__(self):
-        res = 'Mean placement of relaxed xtal structure: {0:0.5f}\n'.format(
-            np.mean(self.placements) + 1)
-        if self.scores is not None:
-            res += 'Mean score of relaxed xtal structure: {0:0.5f}\n'.format(
-                np.mean(self.scores))
-        if self.top_ranked_rmsds is not None:
-            'Mean score of relaxed xtal structure: {0:0.5f}\n'.format(
-                np.mean(self.scores))
-        res += 'Fraction of correctly identified poses: {0:0.5f}'.format(
-            self.get_frac_correct())    
+        res = 'Mean RMSD of top ranked structure: {0:0.5f}\n'.format(
+            self.get_mean_top_ranked_rmsd())
+        res += 'Top1 at 2.0 A: {0:0.5f}\n'.format(
+            self.get_top_n(1, 2.0))
         return res
 
-    def get_mean_placement(self):
-        return np.mean(self.placements) + 1
-
-    def get_mean_xtal_score(self):
-        return np.mean(self.scores) if self.scores is not None else None
-
     def get_mean_top_ranked_rmsd(self):
-        return np.mean(self.top_ranked_rmsds)
+        return np.mean([item[0, -1] for item in self.sorted_scores_and_rmsds])
 
     def __repr__(self):
         return 'Ranking object obtained from {} containing stats:\n'.format(
