@@ -168,7 +168,8 @@ class PointNeuralNetwork(nn.Module):
                         'Mean decoy prediction (train)': reported_decoy_pred,
                         'Mean active prediction (train)': reported_active_pred,
                         'Examples seen (train)':
-                            self.epoch * len(data_loader) * self.batch +
+                            self.epoch * len(
+                                data_loader) * data_loader.batch_size +
                             data_loader.batch_size * self.batch,
                         'Learning rate (train)': lr
                     }
