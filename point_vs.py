@@ -163,7 +163,7 @@ if __name__ == '__main__':
     args_to_record.update(model_kwargs)
 
     if args.load_weights is not None:
-        model_kwargs = load_yaml(model_kwargs.yaml)
+        model_kwargs = load_yaml(args.load_weights)
         model_kwargs['group'] = SE3(0.2)
 
     wandb_init_kwargs = {
