@@ -27,7 +27,7 @@ def save_yaml(d, fname):
 def load_yaml(fname):
     """Load a yaml dictionary"""
     with open(Path(fname).expanduser(), 'r') as f:
-        return yaml.load(f, Loader=yaml.FullLoader)
+        return yaml.load(f, Loader=yaml.Loader)
 
 
 def get_layer_shapes(model):
