@@ -107,7 +107,8 @@ class PointNeuralNetwork(nn.Module):
         else:
             scheduler = None
         reported_decoy_pred = reported_active_pred = 0.5
-        for self.epoch in range(self.epoch, epochs):
+        init_epoch = self.epoch
+        for self.epoch in range(init_epoch, epochs):
             for self.batch, (x, y_true, ligands, receptors) in enumerate(
                     data_loader):
 
@@ -167,7 +168,7 @@ class PointNeuralNetwork(nn.Module):
                         'Mean decoy prediction (train)': reported_decoy_pred,
                         'Mean active prediction (train)': reported_active_pred,
                         'Examples seen (train)':
-                            self.epoch * len(data_loader) +
+                            self.epoch * len(data_loader) * self.batch +
                             data_loader.batch_size * self.batch,
                         'Learning rate (train)': lr
                     }
@@ -309,7 +310,7 @@ class PointNeuralNetwork(nn.Module):
         torch.save({
             'learning_rate': self.lr,
             'weight_decay': self.weight_decay,
-            'epoch': self.epoch,
+            'epoch': self.epoch + 1,
             'losses': self.losses,
             'model_state_dict': self.state_dict(),
             'optimiser_state_dict': self.optimiser.state_dict()
@@ -320,6 +321,8 @@ class PointNeuralNetwork(nn.Module):
         self.load_state_dict(checkpoint['model_state_dict'])
         self.optimiser.load_state_dict(checkpoint['optimiser_state_dict'])
         self.epoch = checkpoint['epoch']
+        if not self.epoch:
+            self.epoch += 1
         self.losses = checkpoint['losses']
         print('Sucesfully loaded weights from', checkpoint_file)
 
