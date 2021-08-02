@@ -213,6 +213,7 @@ class PointNeuralNetwork(nn.Module):
                 self.test(
                     epoch_end_validation_set,
                     predictions_file=epoch_end_predictions_fname)
+            self.train()
 
     def test(self, data_loader, predictions_file=None):
         """Use trained network to perform inference on the test set.
