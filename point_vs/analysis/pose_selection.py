@@ -7,11 +7,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import yaml
+from matplotlib import pyplot as plt
 
 from point_vs.analysis.ranking import Ranking
+from point_vs.utils import load_yaml
 
 
-# TODO: unify this with docking
 def parse_results(
         predictions_fname_or_sdf_root, rmsd_info=None, rmsd_info_fname=None):
     """Parse results stored in text format.
@@ -100,18 +101,50 @@ def parse_results(
     return Ranking(predictions_fname_or_sdf_root, sorted_scores_and_rmsds_lst)
 
 
+def plot_top_n(label_to_ranking, max_n=10, threshold_rmsd=2.0):
+    fig, ax = plt.subplots(figsize=(12, 8))
+    ax.set_xlabel('RSMD threshold (Angstroms)')
+    ax.set_ylabel(
+        'Fraction of top-ranked poses within RMSD\nthreshold of relaxed xtal pose')
+    ax.set_title(
+        'Fraction of top-ranked poses within given cutoff of relaxed xtal pose')
+    x_rng = range(1, max_n + 1)
+    for label, ranking in label_to_ranking.items():
+        top_n = []
+        for n in x_rng:
+            top_n.append(ranking.get_top_n(n, threshold_rmsd))
+        ax.plot(x_rng, top_n, '-x', label=label)
+    ax.set_xlabel('N')
+    ax.set_ylabel('TopN')
+    ax.set_title(
+        'Fraction of top-ranked poses within {} A of relaxed xtal pose'.format(
+            threshold_rmsd))
+    ax.set_ylim([0, 1])
+    ax.set_xlim([1, max_n])
+    ax.grid()
+    ax.legend()
+    return fig, ax
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('results', type=str,
+    parser.add_argument('rmsd_info', type=str,
+                        help='Yaml file containing RMSD information')
+    parser.add_argument('results', type=str, nargs='+',
                         help='Results of PointVS model inference in text '
                              'format, or directory containing Smina docking '
                              'results.')
-    parser.add_argument('rmsd_info', type=str,
-                        help='Yaml file containing RMSD information')
-    parser.add_argument('threshold_rmsd', type=float,
+    parser.add_argument('--threshold_rmsd', '-t', type=float, default=2.0,
                         help='Threshold for the definition of a "good" dock')
+    parser.add_argument('--n', '-n', type=int, default=10,
+                        help='Maximum TopN to plot')
+
     args = parser.parse_args()
-    ranking = parse_results(args.results, rmsd_info_fname=args.rmsd_info)
-    for i in range(1, 11):
-        print('Top{0}:  {1:.3f}'.format(
-            i, ranking.get_top_n(i, args.threshold_rmsd)))
+    rmsd_info = load_yaml(args.rmsd_info)
+    label_to_ranking = {}
+    for fname in args.results:
+        label_to_ranking[Path(fname).parent.name] = parse_results(
+            fname, rmsd_info=rmsd_info)
+    _, ax = plot_top_n(label_to_ranking, args.n, args.threshold_rmsd)
+    plt.show()
+    plt.savefig('topn.png')
