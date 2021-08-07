@@ -196,6 +196,7 @@ if __name__ == '__main__':
 
     if args.epochs:
         model.optimise(
-            train_dl, epochs=args.epochs, epoch_end_validation_set=test_dl)
+            train_dl, epochs=args.epochs,
+            epoch_end_validation_set=test_dl if args.val_on_epoch_end else None)
     if test_dl is not None:
         model.test(test_dl)
