@@ -19,6 +19,7 @@ git clone https://github.com/jscant/PointVS
 cd PointVS
 conda env create -f environment.yml python=3.8
 conda activate pointvs
+pip install -e .
 ```
 If you would like to use wandb for logging information on loss, performance and
 hyperparameters (recommended), you must first create an account at

@@ -160,3 +160,4 @@ dependencies:
     - wrapt==1.12.1
     - "--editable=git+https://github.com/oxcsml/lie-transformer.git#egg=Equivariant_Attention"
     - "--editable=git+https://github.com/mfinzi/LieConv.git#egg=lie_conv"
+    - "--editable=git+https://github.com/pharmai/plip.git#egg=plip"
