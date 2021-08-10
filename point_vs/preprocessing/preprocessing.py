@@ -23,7 +23,7 @@ def uniform_random_rotation(x):
     sphere.
 
     Algorithm taken from "Fast Random Rotation Matrices" (James Avro, 1992):
-    citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.53.1357&rep=rep1&type=pdf
+    https://doi.org/10.1016/B978-0-08-050755-2.50034-8
     """
 
     # There are two random variables in [0, 1) here (naming is same as paper)
