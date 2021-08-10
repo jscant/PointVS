@@ -1,26 +1,26 @@
 """Driver script for various graph attribution methods."""
-
 import argparse
 import urllib
 from pathlib import Path
 
 import matplotlib
-
-matplotlib.use('agg')
-
 import yaml
-from matplotlib import pyplot as plt
+from lie_conv.lieGroups import SE3
 from plip.basic.supplemental import extract_pdbid
 from plip.exchange.webservices import fetch_pdb
 from sklearn.metrics import average_precision_score, \
     precision_recall_curve
-from lie_conv.lieGroups import SE3
+
 from point_vs.attribution.attribution_fns import masking, cam
 from point_vs.attribution.process_pdb import score_and_colour_pdb
 from point_vs.models.egnn_network import EGNN
 from point_vs.models.lie_conv import LieResNet
 from point_vs.models.lie_transformer import EquivariantTransformer
 from point_vs.utils import mkdir, ensure_writable
+
+matplotlib.use('agg')
+
+from matplotlib import pyplot as plt
 
 ALLOWED_METHODS = ('masking', 'cam')
 
