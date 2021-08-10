@@ -110,6 +110,7 @@ def plot_top_n(label_to_ranking, max_n=10, threshold_rmsd=2.0):
         'Fraction of top-ranked poses within given cutoff of relaxed xtal pose')
     x_rng = range(1, max_n + 1)
     for label, ranking in label_to_ranking.items():
+        print(label)
         top_n = []
         for n in x_rng:
             top_n.append(ranking.get_top_n(n, threshold_rmsd))
@@ -126,6 +127,28 @@ def plot_top_n(label_to_ranking, max_n=10, threshold_rmsd=2.0):
     return fig, ax
 
 
+def prune_preds(fnames):
+    roots = set()
+    for fname in [Path(fname) for fname in fnames]:
+        roots.add(fname.parent)
+    result = []
+    for root in roots:
+        predictions = root.glob('**/predictions*.txt')
+        max_epoch_val = 0
+        current_candidate_path = None
+        for prediction in predictions:
+            if prediction.name == 'predictions.txt':
+                result.append(prediction)
+                break
+            epoch_val = int(Path(prediction.name).stem.split('_')[-1])
+            if epoch_val > max_epoch_val:
+                max_epoch_val = epoch_val
+                current_candidate_path = prediction
+        if current_candidate_path is not None:
+            result.append(current_candidate_path)
+    return result
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('rmsd_info', type=str,
@@ -138,13 +161,34 @@ if __name__ == '__main__':
                         help='Threshold for the definition of a "good" dock')
     parser.add_argument('--n', '-n', type=int, default=10,
                         help='Maximum TopN to plot')
+    parser.add_argument('--glob', '-g', action='store_true',
+                        help='Walk through paths looking for predictions.txt '
+                             'files')
 
     args = parser.parse_args()
     rmsd_info = load_yaml(args.rmsd_info)
     label_to_ranking = {}
-    for fname in args.results:
-        label_to_ranking[Path(fname).parent.name] = parse_results(
-            fname, rmsd_info=rmsd_info)
+    predictions_txt_fnames = []
+    if args.glob:
+        for fname in args.results:
+            if not Path(fname).is_dir():
+                if Path(fname).name.startswith('predictions'):
+                    predictions_txt_fnames += [fname]
+                continue
+            preds = list(
+                Path(fname).expanduser().glob('**/predictions*.txt'))
+            preds = prune_preds(preds)
+            if len(preds):
+                predictions_txt_fnames += preds
+            else:
+                predictions_txt_fnames += [fname]
+    else:
+        predictions_txt_fnames = args.results
+
+    for fname in predictions_txt_fnames:
+        ranking = parse_results(fname, rmsd_info=rmsd_info)
+        if len(ranking.sorted_scores_and_rmsds):
+            label_to_ranking[Path(fname).parent.name] = ranking
     _, ax = plot_top_n(label_to_ranking, args.n, args.threshold_rmsd)
-    plt.show()
     plt.savefig('topn.png')
+    plt.show()
