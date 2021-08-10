@@ -110,8 +110,12 @@ class EGNN(PointNeuralNetwork):
     def forward(self, x):
         return self.layers(x)
 
-    def _get_min_max(self):
+    def _get_min_max(self, grads=True):
         """For debugging: print min and max value in each layer."""
+
+        def obtain(obj):
+            return obj.grad if grads else obj
+
         for i in range(3):
             print()
         network = self.layers
@@ -121,24 +125,30 @@ class EGNN(PointNeuralNetwork):
         min_abs = 1e7
         for layer in network:
             if isinstance(layer, nn.Linear):
-                min_ = min(min_, float(torch.min(layer.weight.grad)))
-                max_ = max(max_, float(torch.max(layer.weight.grad)))
-                min_abs = min(min_abs,
-                              float(torch.min(torch.abs(layer.weight.grad))))
-                res += 'Linear: {0}, {1} {2}\n'.format(
-                    float(torch.min(layer.weight.grad)),
-                    float(torch.max(layer.weight.grad)),
-                    float(torch.min(torch.abs(layer.weight.grad))))
+                try:
+                    min_ = min(min_, float(torch.min(obtain(layer.weight))))
+                    max_ = max(max_, float(torch.max(obtain(layer.weight))))
+                    min_abs = min(min_abs,
+                                  float(torch.min(torch.abs(obtain(layer.weight)))))
+                    res += 'Linear: {0}, {1} {2}\n'.format(
+                        float(torch.min(obtain(layer.weight))),
+                        float(torch.max(obtain(layer.weight))),
+                        float(torch.min(torch.abs(obtain(layer.weight)))))
+                except TypeError:
+                    continue
             if isinstance(layer, Pass):
                 if isinstance(layer.module, nn.Linear):
-                    min_ = min(min_, float(torch.min(layer.module.weight.grad)))
-                    max_ = max(max_, float(torch.max(layer.module.weight.grad)))
-                    min_abs = min(min_abs, float(
-                        torch.min(torch.abs(layer.module.weight.grad))))
-                    res += 'Linear:{0} {1} {2}\n'.format(
-                        float(torch.min(layer.module.weight.grad)),
-                        float(torch.max(layer.module.weight.grad)),
-                        float(torch.min(torch.abs(layer.module.weight.grad))))
+                    try:
+                        min_ = min(min_, float(torch.min(obtain(layer.module.weight))))
+                        max_ = max(max_, float(torch.max(obtain(layer.module.weight))))
+                        min_abs = min(min_abs, float(
+                            torch.min(torch.abs(obtain(layer.module.weight)))))
+                        res += 'Linear:{0} {1} {2}\n'.format(
+                            float(torch.min(obtain(layer.module.weight))),
+                            float(torch.max(obtain(layer.module.weight))),
+                            float(torch.min(torch.abs(obtain(layer.module.weight)))))
+                    except TypeError:
+                        continue
             elif isinstance(layer, EGNNPass):
                 layer = layer.egnn
                 for network_type, network_name in zip(
@@ -148,17 +158,17 @@ class EGNN(PointNeuralNetwork):
                         if isinstance(sublayer, nn.Linear):
                             try:
                                 max_ = max(max_, float(
-                                    torch.max(sublayer.weight.grad)))
+                                    torch.max(obtain(sublayer.weight))))
                                 min_ = min(min_, float(
-                                    torch.min(sublayer.weight.grad)))
+                                    torch.min(obtain(sublayer.weight))))
                                 min_abs = min(min_abs, float(
-                                    torch.min(torch.abs(sublayer.weight.grad))))
+                                    torch.min(torch.abs(obtain(sublayer.weight)))))
                                 res += network_name + ': {0} {1} {2}\n'.format(
-                                    float(torch.min(sublayer.weight.grad)),
-                                    float(torch.max(sublayer.weight.grad)),
+                                    float(torch.min(sublayer.weight)),
+                                    float(torch.max(sublayer.weight)),
                                     float(
                                         torch.min(
-                                            torch.abs(sublayer.weight.grad))))
+                                            torch.abs(obtain(sublayer.weight)))))
                             except TypeError:
                                 res += 'NONE_LAYER\n'
         return res[:-1], min_, max_, min_abs
