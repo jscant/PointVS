@@ -4,10 +4,10 @@ from pandas import DataFrame
 from plip.basic import config
 from plip.basic.supplemental import create_folder_if_not_exists, start_pymol
 from plip.structure.preparation import PDBComplex
-from plipcmd import logger
+from plip.plipcmd import logger
 from pymol import cmd
 
-from point_vs.attribution.interaction_parser import PDBInteractionParser
+from point_vs.attribution.interaction_parser import StructuralInteractionParser
 from point_vs.attribution.plip_subclasses import \
     PyMOLVisualizerWithBFactorColouring, VisualizerDataWithMolecularInfo
 from point_vs.utils import mkdir
@@ -105,7 +105,7 @@ def visualize_in_pymol(
         pdbid.upper(), '_'.join(
             [hetid, plcomplex.chain, plcomplex.position]))).expanduser()
 
-    parser = PDBInteractionParser()
+    parser = StructuralInteractionParser()
     score, df = vis.colour_b_factors_pdb(
         model, attribution_fn=attribution_fn, parser=parser,
         results_fname=results_fname, model_args=model_args,
@@ -180,7 +180,7 @@ def score_pdb(
         if config.INTRA is not None:
             vis.ligname = 'Intra%s' % plcomplex.chain
 
-        parser = PDBInteractionParser()
+        parser = StructuralInteractionParser()
         score, df = vis.score_atoms(
             parser, only_process, model, attribution_fn, model_args=model_args,
             quiet=quiet)
