@@ -18,6 +18,18 @@ import yaml
 from matplotlib import pyplot as plt
 
 
+def pretify_dict(d, padding=5):
+    max_key_len = max([len(key) for key in d.keys()])
+    line_len = max_key_len + padding
+    s = ''
+    for key, value in d.items():
+        spaces = ' ' * (line_len - len(key))
+        s += '{0}:{1}{2}\n'.format(
+            key, spaces, value
+        )
+    return s[:-1]
+
+
 def save_yaml(d, fname):
     """Save a dictionary in yaml format."""
     with open(Path(fname).expanduser(), 'w') as f:
@@ -202,9 +214,13 @@ def to_numpy(torch_tensor):
 
 def mkdir(path):
     """Make a new directory, including parents."""
-    path = Path(path).expanduser()
+    path = Path(path).expanduser().resolve()
     path.mkdir(exist_ok=True, parents=True)
     return path
+
+
+def expand_path(path):
+    return Path(path).expanduser().resolve()
 
 
 _use_gpu = False
