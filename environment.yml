@@ -204,5 +204,5 @@ dependencies:
   - pip:
       - einops==0.3.0
       - egnn-pytorch==0.2.6
-      - "--editable=git+https://github.com/oxcsml/lie-transformer.git#egg=Equivariant_Attention"
-      - "--editable=git+https://github.com/pharmai/plip.git#egg=plip"
+      - "--editable=git+ssh://git@github.com/oxcsml/lie-transformer.git#egg=Equivariant_Attention"
+      - "--editable=git+ssh://git@github.com/pharmai/plip.git#egg=plip"
