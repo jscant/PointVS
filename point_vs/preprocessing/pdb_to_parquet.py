@@ -1,16 +1,37 @@
 import argparse
+import multiprocessing as mp
+import urllib
 from collections import defaultdict
 from pathlib import Path
+from urllib.error import HTTPError
+from urllib.request import urlopen
 
 import pandas as pd
 from openbabel import openbabel
+from plip.basic.supplemental import extract_pdbid
 
-from point_vs.utils import mkdir, no_return_parallelise, coords_to_string, PositionSet
+from point_vs.utils import mkdir, no_return_parallelise, coords_to_string, \
+    PositionSet
 
 try:
     from openbabel import pybel
 except (ModuleNotFoundError, ImportError):
     import pybel
+
+
+def fetch_pdb(pdbid):
+    """Modified plip function."""
+    pdbid = pdbid.lower()
+    pdburl = f'https://files.rcsb.org/download/{pdbid}.pdb'
+    try:
+        pdbfile = urlopen(pdburl).read().decode()
+        if 'sorry' in pdbfile:
+            print('No file in PDB format available from wwPDB for', pdbid)
+            return None, None
+    except HTTPError:
+        print('No file in PDB format available from wwPDB for', pdbid)
+        return None, None
+    return [pdbfile, pdbid]
 
 
 class Info:
@@ -49,7 +70,7 @@ class Info:
         self.ad_heteroatom = ad_heteroatom
 
 
-class PDBFileParser:
+class StructuralFileParser:
 
     def __init__(self, mol_type='ligand'):
         assert mol_type in ('ligand', 'receptor')
@@ -551,6 +572,30 @@ class PDBFileParser:
         return out_dict
 
     @staticmethod
+    def read_file(infile, add_hydrogens=True):
+        """Use openbabel to read in a pdb file.
+
+        Original author: Constantin Schneider
+
+        Args:
+            infile (str): Path to input file
+            add_hydrogens (bool): Add hydrogens to the openbabel OBMol object
+        Returns:
+            List of [pybel.Molecule]
+        """
+        molecules = []
+
+        suffix = Path(infile).suffix[1:]
+        file_read = pybel.readfile(suffix, str(infile))
+
+        for mol in file_read:
+            if add_hydrogens:
+                mol.OBMol.AddHydrogens()
+            molecules.append(mol)
+
+        return molecules
+
+    @staticmethod
     def adjust_smina_type(t, h_bonded, hetero_bonded):
         """Original author: Constantin schneider"""
         if t in ('AliphaticCarbonXSNonHydrophobe',
@@ -658,29 +703,6 @@ class PDBFileParser:
             # but including this here to make it equivalent to the cpp code
             return "NumTypes"
 
-    @staticmethod
-    def read_file(infile):
-        """Use openbabel to read in a pdb file.
-
-        Original author: Constantin Schneider
-
-        Args:
-            infile (str): Path to input file
-            add_hydrogens (bool): Add hydrogens to the openbabel OBMol object
-        Returns:
-            List of [pybel.Molecule]
-        """
-        molecules = []
-
-        suffix = Path(infile).suffix[1:]
-        file_read = pybel.readfile(suffix, str(infile))
-
-        for mol in file_read:
-            mol.OBMol.AddHydrogens()
-            molecules.append(mol)
-
-        return molecules
-
     def get_coords_and_types_info(
             self, mol, all_ligand_coords=None, add_polar_hydrogens=True):
         xs, ys, zs, atomic_nums, types, bp = [], [], [], [], [], []
@@ -723,61 +745,137 @@ class PDBFileParser:
         df['bp'] = int(self.mol_type == 'receptor')
         return df
 
-    def file_to_parquets(self, input_file, output_path, output_fname=None,
-                         add_polar_hydrogens=True):
+    def file_to_parquets(
+            self, input_file, output_path=None, output_fname=None,
+            add_polar_hydrogens=True):
         mols = self.read_file(input_file)
-        output_path = mkdir(output_path)
-        output_fname = Path(output_fname)
+        if output_path is not None:
+            output_path = mkdir(output_path)
+        if output_fname is not None:
+            output_fname = Path(output_fname)
         for idx, mol in enumerate(mols):
             if output_fname is None:
                 fname = Path(
                     mol.OBMol.GetTitle()).name.split('.')[0]
             else:
-                # fname = Path(
-                #    output_path,
-                #    (output_fname.stem + '_{}'.format(
-                #        idx) + output_fname.suffix))
                 fname = output_path / output_fname
                 print(fname)
             df = self.obmol_to_parquet(mol, add_polar_hydrogens)
-            print(len(df))
-            raise
+            if output_path is None:
+                return df
             df.to_parquet(fname)
+
+    def download_pdbs_from_csv(self, csv, output_dir):
+        output_dir = Path(output_dir).expanduser()
+        pdbids = set()
+        with open(csv, 'r') as f:
+            for line in f.readlines():
+                pdbids.add(line.split(',')[0].lower())
+        cpus = mp.cpu_count()
+        inputs = [(pdbid, output_dir / pdbid) for pdbid in pdbids
+                  if not Path(output_dir, pdbid, 'receptor.pdb').is_file()]
+        with mp.get_context('spawn').Pool(processes=cpus) as pool:
+            pool.starmap(self.download_pdb_file, inputs)
+
+    @staticmethod
+    def download_pdb_file(pdbid, output_dir):
+        """Given a PDB ID, downloads the corresponding PDB structure.
+        Checks for validity of ID and handles error while downloading.
+        Returns the path of the downloaded file (From PLIP)"""
+        output_dir = Path(output_dir).expanduser()
+        pdbpath = output_dir / 'receptor.pdb'
+        if pdbpath.is_file():
+            print(pdbpath, 'already exists.')
+            return
+        if len(pdbid) != 4 or extract_pdbid(
+                pdbid.lower()) == 'UnknownProtein':
+            raise RuntimeError('Unknown protein ' + pdbid)
+        while True:
+            try:
+                pdbfile, pdbid = fetch_pdb(pdbid.lower())
+            except urllib.error.URLError:
+                print('Fetching pdb {} failed, retrying...'.format(
+                    pdbid))
+            else:
+                break
+        if pdbfile is None:
+            return 'none'
+        output_dir.mkdir(parents=True, exist_ok=True)
+        with open(pdbpath, 'w') as g:
+            g.write(pdbfile)
+        print('File downloaded as', pdbpath)
+        return pdbpath
+
+
+def parse_types_file(types_file):
+    def find_paths(line):
+        recpath, ligpath = None, None
+        chunks = line.split()
+        label = int(chunks[0])
+        for chunk in chunks:
+            if chunk.find('.gninatypes') != -1:
+                if recpath is None:
+                    recpath = chunk
+                else:
+                    ligpath = chunk
+                    break
+        return label, recpath, ligpath
+
+    def get_sdf_and_index(lig):
+        sdf = '_'.join(lig.split('_')[:-1]) + '.sdf'
+        idx = int(lig.split('_')[-1].split('.')[0])
+        return sdf, idx
+
+    def get_pdb(rec):
+        return '_'.join(rec.split('_')[:-1]) + '.pdb'
+
+    labels = defaultdict(lambda: defaultdict(dict))
+    with open(types_file, 'r') as f:
+        for line in f.readlines():
+            label, rec, lig = find_paths(line)
+            lig_sdf, idx = get_sdf_and_index(lig)
+            rec_pdb = get_pdb(rec)
+            labels[rec_pdb][lig_sdf][idx] = label
+    return labels
+
+
+def parse_single_types_entry(rec, lig, labels, input_base_path, output_path):
+    output_path = Path(output_path)
+    if rec is None or lig is None:
+        return
+    lig_parser = StructuralFileParser('ligand')
+    rec_parser = StructuralFileParser('receptor')
+    master_path = '---'.join(str(Path(rec).with_suffix('')).split('/'))
+    rec_output_dir = Path(
+        output_path, 'receptors')
+    for idx, label in labels.items():
+        suffix = '_actives' if label else '_decoys'
+        lig_output_dir = Path(
+            output_path, 'ligands', master_path + suffix)
+
+        lig_output_name = Path(Path(lig).name).stem + '_{}.parquet'.format(idx)
+
+        lig_parser.file_to_parquets(Path(input_base_path, lig),
+                                    lig_output_dir, lig_output_name)
+        rec_parser.file_to_parquets(Path(input_base_path, rec),
+                                    rec_output_dir, master_path + '.parquet')
+
+
+def parse_types_mp(types_file, input_base_path, output_dir):
+    recs, ligs, labels = [], [], []
+    labels_map = parse_types_file(types_file)
+    for rec, lig_d in labels_map.items():
+        for lig, idx_to_label in lig_d.items():
+            recs.append(rec)
+            ligs.append(lig)
+            labels.append(idx_to_label)
+    output_dir = mkdir(output_dir)
+    no_return_parallelise(
+        parse_single_types_entry, recs, ligs, labels, input_base_path,
+        output_dir, cpus=mp.cpu_count())
 
 
 if __name__ == '__main__':
-
-    # pdb_parser = PDBFileParser('receptor')
-    pdb_parser = PDBFileParser('ligand')
-    inp, out, fnames = [], [], []
-    for idx, sdf in enumerate(Path('data/fake_ds').expanduser().glob(
-            '**/minimised.sdf')):
-        """
-        if sdf.stem.endswith('poses'):
-            ad = 'decoys'
-        elif sdf.stem.endswith('minimised'):
-            ad = 'actives'
-        else:
-            continue
-        """
-        pdbid = Path(sdf.parent.name).stem.split('_')[0]
-        # out_path = Path('data/scpdb/parquets/{0}_{1}'.format(
-        #    pdbid, ad
-        # ))
-        out_path = Path('data/scpdb/ligands')
-        # out_fname = '{}.parquet'.format(Path(sdf.name).stem)
-        out_fname = '{}.parquet'.format(pdbid)
-        # if Path(out_path, out_fname).is_file():
-        #    continue
-        inp.append(sdf)
-        out.append(out_path)
-        fnames.append(out_fname)
-        # if not (idx + 1) % 60:
-        #    no_return_parallelise(pdb_parser.file_to_parquets, inp, out, fnames)
-        #    inp, out, fnames = [], [], []
-    no_return_parallelise(pdb_parser.file_to_parquets, inp, out, fnames)
-    exit(1)
-
     parser = argparse.ArgumentParser()
     parser.add_argument('input_file', type=str,
                         help='Input file, any of sdf, pdb or mol2 format '
@@ -785,9 +883,16 @@ if __name__ == '__main__':
     parser.add_argument('output_path', type=str,
                         help='Directory in which to store resultant parquet '
                              'files')
-    parser.add_argument('mol_type', type=str,
+    parser.add_argument('--input_base_path', '-b', type=str,
+                        help='For types file conversion: root relative to '
+                             'which types file entries are made')
+    parser.add_argument('--mol_type', '-m', type=str, default='ligand',
                         help='Type of molecule, one of ligand or receptor')
     args = parser.parse_args()
 
-    pdb_parser = PDBFileParser(args.mol_type)
-    pdb_parser.file_to_parquets(args.input_file, args.output_path)
+    if args.input_file.endswith('.types'):
+        parse_types_mp(args.input_file, Path(args.input_base_path).expanduser(),
+                       args.output_path)
+    else:
+        pdb_parser = StructuralFileParser(args.mol_type)
+        pdb_parser.file_to_parquets(args.input_file, args.output_path)
