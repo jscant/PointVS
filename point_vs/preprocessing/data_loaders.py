@@ -233,6 +233,8 @@ class PointCloudDataset(torch.utils.data.Dataset):
                         rmsd = rmsd_info[pdbid]['docked_wrt_crystal'][idx]
                     except KeyError:
                         continue
+                if rmsd < 0:
+                    continue
                 if rmsd < max_active_rms_distance:
                     labels.append(1)
                     aug_fnames += [ligand_fname] * augmented_active_count
