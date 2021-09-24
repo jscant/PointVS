@@ -48,8 +48,11 @@ def directory_to_types(base_path):
                     lig_fname, rec_name + '.parquet'))
         label = 1 if suffix == 'actives' else 0
         if rmsd_info is not None:
-            rmsd = rmsd_info[rec_name]['docked_wrt_crystal'][int(
-                get_underscore_suffix(lig_fname))]
+            try:
+                rmsd = rmsd_info[rec_name]['docked_wrt_crystal'][int(
+                    get_underscore_suffix(lig_fname))]
+            except KeyError:
+                rmsd = -1
         else:
             rmsd = -1
         print(label, rmsd, remove_base_path(rec_fname),
