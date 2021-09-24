@@ -22,7 +22,6 @@ from pathlib import Path
 import torch
 import yaml
 from lie_conv.lieGroups import SE3
-
 from point_vs import utils
 from point_vs.utils import load_yaml
 
@@ -33,7 +32,8 @@ except (ModuleNotFoundError, OSError):
 from point_vs.models.lie_conv import LieResNet
 from point_vs.models.lie_transformer import EquivariantTransformer
 from point_vs.parse_args import parse_args
-from point_vs.preprocessing.data_loaders import get_data_loader
+from point_vs.preprocessing.data_loaders import get_data_loader, \
+    PointCloudDataset
 
 try:
     import wandb
@@ -99,15 +99,17 @@ if __name__ == '__main__':
     else:
         test_receptors = args.test_receptors
 
+    ds_class = SynthPharmDataset if args.synth_pharm else PointCloudDataset
     train_dl = get_data_loader(
-        args.train_data_root, args.translated_actives,
+        args.train_data_root, args.translated_actives, dataset_class=ds_class,
         batch_size=args.batch_size, compact=args.compact, radius=args.radius,
         use_atomic_numbers=args.use_atomic_numbers, rot=False,
         augmented_actives=args.augmented_actives,
         min_aug_angle=args.min_aug_angle,
         max_active_rms_distance=args.max_active_rmsd,
         min_inactive_rms_distance=args.min_inactive_rmsd,
-        polar_hydrogens=args.hydrogens, receptors=train_receptors, mode='train')
+        polar_hydrogens=args.hydrogens, receptors=train_receptors, mode='train',
+        types_fname=args.train_types, fname_suffix=args.input_suffix)
 
     # Is a validation set specified?
     test_dl = None
@@ -118,7 +120,8 @@ if __name__ == '__main__':
             polar_hydrogens=args.hydrogens, batch_size=args.batch_size,
             max_active_rms_distance=args.max_active_rmsd,
             min_inactive_rms_distance=args.min_inactive_rmsd,
-            rot=False, mode='val')
+            types_fname=args.test_types,
+            rot=False, mode='val', fname_suffix=args.input_suffix)
 
     args_to_record = vars(args)
 

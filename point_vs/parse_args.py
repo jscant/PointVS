@@ -132,4 +132,16 @@ def parse_args():
     parser.add_argument('--val_on_epoch_end', '-v', action='store_true',
                         help='Run inference ion the validation set at the end '
                              'of every epoch during training')
+    parser.add_argument('--synth_pharm', '-p', action='store_true',
+                        help='Synthetic Pharmacophore mode (for Tom, beta)')
+    parser.add_argument('--input_suffix', '-s', type=str, default='parquet',
+                        help='Filename extension for inputs')
+    parser.add_argument('--train_types', type=str,
+                        help='Optional name of GNINA-like types file which '
+                             'contains paths and labels for a training set. '
+                             'See GNINA 1.0 documentation for specification.')
+    parser.add_argument('--test_types', type=str,
+                        help='Optional name of GNINA-like types file which '
+                             'contains paths and labels for a test set. '
+                             'See GNINA 1.0 documentation for specification.')
     return parser.parse_args()
