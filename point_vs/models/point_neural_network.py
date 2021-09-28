@@ -95,12 +95,7 @@ class PointNeuralNetwork(nn.Module):
         self.train()
         print()
         print()
-        if data_loader.batch_size == 1:
-            aggrigation_interval = 32
-        else:
-            aggrigation_interval = 1
         decoy_mean_pred, active_mean_pred = [], []
-        loss = 0.0
         if self.use_1cycle:
             scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 self.optimiser, max_lr=self.lr,
@@ -123,7 +118,7 @@ class PointNeuralNetwork(nn.Module):
                 active_idx = (np.where(y_true_np > 0.5),)
                 decoy_idx = (np.where(y_true_np < 0.5),)
 
-                loss += self._get_loss(y_pred, y_true)
+                loss = self._get_loss(y_pred, y_true)
 
                 is_actives = bool(sum(y_true_np))
                 is_decoys = not bool(np.product(y_true_np))
@@ -133,85 +128,82 @@ class PointNeuralNetwork(nn.Module):
                 if is_decoys:
                     decoy_mean_pred.append(np.mean(y_pred_np[decoy_idx]))
 
-                if not (self.batch + 1) % aggrigation_interval:
-                    self.optimiser.zero_grad()
-                    loss /= aggrigation_interval
-                    reported_batch = (self.batch + 1) // aggrigation_interval
-                    loss.backward()
-                    loss_ = float(loss)
-                    del loss
-                    loss = 0.0
-                    if math.isnan(loss_):
-                        if hasattr(self, '_get_min_max'):
-                            print(self._get_min_max())
-                        raise RuntimeError('We have hit a NaN loss value.')
-                    torch.nn.utils.clip_grad_value_(self.parameters(), 1.0)
-                    self.optimiser.step()
-                    self.losses.append(loss_)
-                    lr = self.optimiser.param_groups[0]['lr']
+                self.optimiser.zero_grad()
+                reported_batch = self.batch + 1
+                loss.backward()
+                loss_ = float(loss.detach())
+                del loss
+                if math.isnan(loss_):
+                    if hasattr(self, '_get_min_max'):
+                        print(self._get_min_max())
+                    raise RuntimeError('We have hit a NaN loss value.')
+                torch.nn.utils.clip_grad_value_(self.parameters(), 1.0)
+                self.optimiser.step()
+                self.losses.append(loss_)
+                lr = self.optimiser.param_groups[0]['lr']
 
-                    if not (reported_batch + 1) % log_interval or \
-                            self.batch == total_iters - 1:
-                        self.save_loss(log_interval)
-                    global_iter += 1
+                if not reported_batch % log_interval or \
+                        self.batch == total_iters - 1:
+                    self.save_loss(log_interval)
+                global_iter += 1
 
-                    eta = get_eta(start_time, global_iter, total_iters)
-                    time_elapsed = format_time(time.time() - start_time)
+                eta = get_eta(start_time, global_iter, total_iters)
+                time_elapsed = format_time(time.time() - start_time)
 
-                    if len(active_mean_pred):
-                        reported_active_pred = np.mean(active_mean_pred)
-                    if len(decoy_mean_pred):
-                        reported_decoy_pred = np.mean(decoy_mean_pred)
+                if len(active_mean_pred):
+                    reported_active_pred = np.mean(active_mean_pred)
+                if len(decoy_mean_pred):
+                    reported_decoy_pred = np.mean(decoy_mean_pred)
 
-                    wandb_update_dict = {
-                        'Time remaining (train)': eta,
-                        'Binary crossentropy (train)': loss_,
-                        'Batch (train)':
-                            (self.epoch * len(data_loader) + reported_batch),
-                        'Mean decoy prediction (train)': reported_decoy_pred,
-                        'Mean active prediction (train)': reported_active_pred,
-                        'Examples seen (train)':
-                            self.epoch * len(
-                                data_loader) * data_loader.batch_size +
-                            data_loader.batch_size * self.batch,
-                        'Learning rate (train)': lr
-                    }
+                wandb_update_dict = {
+                    'Time remaining (train)': eta,
+                    'Binary crossentropy (train)': loss_,
+                    'Batch (train)':
+                        (self.epoch * len(data_loader) + reported_batch),
+                    'Mean decoy prediction (train)': reported_decoy_pred,
+                    'Mean active prediction (train)': reported_active_pred,
+                    'Examples seen (train)':
+                        self.epoch * len(
+                            data_loader) * data_loader.batch_size +
+                        data_loader.batch_size * self.batch,
+                    'Learning rate (train)': lr
+                }
+                try:
                     try:
-                        try:
-                            wandb.log(wandb_update_dict)
-                        except wandb.errors.error.Error:
-                            pass  # wandb has not been initialised so ignore
-                    except AttributeError:
-                        # New versions of wandb have different structure
+                        wandb.log(wandb_update_dict)
+                    except wandb.errors.error.Error:
+                        pass  # wandb has not been initialised so ignore
+                except AttributeError:
+                    # New versions of wandb have different structure
+                    pass
+
+                if scheduler is not None:
+                    scheduler.step()
+
+                print_with_overwrite(
+                    (
+                        'Epoch:',
+                        '{0}/{1}'.format(self.epoch + 1, epochs),
+                        '|', 'Batch:', '{0}/{1}'.format(
+                            reported_batch, len(data_loader)),
+                        'LR:', '{0:.3e}'.format(lr)),
+                    ('Time elapsed:', time_elapsed, '|',
+                     'Time remaining:', eta),
+                    ('Loss: {0:.4f}'.format(loss_), '|',
+                     'Mean active: {0:.4f}'.format(reported_active_pred),
+                     '|', 'Mean decoy: {0:.4f}'.format(reported_decoy_pred))
+                )
+
+                for obj in gc.get_objects():
+                    try:
+                        if torch.is_tensor(obj) or (
+                                (hasattr(obj, 'data') and
+                                 torch.is_tensor(obj.data))):
+                            if len(obj.size()) > 0:
+                                del obj
+                    except:
                         pass
-
-                    if scheduler is not None:
-                        scheduler.step()
-
-                    print_with_overwrite(
-                        (
-                            'Epoch:',
-                            '{0}/{1}'.format(self.epoch + 1, epochs),
-                            '|', 'Batch:', '{0}/{1}'.format(
-                                reported_batch, len(data_loader)),
-                            'LR:', '{0:.3e}'.format(lr)),
-                        ('Time elapsed:', time_elapsed, '|',
-                         'Time remaining:', eta),
-                        ('Loss: {0:.4f}'.format(loss_), '|',
-                         'Mean active: {0:.4f}'.format(reported_active_pred),
-                         '|', 'Mean decoy: {0:.4f}'.format(reported_decoy_pred))
-                    )
-
-                    for obj in gc.get_objects():
-                        try:
-                            if torch.is_tensor(obj) or (
-                                    hasattr(obj, 'data') and torch.is_tensor(
-                                obj.data)):
-                                if len(obj.size()) > 0:
-                                    del obj
-                        except:
-                            pass
-                    torch.cuda.empty_cache()
+                torch.cuda.empty_cache()
 
             # save after each epoch
             self.save()
