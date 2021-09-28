@@ -1,3 +1,4 @@
+import gc
 import math
 import time
 from abc import abstractmethod
@@ -137,14 +138,16 @@ class PointNeuralNetwork(nn.Module):
                     loss /= aggrigation_interval
                     reported_batch = (self.batch + 1) // aggrigation_interval
                     loss.backward()
-                    loss = float(loss)
-                    if math.isnan(loss):
+                    loss_ = float(loss)
+                    del loss
+                    loss = 0.0
+                    if math.isnan(loss_):
                         if hasattr(self, '_get_min_max'):
                             print(self._get_min_max())
                         raise RuntimeError('We have hit a NaN loss value.')
                     torch.nn.utils.clip_grad_value_(self.parameters(), 1.0)
                     self.optimiser.step()
-                    self.losses.append(loss)
+                    self.losses.append(loss_)
                     lr = self.optimiser.param_groups[0]['lr']
 
                     if not (reported_batch + 1) % log_interval or \
@@ -162,7 +165,7 @@ class PointNeuralNetwork(nn.Module):
 
                     wandb_update_dict = {
                         'Time remaining (train)': eta,
-                        'Binary crossentropy (train)': loss,
+                        'Binary crossentropy (train)': loss_,
                         'Batch (train)':
                             (self.epoch * len(data_loader) + reported_batch),
                         'Mean decoy prediction (train)': reported_decoy_pred,
@@ -194,15 +197,22 @@ class PointNeuralNetwork(nn.Module):
                             'LR:', '{0:.3e}'.format(lr)),
                         ('Time elapsed:', time_elapsed, '|',
                          'Time remaining:', eta),
-                        ('Loss: {0:.4f}'.format(loss), '|',
+                        ('Loss: {0:.4f}'.format(loss_), '|',
                          'Mean active: {0:.4f}'.format(reported_active_pred),
                          '|', 'Mean decoy: {0:.4f}'.format(reported_decoy_pred))
                     )
 
-                    loss = 0.0
-                    decoy_mean_pred, active_mean_pred = [], []
+                    for obj in gc.get_objects():
+                        try:
+                            if torch.is_tensor(obj) or (
+                                    hasattr(obj, 'data') and torch.is_tensor(
+                                obj.data)):
+                                if len(obj.size()) > 0:
+                                    del obj
+                        except:
+                            pass
 
-            # save after each epoch
+                            # save after each epoch
             self.save()
 
             # end of epoch validation if requested
