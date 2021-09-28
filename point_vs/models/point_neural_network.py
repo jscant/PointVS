@@ -211,8 +211,9 @@ class PointNeuralNetwork(nn.Module):
                                     del obj
                         except:
                             pass
+                    torch.cuda.empty_cache()
 
-                            # save after each epoch
+            # save after each epoch
             self.save()
 
             # end of epoch validation if requested
