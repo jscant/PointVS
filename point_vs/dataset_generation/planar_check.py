@@ -14,6 +14,8 @@ def is_planar_structure(fname, eps=1e-2):
     mol = sfp.read_file(fname, add_hydrogens=False)[0]
     plane_defining_points = []
     for idx, atom in enumerate(mol):
+        if atom.atomicnum == 1:
+            continue
         coords = atom.coords
         if idx < 3:
             plane_defining_points.append(coords)
