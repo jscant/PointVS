@@ -1,4 +1,4 @@
-import gc
+import math
 import math
 import time
 from abc import abstractmethod
@@ -193,17 +193,6 @@ class PointNeuralNetwork(nn.Module):
                      'Mean active: {0:.4f}'.format(reported_active_pred),
                      '|', 'Mean decoy: {0:.4f}'.format(reported_decoy_pred))
                 )
-
-                for obj in gc.get_objects():
-                    try:
-                        if torch.is_tensor(obj) or (
-                                (hasattr(obj, 'data') and
-                                 torch.is_tensor(obj.data))):
-                            if len(obj.size()) > 0:
-                                del obj
-                    except:
-                        pass
-                torch.cuda.empty_cache()
 
             # save after each epoch
             self.save()
