@@ -30,6 +30,7 @@ def find_planar_structures(directory, eps=1e-2):
             print('Processed', idx, 'structures')
         if is_planar_structure(pdb, eps=eps):
             planar_structures.append(pdb)
+            print(pdb, 'is planar')
     return planar_structures
 
 
@@ -40,7 +41,7 @@ if __name__ == '__main__':
     parser.add_argument('directory', type=str,
                         help='Directory in which to search for planar PDB '
                              'structures')
-    parser.add_argument('--eps', '-e', type=float, default=1e-2,
+    parser.add_argument('--eps', '-e', type=float, default=1e-1,
                         help='Parameter proportional to maximum deviation from '
                              'the plane')
     args = parser.parse_args()
@@ -52,3 +53,5 @@ if __name__ == '__main__':
         print('Planar structures:\n')
         for structure in structures:
             print(structure)
+    with open('planar_pdbs.txt', 'w') as f:
+        f.write('\n'.join(structures))
