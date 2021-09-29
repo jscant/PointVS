@@ -11,7 +11,11 @@ except (ModuleNotFoundError, ImportError):
 
 def is_planar_structure(fname, eps=1e-2):
     sfp = StructuralFileParser('receptor')
-    mol = sfp.read_file(fname, add_hydrogens=False)[0]
+    try:
+        mol = sfp.read_file(fname, add_hydrogens=False)[0]
+    except IndexError:
+        print('Could not process{}', fname)
+        return False
     plane_defining_points = []
     for idx, atom in enumerate(mol):
         if atom.atomicnum == 1:
