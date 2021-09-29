@@ -28,7 +28,7 @@ def is_planar_structure(fname, eps=1e-2):
 def find_planar_structures(directory, eps=1e-2):
     planar_structures = []
     for idx, pdb in enumerate(expand_path(directory).glob('**/*.pdb')):
-        if not (idx + 1) % 1000:
+        if not (idx + 1) % 100:
             print('Processed', idx, 'structures')
         if is_planar_structure(pdb, eps=eps):
             planar_structures.append(pdb)
@@ -56,4 +56,4 @@ if __name__ == '__main__':
         for structure in structures:
             print(structure)
     with open('planar_pdbs.txt', 'w') as f:
-        f.write('\n'.join(structures))
+        f.write('\n'.join([str(s) for s in structures]))
