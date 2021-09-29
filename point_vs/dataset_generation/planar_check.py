@@ -3,6 +3,11 @@ import argparse
 from point_vs.preprocessing.pdb_to_parquet import StructuralFileParser
 from point_vs.utils import expand_path, are_points_on_plane
 
+try:
+    from openbabel import pybel
+except (ModuleNotFoundError, ImportError):
+    import pybel
+
 
 def is_planar_structure(fname, eps=1e-2):
     sfp = StructuralFileParser('receptor')
@@ -20,13 +25,17 @@ def is_planar_structure(fname, eps=1e-2):
 
 def find_planar_structures(directory, eps=1e-2):
     planar_structures = []
-    for pdb in expand_path(directory).glob('**/*.pdb'):
+    for idx, pdb in enumerate(expand_path(directory).glob('**/*.pdb')):
+        if not (idx + 1) % 1000:
+            print('Processed', idx, 'structures')
         if is_planar_structure(pdb, eps=eps):
             planar_structures.append(pdb)
     return planar_structures
 
 
 if __name__ == '__main__':
+    pybel.ob.obErrorLog.SetOutputLevel(0)
+    pybel.ob.obErrorLog.StopLogging()
     parser = argparse.ArgumentParser()
     parser.add_argument('directory', type=str,
                         help='Directory in which to search for planar PDB '
