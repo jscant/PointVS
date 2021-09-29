@@ -2,7 +2,6 @@
 Some basic helper functions for formatting time and sticking dataframes
 together.
 """
-
 import math
 import multiprocessing as mp
 import shutil
@@ -16,6 +15,19 @@ import torch
 import torch.nn as nn
 import yaml
 from matplotlib import pyplot as plt
+
+
+def are_points_on_plane(p1, p2, p3, p4, eps=1e-6):
+    def extend_arr(arr):
+        return np.array(list(arr) + [1])
+
+    m = np.vstack([
+        extend_arr(p1),
+        extend_arr(p2),
+        extend_arr(p3),
+        extend_arr(p4)
+    ])
+    return abs(np.linalg.det(m)) < eps
 
 
 def pretify_dict(d, padding=5):
@@ -193,7 +205,7 @@ def no_return_parallelise(func, *args, cpus=-1):
         args[idx] = [args[idx]] * iterable_len
 
     inputs = list(zip(*args))
-    with mp.get_context('forkserver').Pool(processes=cpus) as pool:
+    with mp.Pool(processes=cpus) as pool:
         pool.starmap(func, inputs)
 
 
@@ -212,9 +224,9 @@ def to_numpy(torch_tensor):
     return torch_tensor.cpu().detach().numpy()
 
 
-def mkdir(path):
+def mkdir(*paths):
     """Make a new directory, including parents."""
-    path = Path(path).expanduser().resolve()
+    path = Path(*paths).expanduser().resolve()
     path.mkdir(exist_ok=True, parents=True)
     return path
 
