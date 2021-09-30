@@ -178,7 +178,45 @@ class PointCloudDataset(torch.utils.data.Dataset):
         self.compact = compact
 
         labels = []
-        if types_fname is None:
+        self.use_types = False if types_fname is None else True
+        if max_active_rms_distance is not None \
+                or min_inactive_rms_distance is not None:
+            label_by_rmsd = True
+        else:
+            label_by_rmsd = False
+
+        aug_recs, aug_ligs = [], []
+        confirmed_ligs = []
+        confirmed_recs = []
+        if self.use_types:
+            _labels, rmsds, receptor_fnames, ligand_fnames = \
+                types_to_list(types_fname)
+
+            # Do we use provided labels or do we generate our own using rmsds?
+            labels = [] if label_by_rmsd else _labels
+            for path_idx, (receptor_fname, ligand_fname) in enumerate(
+                    zip(receptor_fnames, ligand_fnames)):
+                if label_by_rmsd:
+                    # Pose selection, filter by max/min active/inactive rmsd
+                    # from xtal poses
+                    rmsd = rmsds[path_idx]
+                    if rmsd < 0:
+                        continue
+                    elif rmsd < max_active_rms_distance:
+                        labels.append(1)
+                        aug_ligs += [ligand_fname] * augmented_active_count
+                        aug_recs += [receptor_fname] * augmented_active_count
+                    elif rmsd >= min_inactive_rms_distance:
+                        labels.append(0)
+                    else:  # discard this entry (do not add to confirmed_ligs)
+                        continue
+                elif labels[path_idx]:
+                    aug_ligs += [ligand_fname] * augmented_active_count
+                    aug_recs += [receptor_fname] * augmented_active_count
+                confirmed_ligs.append(ligand_fname)
+                confirmed_recs.append(receptor_fname)
+            self.receptor_fnames = confirmed_recs + aug_recs
+        else:
             if receptors is None:
                 print('Loading all structures in', self.base_path)
                 ligand_fnames = list(
@@ -192,39 +230,12 @@ class PointCloudDataset(torch.utils.data.Dataset):
                         '{0}*/*.{1}'.format(receptor, fname_suffix)))
                 print('Loading all structures in', self.base_path)
                 ligand_fnames = sorted(ligand_fnames)
-            self.use_types = False
-            if max_active_rms_distance is not None \
-                    or min_inactive_rms_distance is not None:
+            if label_by_rmsd:
                 rmsd_info_fname = Path(self.base_path, 'rmsd_info.yaml')
                 rmsd_info = load_yaml(rmsd_info_fname)
-        else:
-            _labels, rmsds, self.receptor_fnames, ligand_fnames = \
-                types_to_list(
-                    types_fname)
-            # Do we use provided labels or do we generate our own using rmsds?
-            if max_active_rms_distance is None or min_inactive_rms_distance \
-                    is None:
-                labels = _labels
-            self.use_types = True
 
-        aug_fnames = []
-        confirmed_fnames = []
-
-        for path_idx, ligand_fname in enumerate(ligand_fnames):
-            if max_active_rms_distance is None or \
-                    min_inactive_rms_distance is None:
-                if not self.use_types:
-                    if str(ligand_fname.parent.name).find('active') == -1:
-                        labels.append(0)
-                    else:
-                        labels.append(1)
-                aug_fnames += [ligand_fname] * augmented_active_count
-            else:
-                # Pose selection, filter by min/max active/inactive rmsd from
-                # xtal poses
-                if self.use_types:
-                    rmsd = rmsds[path_idx]
-                else:
+            for path_idx, ligand_fname in enumerate(ligand_fnames):
+                if label_by_rmsd:
                     if str(ligand_fname.parent.name).find('active') != -1:
                         continue
                     pdbid = ligand_fname.parent.name.split('_')[0]
@@ -233,21 +244,28 @@ class PointCloudDataset(torch.utils.data.Dataset):
                         rmsd = rmsd_info[pdbid]['docked_wrt_crystal'][idx]
                     except KeyError:
                         continue
-                if rmsd < 0:
-                    continue
-                if rmsd < max_active_rms_distance:
-                    labels.append(1)
-                    aug_fnames += [ligand_fname] * augmented_active_count
-                elif rmsd >= min_inactive_rms_distance:
-                    labels.append(0)
-                else:  # discard this entry (do not add to confirmed_fnames)
-                    continue
-            confirmed_fnames.append(ligand_fname)
+                    if rmsd < 0:
+                        continue
+                    if rmsd < max_active_rms_distance:
+                        labels.append(1)
+                        aug_ligs += [ligand_fname] * augmented_active_count
+                    elif rmsd >= min_inactive_rms_distance:
+                        labels.append(0)
+                    else:  # discard this entry (do not add to confirmed_ligs)
+                        continue
+                else:
+                    if str(ligand_fname.parent.name).find('active') == -1:
+                        labels.append(0)
+                    else:
+                        labels.append(1)
+                        aug_ligs += [ligand_fname] * augmented_active_count
+                confirmed_ligs.append(ligand_fname)
+                self.receptor_fnames = None
 
         self.pre_aug_ds_len = len(ligand_fnames)
-        self.ligand_fnames = confirmed_fnames + aug_fnames
+        self.ligand_fnames = confirmed_ligs + aug_ligs
 
-        labels += [0] * len(aug_fnames)
+        labels += [0] * len(aug_ligs)
         labels = np.array(labels)
         active_count = np.sum(labels)
         class_sample_count = np.array(
@@ -367,7 +385,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
 
 
 def types_to_list(types_fname):
-    """Takes a types file and returns four lists containing paths and labels.
+    """Take a types file and returns four lists containing paths and labels.
 
     Types files should be of the format:
         <label> <...> <rmsd> <receptor_filename> <ligand_filename> <...>
@@ -443,6 +461,8 @@ def get_collate_fn(dim):
         m_batch = torch.zeros(batch_size, max_len)
         label_batch = torch.zeros(batch_size, )
         ligands, receptors = [], []
+        if max_len > 300:
+            print('\n\n\n\n\n\n')
         for batch_index, ((p, v, size), ligand, receptor, label) in enumerate(
                 batch):
             p_batch[batch_index, :size, :] = p
@@ -451,6 +471,10 @@ def get_collate_fn(dim):
             label_batch[batch_index] = label
             ligands.append(ligand)
             receptors.append(receptor)
+            if max_len > 300:
+                print(receptor, ligand, size)
+        if max_len > 300:
+            print('\n\n\n\n\n\n')
         return (p_batch, v_batch,
                 m_batch.bool()), label_batch.float(), ligands, receptors
 
