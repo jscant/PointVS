@@ -22,6 +22,7 @@ from pathlib import Path
 import torch
 import yaml
 from lie_conv.lieGroups import SE3
+
 from point_vs import utils
 from point_vs.utils import load_yaml
 
@@ -99,9 +100,9 @@ if __name__ == '__main__':
     else:
         test_receptors = args.test_receptors
 
-    ds_class = SynthPharmDataset if args.synth_pharm else PointCloudDataset
     train_dl = get_data_loader(
-        args.train_data_root, args.translated_actives, dataset_class=ds_class,
+        args.train_data_root, args.translated_actives,
+        dataset_class=PointCloudDataset,
         batch_size=args.batch_size, compact=args.compact, radius=args.radius,
         use_atomic_numbers=args.use_atomic_numbers, rot=False,
         augmented_actives=args.augmented_actives,
@@ -116,6 +117,7 @@ if __name__ == '__main__':
     if args.test_data_root is not None:
         test_dl = get_data_loader(
             args.test_data_root, receptors=test_receptors, compact=args.compact,
+            dataset_class=PointCloudDataset,
             use_atomic_numbers=args.use_atomic_numbers, radius=args.radius,
             polar_hydrogens=args.hydrogens, batch_size=args.batch_size,
             max_active_rms_distance=args.max_active_rmsd,
