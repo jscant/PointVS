@@ -91,7 +91,6 @@ class PointNeuralNetwork(nn.Module):
         start_time = time.time()
         total_iters = epochs * len(data_loader)
         log_interval = 10
-        global_iter = 0
         self.train()
         print()
         print()
@@ -104,6 +103,7 @@ class PointNeuralNetwork(nn.Module):
             scheduler = None
         reported_decoy_pred = reported_active_pred = 0.5
         init_epoch = self.epoch
+        global_iter = init_epoch * len(data_loader)
         for self.epoch in range(init_epoch, epochs):
             for self.batch, (x, y_true, ligands, receptors) in enumerate(
                     data_loader):
