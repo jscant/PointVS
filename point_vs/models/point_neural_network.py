@@ -103,7 +103,7 @@ class PointNeuralNetwork(nn.Module):
             scheduler = None
         reported_decoy_pred = reported_active_pred = 0.5
         init_epoch = self.epoch
-        global_iter = init_epoch * len(data_loader)
+        global_iter = 0
         for self.epoch in range(init_epoch, epochs):
             for self.batch, (x, y_true, ligands, receptors) in enumerate(
                     data_loader):
@@ -147,7 +147,7 @@ class PointNeuralNetwork(nn.Module):
                     self.save_loss(log_interval)
                 global_iter += 1
 
-                eta = get_eta(start_time, global_iter, total_iters)
+                eta = get_eta(start_time, global_iter, total_iters - init_epoch)
                 time_elapsed = format_time(time.time() - start_time)
 
                 if len(active_mean_pred):
