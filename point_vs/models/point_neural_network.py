@@ -148,7 +148,7 @@ class PointNeuralNetwork(nn.Module):
                 global_iter += 1
 
                 eta = get_eta(start_time, global_iter,
-                              total_iters - len(data_loader) * init_epoch)
+                              total_iters - (len(data_loader) * init_epoch))
                 time_elapsed = format_time(time.time() - start_time)
 
                 if len(active_mean_pred):
