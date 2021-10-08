@@ -361,7 +361,6 @@ def get_data_loader(
     else:
         return GeoDataLoader(
             ds, batch_size, False, sampler=sampler,
-            num_workers=max(1, mp.cpu_count() - 1),
             drop_last=False, pin_memory=True)
 
 
