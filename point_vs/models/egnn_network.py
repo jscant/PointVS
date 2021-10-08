@@ -75,7 +75,7 @@ class ThinEGNNLayer(EGNNLayer):
         self.apply(self.init_)
 
 
-class EGNN(PointNeuralNetwork):
+class LucidEGNN(PointNeuralNetwork):
 
     # We have our own initialisation methods for EGNN
     @staticmethod
