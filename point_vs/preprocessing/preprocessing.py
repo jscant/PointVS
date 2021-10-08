@@ -6,6 +6,9 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from matplotlib import pyplot as plt
+from scipy.spatial.distance import cdist
+
+from point_vs.utils import expand_path, Timer
 
 
 def generate_random_z_axis_rotation():
@@ -56,8 +59,46 @@ def angle_3d(v1, v2):
     return angle
 
 
+def generate_edges(struct, radius=4, hydrogens=False):
+    """Generate edges of graph with specified distance cutoff.
+
+    Arguments:
+        struct: DataFrame containing x, y, z, types, bp series.
+        radius: maximum distance below which there is an edge between two atoms
+
+    Returns:
+        Tuple containing the edge indices and edge attributes. Edge attributes
+        are 0 for ligand-ligand edges, 1 for ligand-receptor edges, and 2 for
+        receptor-receptor edges.
+    """
+    if not hydrogens:
+        struct = struct[struct.atomic_number > 1]
+    coords = extract_coords(struct)
+    bp = struct.bp.to_numpy()
+    distances = cdist(coords, coords, 'euclidean')
+    adj = (distances < radius) & (distances > 1e-7)
+    n_edges = np.sum(adj)
+    edge_indices = np.where(adj)
+
+    bp_0 = bp[edge_indices[0]]
+    bp_1 = bp[edge_indices[1]]
+    edge_attrs = np.zeros((n_edges,), dtype='int32')
+    edge_attrs[np.where((bp_0 == 0) & (bp_1 == 1))] = 1
+    edge_attrs[np.where((bp_0 == 1) & (bp_1 == 0))] = 1
+    edge_attrs[np.where((bp_0 == 1) & (bp_1 == 1))] = 2
+
+    return edge_indices, edge_attrs
+
+
+def extract_coords(struct, bp=None):
+    """Get numpy coordinates from pd.DataFrame."""
+    entity = struct[(struct.bp == bp)] if bp is not None else struct
+    return np.vstack(
+        [entity.x.to_numpy(), entity.y.to_numpy(), entity.z.to_numpy()]).T
+
+
 def make_box(struct, radius=4, relative_to_ligand=True):
-    """Truncates receptor atoms which are too far away from the ligand.
+    """Truncate receptor atoms which are too far away from the ligand.
 
     Arguments:
         struct: DataFrame containing x, y, z, types, bp series.
@@ -72,43 +113,30 @@ def make_box(struct, radius=4, relative_to_ligand=True):
         ligand atom.
     """
 
-    def extract_coords(bp):
-        entity = struct[(struct.bp == bp) & (struct.atomic_number > 1)]
-        return np.vstack(
-            [entity.x.to_numpy(), entity.y.to_numpy(), entity.z.to_numpy()]).T
+    ligand_np = extract_coords(struct, 0)
+    receptor_np = extract_coords(struct, 1)
 
-    ligand_np = extract_coords(0)
-    receptor_np = extract_coords(1)
+    if relative_to_ligand:
+        result = struct[struct.bp == 0]
+        rec_struct = struct[struct.bp == 1].copy()
+        rec_struct.reset_index(inplace=True)
+        distances = cdist(ligand_np, receptor_np, 'euclidean')
+        mask = distances < radius
+        keep = np.where(np.sum(mask, axis=0))[0]
+        result = result.append(rec_struct[rec_struct.index.isin(keep)],
+                               ignore_index=True)
+        del result['index']
+
     ligand_centre = np.mean(ligand_np, axis=0)
 
     struct['sq_dist'] = ((struct.x - ligand_centre[0]) ** 2 +
                          (struct.y - ligand_centre[1]) ** 2 +
                          (struct.z - ligand_centre[2]) ** 2)
 
-    if not relative_to_ligand:
-        struct = struct[(struct.sq_dist < radius ** 2) | (struct.bp == 0)].copy()
-        del struct['sq_dist']
-        return struct
-
-    struct = struct[struct.sq_dist < 12].copy()
+    struct = struct[
+        (struct.sq_dist < radius ** 2) | (struct.bp == 0)].copy()
     del struct['sq_dist']
-    ligand = struct[struct.bp == 0].copy()
-    receptor = struct[struct.bp == 1].copy()
-    ligand_np = extract_coords(0)
-    r_squared = radius ** 2
-    include = np.zeros((len(receptor, )))
-    for rec_idx in range(len(include)):
-        for lig_idx in range(ligand_np.shape[0]):
-            sq_dist = sum(
-                np.square(receptor_np[rec_idx, :] - ligand_np[lig_idx, :]))
-            if sq_dist <= r_squared:
-                include[rec_idx] = 1
-                break
-    receptor['include'] = include
-    receptor = receptor[receptor.include == 1]
-    result = ligand.append(receptor, ignore_index=True)
-    del result['include']
-    return result
+    return struct
 
 
 def make_bit_vector(atom_types, n_atom_types, compact=True):
@@ -156,11 +184,17 @@ def centre_on_ligand(struct):
     return struct
 
 
-def concat_structs(rec, lig, min_lig_rotation=0):
+def concat_structs(rec, lig, min_lig_rotation=0, parsers=None):
     """Concatenate the receptor and ligand parquet structures."""
     min_lig_rotation = np.pi * min_lig_rotation / 180
-    lig_struct = pd.read_parquet(lig)
-    rec_struct = pd.read_parquet(rec)
+
+    if parsers is None:
+        lig_struct = pd.read_parquet(lig)
+        rec_struct = pd.read_parquet(rec)
+    else:
+        lig_struct = parsers[0].file_to_parquets(lig, add_polar_hydrogens=True)
+        rec_struct = parsers[1].file_to_parquets(rec, add_polar_hydrogens=True)
+
     ############################################################################
     # Uncommenting the following would result in excluding 'other' atoms:
 
@@ -269,6 +303,19 @@ def set_axes_equal(ax):
 
 
 if __name__ == '__main__':
+
+    bp = expand_path('~/projects/PointVS/data/small_chembl_test')
+    struct = make_box(concat_structs(
+        bp / 'receptors/12968.parquet',
+        bp / 'ligands/12968_decoys/mol9690_0.parquet',
+        min_lig_rotation=0),
+        radius=4, relative_to_ligand=True)
+    exit(0)
+    with Timer() as t:
+        generate_edges(struct, radius=4)
+    print(t.interval)
+
+    exit(0)
     random_coords = np.random.rand(30, 3)
     vecs = []
     angles = []
