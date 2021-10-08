@@ -2,122 +2,20 @@
 DataLoaders to take parquet directories and create feature vectors suitable
 for use by models found in this project.
 """
+import multiprocessing as mp
 from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
 import torch
+from torch.nn.functional import one_hot
 from torch.utils.data import DataLoader
 from torch.utils.data import WeightedRandomSampler
+from torch_geometric.data import DataLoader as GeoDataLoader, Data
 
 from point_vs.preprocessing.preprocessing import make_box, \
-    concat_structs, make_bit_vector, uniform_random_rotation
+    concat_structs, make_bit_vector, uniform_random_rotation, generate_edges
 from point_vs.utils import load_yaml
-
-
-def get_data_loader(
-        *data_roots, dataset_class, receptors=None, batch_size=32, compact=True,
-        use_atomic_numbers=False, radius=6, rot=True,
-        augmented_actives=0, min_aug_angle=30,
-        polar_hydrogens=True, mode='train',
-        max_active_rms_distance=None, fname_suffix='parquet',
-        min_inactive_rms_distance=None, types_fname=None):
-    """Give a DataLoader from a list of receptors and data roots."""
-    ds_kwargs = {
-        'receptors': receptors,
-        'radius': radius,
-        'rot': rot
-    }
-    ds = multiple_source_dataset(
-        dataset_class, *data_roots, balanced=True, compact=compact,
-        polar_hydrogens=polar_hydrogens, augmented_actives=augmented_actives,
-        min_aug_angle=min_aug_angle, use_atomic_numbers=use_atomic_numbers,
-        max_active_rms_distance=max_active_rms_distance,
-        min_inactive_rms_distance=min_inactive_rms_distance,
-        fname_suffix=fname_suffix, types_fname=types_fname,
-        **ds_kwargs)
-    collate = get_collate_fn(ds.feature_dim)
-    sampler = ds.sampler if mode == 'train' else None
-    return DataLoader(
-        ds, batch_size, False, sampler=sampler,  # num_workers=mp.cpu_count(),
-        collate_fn=collate, drop_last=False, pin_memory=True)
-
-
-def multiple_source_dataset(
-        loader_class, *base_paths, receptors=None, polar_hydrogens=True,
-        augmented_actives=0, min_aug_angle=30, max_active_rms_distance=None,
-        min_inactive_rms_distance=None, compact=True, use_atomic_numbers=False,
-        fname_suffix='parquet', balanced=True, types_fname=None, **kwargs):
-    """Concatenate mulitple datasets into one, preserving balanced sampling.
-
-    Arguments:
-        loader_class: one of either PointCloudDataset or SE3TransformerLoader,
-            inheriting from Datset. This class should have in its constructor a
-            list of binary labels associated with each item, stored in
-            <class>.labels.
-        base_paths: locations of parquets files, one for each dataset.
-        receptors: receptors to include. If None, all receptors found are used.
-        polar_hydrogens:
-        augmented_actives: number of actives to be rotated randomly and used as
-            decoys (per active in the training set)
-        min_aug_angle: minimum angle of rotation for each augmented active (as
-            specified in augmented_active_count)
-        max_active_rms_distance: (pose selection) maximum rmsd between active
-            docked and crystal structures
-        min_inactive_rms_distance: (pose selection) minimum rmsd between
-            inactive docked and crystal structures
-        compact: compress 1hot vectors by using a single bit to
-            signify whether atoms are from the receptor or ligand rather
-            than using two input bits per atom type
-        use_atomic_numbers: use atomic numbers rather than sminatypes
-        fname_suffix:
-        balanced: whether to sample probabailistically based on class imbalance.
-        types_fname:
-        kwargs: other keyword arguments for loader_class.
-
-    Returns:
-        Concatenated dataset including balanced sampler.
-    """
-    datasets = []
-    labels = []
-    filenames = []
-    base_paths = sorted(
-        [Path(bp).expanduser() for bp in base_paths if bp is not None])
-    for base_path in base_paths:
-        if base_path is not None:
-            dataset = loader_class(
-                base_path, compact=compact, receptors=receptors,
-                augmented_active_count=augmented_actives,
-                augmented_active_min_angle=min_aug_angle,
-                polar_hydrogens=polar_hydrogens,
-                max_active_rms_distance=max_active_rms_distance,
-                min_inactive_rms_distance=min_inactive_rms_distance,
-                use_atomic_numbers=use_atomic_numbers,
-                fname_suffix=fname_suffix,
-                types_fname=types_fname,
-                **kwargs)
-            labels += list(dataset.labels)
-            filenames += dataset.ligand_fnames
-            datasets.append(dataset)
-    labels = np.array(labels)
-    active_count = np.sum(labels)
-    class_sample_count = np.array(
-        [len(labels) - active_count, active_count])
-    if np.sum(labels) == len(labels) or np.sum(labels) == 0 or not balanced:
-        sampler = None
-    else:
-        weights = 1. / class_sample_count
-        sample_weights = torch.from_numpy(
-            np.array([weights[i] for i in labels]))
-        sampler = WeightedRandomSampler(sample_weights, len(sample_weights))
-    multi_source_dataset = torch.utils.data.ConcatDataset(datasets)
-    multi_source_dataset.sampler = sampler
-    multi_source_dataset.class_sample_count = class_sample_count
-    multi_source_dataset.labels = labels
-    multi_source_dataset.filenames = filenames
-    multi_source_dataset.base_path = ', '.join([str(bp) for bp in base_paths])
-    multi_source_dataset.feature_dim = datasets[0].feature_dim
-    return multi_source_dataset
 
 
 class PointCloudDataset(torch.utils.data.Dataset):
@@ -129,7 +27,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
             compact=True, rot=False, augmented_active_count=0,
             augmented_active_min_angle=90, max_active_rms_distance=None,
             min_inactive_rms_distance=None, fname_suffix='parquet',
-            types_fname=None, **kwargs):
+            types_fname=None, edge_radius=None, **kwargs):
         """Initialise dataset.
 
         Arguments:
@@ -160,6 +58,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
             include_relaxed: (pose selection) include the relaxed crystal
                 structure as an active
             types_fname:
+            edge_radius:
             kwargs: keyword arguments passed to the parent class (Dataset).
         """
 
@@ -168,6 +67,8 @@ class PointCloudDataset(torch.utils.data.Dataset):
         super().__init__(**kwargs)
         self.radius = radius
         self.base_path = Path(base_path).expanduser()
+        if edge_radius > 0:
+            self.edge_radius = edge_radius
 
         self.fname_suffix = fname_suffix
         if not self.base_path.exists():
@@ -325,19 +226,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
         """Return the total size of the dataset."""
         return len(self.ligand_fnames)
 
-    def __getitem__(self, item):
-        """Given an index, locate and preprocess relevant parquet file.
-
-        Arguments:
-            item: index in the list of filenames denoting which ligand and
-                receptor to fetch
-
-        Returns:
-            Tuple containing (a) a tuple with a list of tensors: cartesian
-            coordinates, feature vectors and masks for each point, as well as
-            the number of points in the structure and (b) the label \in \{0, 1\}
-            denoting whether the structure is an active or a decoy.
-        """
+    def get_item(self, item):
         label = self.labels[item]
         if self.use_types:
             lig_fname = Path(self.base_path, self.ligand_fnames[item])
@@ -365,7 +254,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
 
         struct = make_box(concat_structs(
             rec_fname, lig_fname, min_lig_rotation=aug_angle),
-            radius=self.radius, relative_to_ligand=False)
+            radius=self.radius, relative_to_ligand=True)
 
         if not self.polar_hydrogens:
             struct = struct[struct['atomic_number'] > 1]
@@ -374,14 +263,185 @@ class PointCloudDataset(torch.utils.data.Dataset):
             struct.types = struct['atomic_number'].map(
                 self.atomic_number_to_index) + struct.bp * (
                                    self.max_feature_id + 1)
-        p = torch.from_numpy(
-            np.expand_dims(self.transformation(
-                struct[struct.columns[:3]].to_numpy()), 0))
 
-        v = torch.unsqueeze(make_bit_vector(
-            struct.types.to_numpy(), self.max_feature_id + 1, self.compact), 0)
+        p = torch.from_numpy(
+            self.transformation(
+                struct[struct.columns[:3]].to_numpy()))
+
+        v = make_bit_vector(
+            struct.types.to_numpy(), self.max_feature_id + 1, self.compact)
+
+        return p, v, label, lig_fname, rec_fname, struct
+
+    def __getitem__(self, item):
+        """Given an index, locate and preprocess relevant parquet file.
+
+        Arguments:
+            item: index in the list of filenames denoting which ligand and
+                receptor to fetch
+
+        Returns:
+            Tuple containing (a) a tuple with a list of tensors: cartesian
+            coordinates, feature vectors and masks for each point, as well as
+            the number of points in the structure and (b) the label \in \{0, 1\}
+            denoting whether the structure is an active or a decoy.
+        """
+        p, v, label, lig_fname, rec_fname, struct = self.get_item(item)
 
         return (p, v, len(struct)), lig_fname, rec_fname, label
+
+
+class PygPointCloudDataset(PointCloudDataset):
+    """Class for feeding structure parquets into network."""
+
+    def __getitem__(self, item):
+        """Given an index, locate and preprocess relevant parquet file.
+
+        Arguments:
+            item: index in the list of filenames denoting which ligand and
+                receptor to fetch
+
+        Returns:
+            Tuple containing (a) a tuple with a list of tensors: cartesian
+            coordinates, feature vectors and masks for each point, as well as
+            the number of points in the structure and (b) the label \in \{0, 1\}
+            denoting whether the structure is an active or a decoy.
+        """
+        p, v, label, lig_fname, rec_fname, struct = self.get_item(item)
+
+        if hasattr(self, 'edge_radius'):
+            edge_radius = self.edge_radius
+        else:
+            edge_radius = 4
+        edge_indices, edge_attrs = generate_edges(
+            struct, radius=edge_radius, hydrogens=self.polar_hydrogens)
+
+        edge_indices = torch.from_numpy(np.vstack(edge_indices)).long()
+        edge_attrs = one_hot(torch.from_numpy(edge_attrs).long(), 3)
+
+        return Data(
+            x=v,
+            edge_index=edge_indices,
+            edge_attr=edge_attrs,
+            pos=p,
+            y=torch.from_numpy(np.array(label)).long(),
+            m=torch.ones(len(struct)),
+            rec_fname=rec_fname,
+            lig_fname=lig_fname,
+        )
+
+
+def get_data_loader(
+        *data_roots, dataset_class, receptors=None, batch_size=32, compact=True,
+        use_atomic_numbers=False, radius=6, rot=True,
+        augmented_actives=0, min_aug_angle=30,
+        polar_hydrogens=True, mode='train',
+        max_active_rms_distance=None, fname_suffix='parquet',
+        min_inactive_rms_distance=None, types_fname=None, edge_radius=None):
+    """Give a DataLoader from a list of receptors and data roots."""
+    ds_kwargs = {
+        'receptors': receptors,
+        'radius': radius,
+        'rot': rot
+    }
+    ds = multiple_source_dataset(
+        dataset_class, *data_roots, balanced=True, compact=compact,
+        polar_hydrogens=polar_hydrogens, augmented_actives=augmented_actives,
+        min_aug_angle=min_aug_angle, use_atomic_numbers=use_atomic_numbers,
+        max_active_rms_distance=max_active_rms_distance,
+        min_inactive_rms_distance=min_inactive_rms_distance,
+        fname_suffix=fname_suffix, types_fname=types_fname,
+        edge_radius=edge_radius, **ds_kwargs)
+    sampler = ds.sampler if mode == 'train' else None
+    if dataset_class == PointCloudDataset:
+        collate = get_collate_fn(ds.feature_dim)
+        return DataLoader(
+            ds, batch_size, False, sampler=sampler,
+            collate_fn=collate, drop_last=False, pin_memory=True)
+    else:
+        return GeoDataLoader(
+            ds, batch_size, False, sampler=sampler,
+            num_workers=max(1, mp.cpu_count() - 1),
+            drop_last=False, pin_memory=True)
+
+
+def multiple_source_dataset(
+        loader_class, *base_paths, receptors=None, polar_hydrogens=True,
+        augmented_actives=0, min_aug_angle=30, max_active_rms_distance=None,
+        min_inactive_rms_distance=None, compact=True, use_atomic_numbers=False,
+        fname_suffix='parquet', balanced=True, types_fname=None,
+        edge_radius=None, **kwargs):
+    """Concatenate mulitple datasets into one, preserving balanced sampling.
+
+    Arguments:
+        loader_class: one of either PointCloudDataset or SE3TransformerLoader,
+            inheriting from Datset. This class should have in its constructor a
+            list of binary labels associated with each item, stored in
+            <class>.labels.
+        base_paths: locations of parquets files, one for each dataset.
+        receptors: receptors to include. If None, all receptors found are used.
+        polar_hydrogens:
+        augmented_actives: number of actives to be rotated randomly and used as
+            decoys (per active in the training set)
+        min_aug_angle: minimum angle of rotation for each augmented active (as
+            specified in augmented_active_count)
+        max_active_rms_distance: (pose selection) maximum rmsd between active
+            docked and crystal structures
+        min_inactive_rms_distance: (pose selection) minimum rmsd between
+            inactive docked and crystal structures
+        compact: compress 1hot vectors by using a single bit to
+            signify whether atoms are from the receptor or ligand rather
+            than using two input bits per atom type
+        use_atomic_numbers: use atomic numbers rather than sminatypes
+        fname_suffix:
+        balanced: whether to sample probabailistically based on class imbalance.
+        types_fname:
+        kwargs: other keyword arguments for loader_class.
+
+    Returns:
+        Concatenated dataset including balanced sampler.
+    """
+    datasets = []
+    labels = []
+    filenames = []
+    base_paths = sorted(
+        [Path(bp).expanduser() for bp in base_paths if bp is not None])
+    for base_path in base_paths:
+        if base_path is not None:
+            dataset = loader_class(
+                base_path, compact=compact, receptors=receptors,
+                augmented_active_count=augmented_actives,
+                augmented_active_min_angle=min_aug_angle,
+                polar_hydrogens=polar_hydrogens,
+                max_active_rms_distance=max_active_rms_distance,
+                min_inactive_rms_distance=min_inactive_rms_distance,
+                use_atomic_numbers=use_atomic_numbers,
+                fname_suffix=fname_suffix,
+                types_fname=types_fname,
+                edge_radius=edge_radius,
+                **kwargs)
+            labels += list(dataset.labels)
+            filenames += dataset.ligand_fnames
+            datasets.append(dataset)
+    labels = np.array(labels)
+    active_count = np.sum(labels)
+    class_sample_count = np.array(
+        [len(labels) - active_count, active_count])
+    if np.sum(labels) == len(labels) or np.sum(labels) == 0 or not balanced:
+        sampler = None
+    else:
+        weights = 1. / class_sample_count
+        sample_weights = torch.from_numpy(
+            np.array([weights[i] for i in labels]))
+        sampler = WeightedRandomSampler(sample_weights, len(sample_weights))
+    multi_source_dataset = torch.utils.data.ConcatDataset(datasets)
+    multi_source_dataset.sampler = sampler
+    multi_source_dataset.class_sample_count = class_sample_count
+    multi_source_dataset.labels = labels
+    multi_source_dataset.filenames = filenames
+    multi_source_dataset.base_path = ', '.join([str(bp) for bp in base_paths])
+    multi_source_dataset.feature_dim = datasets[0].feature_dim
+    return multi_source_dataset
 
 
 def types_to_list(types_fname):
