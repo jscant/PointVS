@@ -46,7 +46,7 @@ class PointNeuralNetwork(nn.Module):
 
         self.layers = self.build_net(**model_kwargs)
         self.optimiser = torch.optim.Adam(
-            self.parameters(), lr=self.lr, weight_decay=weight_decay, eps=1e-3)
+            self.parameters(), lr=self.lr, weight_decay=weight_decay)
 
         self.use_1cycle = use_1cycle
 
@@ -54,7 +54,6 @@ class PointNeuralNetwork(nn.Module):
             with open(save_path / 'model_kwargs.yaml', 'w') as f:
                 yaml.dump(model_kwargs, f)
 
-        self.apply(self.xavier_init)
         self.cuda()
 
     def forward(self, x):

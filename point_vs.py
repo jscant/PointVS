@@ -27,14 +27,15 @@ from point_vs import utils
 from point_vs.utils import load_yaml
 
 try:
-    from point_vs.models.egnn_network import EGNN
+    from point_vs.models.egnn_satorras import SartorrasEGNN
+    from point_vs.models.egnn_network import LucidEGNN
 except (ModuleNotFoundError, OSError):
     EGNNStack = None
 from point_vs.models.lie_conv import LieResNet
 from point_vs.models.lie_transformer import EquivariantTransformer
 from point_vs.parse_args import parse_args
 from point_vs.preprocessing.data_loaders import get_data_loader, \
-    PointCloudDataset
+    PointCloudDataset, PygPointCloudDataset
 
 try:
     import wandb
@@ -82,7 +83,8 @@ if __name__ == '__main__':
 
     model_classes = {
         'lieconv': LieResNet,
-        'egnn': EGNN,
+        'egnn': SartorrasEGNN,
+        'lucid': LucidEGNN,
         'lietransformer': EquivariantTransformer
     }
 
@@ -100,9 +102,14 @@ if __name__ == '__main__':
     else:
         test_receptors = args.test_receptors
 
+    if args.model == 'egnn':
+        dataset_class = PygPointCloudDataset
+    else:
+        dataset_class = PointCloudDataset
+
     train_dl = get_data_loader(
         args.train_data_root, args.translated_actives,
-        dataset_class=PointCloudDataset,
+        dataset_class=dataset_class,
         batch_size=args.batch_size, compact=args.compact, radius=args.radius,
         use_atomic_numbers=args.use_atomic_numbers, rot=False,
         augmented_actives=args.augmented_actives,
@@ -110,17 +117,20 @@ if __name__ == '__main__':
         max_active_rms_distance=args.max_active_rmsd,
         min_inactive_rms_distance=args.min_inactive_rmsd,
         polar_hydrogens=args.hydrogens, receptors=train_receptors, mode='train',
-        types_fname=args.train_types, fname_suffix=args.input_suffix)
+        types_fname=args.train_types, fname_suffix=args.input_suffix,
+        edge_radius=args.edge_radius
+    )
 
     # Is a validation set specified?
     test_dl = None
     if args.test_data_root is not None:
         test_dl = get_data_loader(
             args.test_data_root, receptors=test_receptors, compact=args.compact,
-            dataset_class=PointCloudDataset,
+            dataset_class=dataset_class,
             use_atomic_numbers=args.use_atomic_numbers, radius=args.radius,
             polar_hydrogens=args.hydrogens, batch_size=args.batch_size,
             types_fname=args.test_types,
+            edge_radius=args.edge_radius,
             rot=False, mode='val', fname_suffix=args.input_suffix)
 
     args_to_record = vars(args)
@@ -161,6 +171,10 @@ if __name__ == '__main__':
         'norm_coords': args.norm_coords,
         'norm_feats': args.norm_feats,
         'thin_mlps': args.thin_mlps,
+        'attention': args.egnn_attention,
+        'tanh': args.egnn_tanh,
+        'normalize': args.egnn_normalise,
+        'residual': args.egnn_residual,
     }
 
     args_to_record.update(model_kwargs)

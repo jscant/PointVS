@@ -7,7 +7,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('model', type=str,
                         help='Type of point cloud network to use: '
-                             'lietransformer, lieconv or egnn')
+                             'lietransformer, lieconv, lucid or egnn')
     parser.add_argument('train_data_root', type=str,
                         help='Location of structure training *.parquets files. '
                              'Receptors should be in a directory named '
@@ -144,4 +144,16 @@ def parse_args():
                         help='Optional name of GNINA-like types file which '
                              'contains paths and labels for a test set. '
                              'See GNINA 1.0 documentation for specification.')
+    parser.add_argument('--egnn_attention', action='store_true',
+                        help='Use attention mechanism on edges for EGNN')
+    parser.add_argument('--egnn_tanh', action='store_true',
+                        help='Put tanh layer at the end of the coordinates '
+                             'mlp (EGNN)')
+    parser.add_argument('--egnn_normalise', action='store_true',
+                        help='Normalise radial coordinates (EGNN)')
+    parser.add_argument('--egnn_residual', action='store_true',
+                        help='Use residual connections (EGNN)')
+    parser.add_argument('--edge_radius', type=float, default=4.0,
+                        help='Maximum interatomic distance for an edge to '
+                             'exist (EGNN)')
     return parser.parse_args()
