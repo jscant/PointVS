@@ -313,8 +313,7 @@ class PygPointCloudDataset(PointCloudDataset):
             edge_radius = self.edge_radius
         else:
             edge_radius = 4
-        edge_indices, edge_attrs = generate_edges(
-            struct, radius=edge_radius, hydrogens=self.polar_hydrogens)
+        edge_indices, edge_attrs = generate_edges(struct, radius=edge_radius)
 
         edge_indices = torch.from_numpy(np.vstack(edge_indices)).long()
         edge_attrs = one_hot(torch.from_numpy(edge_attrs).long(), 3)

@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from matplotlib import pyplot as plt
 from scipy.spatial.distance import cdist
 
-from point_vs.utils import expand_path, Timer
+from point_vs.utils import expand_path
 
 
 def generate_random_z_axis_rotation():
@@ -59,7 +59,7 @@ def angle_3d(v1, v2):
     return angle
 
 
-def generate_edges(struct, radius=4, hydrogens=False):
+def generate_edges(struct, radius=4):
     """Generate edges of graph with specified distance cutoff.
 
     Arguments:
@@ -71,17 +71,16 @@ def generate_edges(struct, radius=4, hydrogens=False):
         are 0 for ligand-ligand edges, 1 for ligand-receptor edges, and 2 for
         receptor-receptor edges.
     """
-    if not hydrogens:
-        struct = struct[struct.atomic_number > 1]
     coords = extract_coords(struct)
-    bp = struct.bp.to_numpy()
+    lig_or_rec = struct.bp.to_numpy()
     distances = cdist(coords, coords, 'euclidean')
     adj = (distances < radius) & (distances > 1e-7)
     n_edges = np.sum(adj)
     edge_indices = np.where(adj)
 
-    bp_0 = bp[edge_indices[0]]
-    bp_1 = bp[edge_indices[1]]
+    bp_0 = lig_or_rec[edge_indices[0]]
+    bp_1 = lig_or_rec[edge_indices[1]]
+
     edge_attrs = np.zeros((n_edges,), dtype='int32')
     edge_attrs[np.where((bp_0 == 0) & (bp_1 == 1))] = 1
     edge_attrs[np.where((bp_0 == 1) & (bp_1 == 0))] = 1
@@ -226,7 +225,7 @@ def concat_structs(rec, lig, min_lig_rotation=0, parsers=None):
 """Everything below is for debugging (ignore)"""
 
 
-def plot_struct(struct):
+def plot_struct(struct, edges=None):
     """Helper function for plotting inputs."""
 
     def set_axes_equal(ax):
@@ -263,6 +262,22 @@ def plot_struct(struct):
     colours = ['black', 'red']
     ax.scatter(x, y, z, c=atoms, cmap=matplotlib.colors.ListedColormap(colours),
                marker='o', s=80)
+
+    if edges is not None:
+        cols = {
+            0: 'g-',
+            1: 'r-',
+            2: 'b-'
+        }
+        for idx, (i, j) in enumerate(zip(*edges[0])):
+            col = cols[edges[1][idx]]
+            ax.plot(
+                ([xyz[i, 0], xyz[j, 0]]),
+                ([xyz[i, 1], xyz[j, 1]]),
+                ([xyz[i, 2], xyz[j, 2]]),
+                col
+            )
+
     ax.set_xlabel('X Label')
     ax.set_ylabel('Y Label')
     ax.set_zlabel('Z Label')
@@ -271,70 +286,11 @@ def plot_struct(struct):
     plt.show()
 
 
-def set_axes_equal(ax):
-    """Make axes of 3D plot have equal scale so that spheres appear as spheres,
-    cubes as cubes, etc..  This is one possible solution to Matplotlib's
-    ax.set_aspect('equal') and ax.axis('equal') not working for 3D.
-
-    Arguments:
-        ax: a matplotlib axis, e.g., as output from plt.gca().
-
-    (From stackoverflow)
-    """
-
-    x_limits = ax.get_xlim3d()
-    y_limits = ax.get_ylim3d()
-    z_limits = ax.get_zlim3d()
-
-    x_range = abs(x_limits[1] - x_limits[0])
-    x_middle = np.mean(x_limits)
-    y_range = abs(y_limits[1] - y_limits[0])
-    y_middle = np.mean(y_limits)
-    z_range = abs(z_limits[1] - z_limits[0])
-    z_middle = np.mean(z_limits)
-
-    # The plot bounding box is a sphere in the sense of the infinity
-    # norm, hence I call half the max range the plot radius.
-    plot_radius = 0.5 * max([x_range, y_range, z_range])
-
-    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
-    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
-    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
-
-
 if __name__ == '__main__':
-
-    bp = expand_path('~/projects/PointVS/data/small_chembl_test')
+    bp = expand_path('data/small_chembl_test')
     struct = make_box(concat_structs(
         bp / 'receptors/12968.parquet',
-        bp / 'ligands/12968_decoys/mol9690_0.parquet',
+        bp / 'ligands/12968_actives/mol25_7.parquet',
         min_lig_rotation=0),
-        radius=4, relative_to_ligand=True)
-    exit(0)
-    with Timer() as t:
-        generate_edges(struct, radius=4)
-    print(t.interval)
-
-    exit(0)
-    random_coords = np.random.rand(30, 3)
-    vecs = []
-    angles = []
-    for i in range(300):
-        rot = uniform_random_rotation(random_coords)
-        vecs.append(rot[0, :])
-        angles.append(180 * angle_3d(random_coords[0, :], rot[0, :]) / np.pi)
-
-    vecs = np.array(vecs)
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    x, y, z = vecs[:, 0], vecs[:, 1], vecs[:, 2]
-    ax.scatter(x, y, z, marker='o', s=20)
-    ax.scatter(*random_coords[0, :], c='r', s=20, marker='o')
-    ax.set_box_aspect((np.ptp(x), np.ptp(y), np.ptp(z)))
-    set_axes_equal(ax)
-
-    plt.savefig('sphere.png')
-    plt.show()
-    plt.clf()
-    plt.hist(angles, bins=50)
-    plt.savefig('angles.png')
+        radius=9, relative_to_ligand=True)
+    plot_struct(struct, generate_edges(struct, radius=4))
