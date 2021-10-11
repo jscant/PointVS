@@ -97,7 +97,8 @@ class LucidEGNN(PointNeuralNetwork):
         egnn = lambda: layer_class(
             dim=k, m_dim=m_dim, norm_coors=norm_coords, norm_feats=norm_feats,
             dropout=dropout, fourier_features=fourier_features,
-            num_nearest_neighbors=nbhd, init_eps=1e-2, soft_edges=True)
+            num_nearest_neighbors=nbhd, init_eps=1e-2, soft_edges=True,
+            coor_weights_clamp_value=2.0)
 
         return nn.Sequential(
             Pass(nn.Linear(dim_input, k), dim=1),
