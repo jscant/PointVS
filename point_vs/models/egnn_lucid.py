@@ -35,9 +35,9 @@ class PygLucidEGNN(PygPointNeuralNetwork):
                 # Add a Tanh for stability
                 layer.coors_mlp = nn.Sequential(
                     nn.Linear(k, k * 4),
-                    self.dropout,
+                    layer.dropout,
                     SiLU(),
-                    nn.Linear(self.m_dim * 4, 1),
+                    nn.Linear(layer.mdim * 4, 1),
                     nn.Tanh()
                 )
                 layers.append(layer)
