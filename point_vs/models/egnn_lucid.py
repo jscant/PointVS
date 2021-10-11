@@ -37,7 +37,7 @@ class PygLucidEGNN(PygPointNeuralNetwork):
                     nn.Linear(k, k * 4),
                     layer.dropout,
                     SiLU(),
-                    nn.Linear(layer.mdim * 4, 1),
+                    nn.Linear(layer.m_dim * 4, 1),
                     nn.Tanh()
                 )
                 layers.append(layer)
