@@ -1,22 +1,18 @@
 import math
 import time
-from abc import abstractmethod
 from pathlib import Path
 
 import numpy as np
 import torch
 import wandb
-import yaml
 from torch import nn
 
 from point_vs.models.point_neural_network import PointNeuralNetwork
-from point_vs.utils import get_eta, format_time, print_with_overwrite, mkdir, \
-    to_numpy
+from point_vs.utils import get_eta, format_time, print_with_overwrite, to_numpy
 
 
 class PygPointNeuralNetwork(PointNeuralNetwork):
     """Base (abstract) class for all point cloud based binary classifiers."""
-
 
     def optimise(self, data_loader, epochs=1, epoch_end_validation_set=None):
         """Train the network.
