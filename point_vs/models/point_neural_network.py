@@ -44,6 +44,7 @@ class PointNeuralNetwork(nn.Module):
         self.wandb_path = self.save_path / 'wandb_{}'.format(wandb_project)
         self.wandb_run = wandb_run
 
+        self.n_layers = model_kwargs.get('num_layers', 12)
         self.layers = self.build_net(**model_kwargs)
         self.optimiser = torch.optim.Adam(
             self.parameters(), lr=self.lr, weight_decay=weight_decay)
@@ -61,9 +62,8 @@ class PointNeuralNetwork(nn.Module):
             x = layer(x)
         return x
 
-    @abstractmethod
     def _get_y_true(self, y):
-        pass
+        return y.cuda()
 
     def _process_inputs(self, x):
         return x.cuda()

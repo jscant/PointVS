@@ -28,7 +28,7 @@ from point_vs.utils import load_yaml
 
 try:
     from point_vs.models.egnn_satorras import SartorrasEGNN
-    from point_vs.models.egnn_network import LucidEGNN
+    from point_vs.models.egnn_lucid import PygLucidEGNN
 except (ModuleNotFoundError, OSError):
     EGNNStack = None
 from point_vs.models.lie_conv import LieResNet
@@ -84,7 +84,7 @@ if __name__ == '__main__':
     model_classes = {
         'lieconv': LieResNet,
         'egnn': SartorrasEGNN,
-        'lucid': LucidEGNN,
+        'lucid': PygLucidEGNN,
         'lietransformer': EquivariantTransformer
     }
 
@@ -102,7 +102,7 @@ if __name__ == '__main__':
     else:
         test_receptors = args.test_receptors
 
-    if args.model == 'egnn':
+    if args.model in ('lucid', 'egnn'):
         dataset_class = PygPointCloudDataset
     else:
         dataset_class = PointCloudDataset
