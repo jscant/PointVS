@@ -37,7 +37,13 @@ class PygPointNeuralNetwork(PointNeuralNetwork):
             scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 self.optimiser, max_lr=self.lr,
                 steps_per_epoch=epochs * len(data_loader), epochs=1)
+            print('Using 1cycle')
+        elif self.warm_restarts:
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+                self.optimiser, T_0=len(data_loader), T_mult=1, eta_min=0)
+            print('Using CosineAnnealingWarmRestarts')
         else:
+            print('Using a flat learning rate')
             scheduler = None
         reported_decoy_pred = reported_active_pred = 0.5
         init_epoch = self.epoch

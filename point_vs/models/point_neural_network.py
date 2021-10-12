@@ -1,6 +1,5 @@
 import math
 import time
-from abc import abstractmethod
 from pathlib import Path
 
 import numpy as np
@@ -18,7 +17,7 @@ class PointNeuralNetwork(nn.Module):
 
     def __init__(self, save_path, learning_rate, weight_decay=None,
                  wandb_project=None, wandb_run=None, silent=False,
-                 use_1cycle=False, **model_kwargs):
+                 use_1cycle=False, warm_restarts=False, **model_kwargs):
         super().__init__()
         self.batch = 0
         self.epoch = 0
@@ -49,7 +48,11 @@ class PointNeuralNetwork(nn.Module):
         self.optimiser = torch.optim.Adam(
             self.parameters(), lr=self.lr, weight_decay=weight_decay)
 
+        assert not (use_1cycle and warm_restarts), '1cycle nad warm restarts ' \
+                                                   'are mutually exclusive'
+
         self.use_1cycle = use_1cycle
+        self.warm_restarts = warm_restarts
 
         if not silent:
             with open(save_path / 'model_kwargs.yaml', 'w') as f:
@@ -97,7 +100,13 @@ class PointNeuralNetwork(nn.Module):
             scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 self.optimiser, max_lr=self.lr,
                 steps_per_epoch=epochs * len(data_loader), epochs=1)
+            print('Using 1cycle')
+        elif self.warm_restarts:
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+                self.optimiser, T_0=len(data_loader), T_mult=1, eta_min=0)
+            print('Using CosineAnnealingWarmRestarts')
         else:
+            print('Using a flat learning rate')
             scheduler = None
         reported_decoy_pred = reported_active_pred = 0.5
         init_epoch = self.epoch
