@@ -29,7 +29,7 @@ class PygLucidEGNN(PygPointNeuralNetwork):
                 update_coors=True,
                 dropout=dropout,
                 coor_weights_clamp_value=2.0,
-                aggr='add',
+                aggr='mean',
             )
             if tanh:
                 # Add a Tanh for stability
