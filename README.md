@@ -13,7 +13,7 @@ and LieTransformer with SE(3) equivariance to perform
 [virtual screening](https://en.wikipedia.org/wiki/Virtual_screening) and
 pose selection.
 
-##Installation and Initialisation
+## Installation and Initialisation
 ```
 git clone https://github.com/jscant/PointVS
 cd PointVS
@@ -36,7 +36,7 @@ A small working example is:
 python3 point_vs.py egnn data/small_chembl_test test_output --test_types data/small_chembl_test.types
 ```
 
-##Dataset generation
+## Dataset generation
 
 For full instructions, see the [README](https://github.com/jscant/PointVS/tree/master/point_vs/dataset_generation).
 
@@ -47,13 +47,13 @@ the types file (Loading Datasets section below), from which
 `point_vs/dataset_generation/mol_to_parquet.py` can be used to convert 
 pdb, sdf and mol2 files to the required format.
 
-##Loading datasets
+## Loading datasets
 The recommended way to feed data into the models is to use types files, which
 are used extensively in [GNINA 1.0](https://github.com/gnina/gnina). The
 input `point_vs.py` arguments `train_data_root`, `--test_data_root (-t)`,
 `--train_types` and `--test_types` should be specified.
 
-###Option 1: Types File
+### Option 1: Types File
 Each line should follow the format:
 
 `<label> <n/a> <rmsd> <receptor> <ligand>`
@@ -87,7 +87,7 @@ See the [README](https://github.com/jscant/PointVS/tree/master/point_vs/dataset_
 in `point_vs/dataset_generation` for a script which generates types files and 
 calculates RMSDs.
 
-###Option 2: Active and inactive molecules sorted by directory structure
+### Option 2: Active and inactive molecules sorted by directory structure
 
 The input structures should be in pandas-readable parquet files, with the ligand
 and receptor in separate files for memory efficiency. The directory structure 
