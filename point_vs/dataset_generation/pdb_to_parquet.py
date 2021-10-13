@@ -11,7 +11,7 @@ from openbabel import openbabel
 from plip.basic.supplemental import extract_pdbid
 
 from point_vs.utils import mkdir, no_return_parallelise, coords_to_string, \
-    PositionSet
+    PositionSet, expand_path
 
 try:
     from openbabel import pybel
@@ -747,13 +747,15 @@ class StructuralFileParser:
 
     def file_to_parquets(
             self, input_file, output_path=None, output_fname=None,
-            add_polar_hydrogens=True):
+            add_polar_hydrogens=True, sdf_idx=None):
         mols = self.read_file(input_file)
         if output_path is not None:
             output_path = mkdir(output_path)
         if output_fname is not None:
             output_fname = Path(output_fname)
         for idx, mol in enumerate(mols):
+            if sdf_idx is not None and idx != sdf_idx:
+                continue
             if output_fname is None:
                 fname = Path(
                     mol.OBMol.GetTitle()).name.split('.')[0]
@@ -811,68 +813,57 @@ def parse_types_file(types_file):
     def find_paths(line):
         recpath, ligpath = None, None
         chunks = line.split()
-        label = int(chunks[0])
         for chunk in chunks:
-            if chunk.find('.gninatypes') != -1:
+            if chunk.find('.parquet') != -1:
                 if recpath is None:
                     recpath = chunk
                 else:
                     ligpath = chunk
                     break
-        return label, recpath, ligpath
+        return recpath, ligpath
 
+    recs, ligs = set(), set()
+    with open(types_file, 'r') as f:
+        for line in f.readlines():
+            rec, lig = find_paths(line)
+            recs.add(rec)
+            ligs.add(lig)
+    return list(recs), list(ligs)
+
+
+def parse_single_types_entry(inp, outp, structure_type):
     def get_sdf_and_index(lig):
-        sdf = '_'.join(lig.split('_')[:-1]) + '.sdf'
-        idx = int(lig.split('_')[-1].split('.')[0])
+        sdf = '_'.join(str(lig).split('_')[:-1]) + '.sdf'
+        idx = int(str(lig).split('_')[-1].split('.')[0])
         return sdf, idx
 
     def get_pdb(rec):
-        return '_'.join(rec.split('_')[:-1]) + '.pdb'
+        return str(rec).replace(
+            '.parquet', '.pdb').replace(
+            '.gninatypes', '.pdb')
 
-    labels = defaultdict(lambda: defaultdict(dict))
-    with open(types_file, 'r') as f:
-        for line in f.readlines():
-            label, rec, lig = find_paths(line)
-            lig_sdf, idx = get_sdf_and_index(lig)
-            rec_pdb = get_pdb(rec)
-            labels[rec_pdb][lig_sdf][idx] = label
-    return labels
-
-
-def parse_single_types_entry(rec, lig, labels, input_base_path, output_path):
-    output_path = Path(output_path)
-    if rec is None or lig is None:
-        return
-    lig_parser = StructuralFileParser('ligand')
-    rec_parser = StructuralFileParser('receptor')
-    master_path = '---'.join(str(Path(rec).with_suffix('')).split('/'))
-    rec_output_dir = Path(
-        output_path, 'receptors')
-    for idx, label in labels.items():
-        suffix = '_actives' if label else '_decoys'
-        lig_output_dir = Path(
-            output_path, 'ligands', master_path + suffix)
-
-        lig_output_name = Path(Path(lig).name).stem + '_{}.parquet'.format(idx)
-
-        lig_parser.file_to_parquets(Path(input_base_path, lig),
-                                    lig_output_dir, lig_output_name)
-        rec_parser.file_to_parquets(Path(input_base_path, rec),
-                                    rec_output_dir, master_path + '.parquet')
+    parser = StructuralFileParser(structure_type)
+    if structure_type == 'receptor':
+        inp = get_pdb(inp)
+        sdf_idx = None
+    else:
+        inp, sdf_idx = get_sdf_and_index(inp)
+    parser.file_to_parquets(inp,
+                            outp.parent,
+                            outp.name.replace('.gninatypes', '.parquet'),
+                            sdf_idx=sdf_idx)
 
 
-def parse_types_mp(types_file, input_base_path, output_dir):
-    recs, ligs, labels = [], [], []
-    labels_map = parse_types_file(types_file)
-    for rec, lig_d in labels_map.items():
-        for lig, idx_to_label in lig_d.items():
-            recs.append(rec)
-            ligs.append(lig)
-            labels.append(idx_to_label)
-    output_dir = mkdir(output_dir)
+def parse_types_mp(types_file, input_base_path, output_base_path):
+    output_dir = mkdir(output_base_path)
+    input_base_path = expand_path(input_base_path)
+    recs, ligs = parse_types_file(types_file)
+    inputs = recs + ligs
+    structure_types = ['receptor' for _ in recs] + ['ligand' for _ in ligs]
+    outputs = [Path(output_dir, input) for input in inputs]
+    inputs = [Path(input_base_path, input) for input in inputs]
     no_return_parallelise(
-        parse_single_types_entry, recs, ligs, labels, input_base_path,
-        output_dir, cpus=mp.cpu_count())
+        parse_single_types_entry, inputs, outputs, structure_types)
 
 
 if __name__ == '__main__':
