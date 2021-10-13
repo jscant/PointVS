@@ -91,6 +91,8 @@ if __name__ == '__main__':
                 wandb_run = cmd_line_args['wandb_run'] + '_VAL-' + Path(
                     args.test_types).with_suffix('').name
 
+    args_to_record['wandb_project'] = wandb_project
+    args_to_record['wandb_run'] = wandb_run
     wandb_init_kwargs = {
         'project': wandb_project, 'allow_val_change': True,
         'config': args_to_record
