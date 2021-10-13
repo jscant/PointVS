@@ -52,3 +52,21 @@ which are selected by specifying EITHER:
     ====== --active_pattern AND --inactive_pattern ======
     No RMSD will be calculated; structures matching the active and inactive
     patterns will be assigned labels 1 and 0 respectively.
+
+
+##mol_to_parquet.py
+
+```
+usage: mol_to_parquet.py [-h] types_file output_path types_base_path
+
+positional arguments:
+  types_file       Input file, any of sdf, pdb or mol2 format accepted
+  output_path      Directory in which to store resultant parquet files
+  types_base_path  Root relative to which types file entries are made. This
+                   should contain all of the SDF files to be converted.
+```
+
+This script will take the output of `generate_types_file.py` and convert the
+pdb/sdf files used to generate the types file into parquets. The output
+directory structure will that found in the types file, relative to
+`output_path`.
