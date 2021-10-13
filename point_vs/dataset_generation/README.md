@@ -1,8 +1,10 @@
 #Dataset generation
+
 Some of the more important scripts found in `pointvs/dataset_generation` are
 explained here.
 
 ##generate_types_file.py
+
 Generate a types file including RMSD calculations if specified from PDB, SDF
 and MOL2 files.
 ```
