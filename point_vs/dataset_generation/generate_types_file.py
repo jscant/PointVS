@@ -57,7 +57,7 @@ from pathlib import Path
 
 from openbabel import pybel
 
-from point_vs.utils import expand_path, pretify_dict
+from point_vs.utils import expand_path, pretify_dict, mkdir
 
 
 def execute_cmd(cmd, raise_exceptions=True, silent=False):
@@ -219,7 +219,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     base_path = expand_path(args.base_path)
-    output_path = expand_path(args.output_path)
+    output_path = mkdir(args.output_path)
 
     pdb_exp = args.receptor_pattern
     xtal_exp = args.crystal_pose_pattern
@@ -236,5 +236,5 @@ if __name__ == '__main__':
                 s += s_
 
     with open(expand_path(
-            output_path / (output_path.name + '.types')), 'w') as f:
+            output_path / (output_path.parent.name + '.types')), 'w') as f:
         f.write(s)
