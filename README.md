@@ -159,7 +159,7 @@ The input format for PointVS neural networks is the
 [parquet](http://parquet.apache.org/documentation/latest/). The script
 `point_vs/dataset_generation/generate_types_file.py` can be used to generate
 the types file (Loading Datasets section below), from which
-`point_vs/dataset_generation/mol_to_parquet.py` can be used to convert 
+`point_vs/dataset_generation/types_to_parquet.py` can be used to convert 
 pdb, sdf and mol2 files to the required format.
 
 ## Loading datasets
