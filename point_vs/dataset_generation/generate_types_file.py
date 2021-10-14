@@ -108,15 +108,15 @@ def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
         return [f for f in directory.glob('*') if f.is_file() and
                 re.match(exp, str(f.name))]
 
-    def types_line(receptor_pdb, ref_sdf, query_sdf=None, label=None):
+    def types_line(receptor_pdb, ref_sdf=None, query_sdf=None, label=None):
         dir_name = directory.name
         template = '{0} -1 {1} {2} {3}\n'
 
         if label is None:
             rmsds = get_rmsd(ref_sdf, query_sdf)
         else:
-            rmsds = [-1 for _ in pybel.readfile(ref_sdf.suffix[1:],
-                                                str(ref_sdf))]
+            rmsds = [-1 for _ in pybel.readfile(query_sdf.suffix[1:],
+                                                str(query_sdf))]
 
         if include_crystal_structure:
             res = template.format(
@@ -141,7 +141,7 @@ def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
                 ),
                 Path(
                     dir_name,
-                    ref_sdf.with_suffix('').name + '_{}.parquet'.format(idx)
+                    query_sdf.with_suffix('').name + '_{}.parquet'.format(idx)
                 )
             )
         return res
@@ -189,9 +189,11 @@ def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
         active_matches = re_glob(active_exp)
         inactive_matches = re_glob(inactive_exp)
         for active_match in active_matches:
-            types_str += types_line(receptor_pdb, active_match, label=1)
+            types_str += types_line(
+                receptor_pdb, query_sdf=active_match, label=1)
         for inactive_match in inactive_matches:
-            types_str += types_line(receptor_pdb, inactive_match, label=0)
+            types_str += types_line(
+                receptor_pdb, query_sdf=inactive_match, label=0)
 
     else:
         raise RuntimeError('Either specify both crystal_exp and docked_exp '
