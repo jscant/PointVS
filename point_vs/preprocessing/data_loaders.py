@@ -229,8 +229,8 @@ class PointCloudDataset(torch.utils.data.Dataset):
     def get_item(self, item):
         label = self.labels[item]
         if self.use_types:
-            lig_fname = Path(self.base_path, self.ligand_fnames[item])
-            rec_fname = Path(self.base_path, self.receptor_fnames[item])
+            lig_fname = Path(self.ligand_fnames[item])
+            rec_fname = Path(self.receptor_fnames[item])
         else:
             lig_fname = self.ligand_fnames[item]
             rec_name = lig_fname.parent.name.split('_')[0]
@@ -253,8 +253,9 @@ class PointCloudDataset(torch.utils.data.Dataset):
             aug_angle = self.augmented_active_min_angle
 
         struct = make_box(concat_structs(
-            rec_fname, lig_fname, min_lig_rotation=aug_angle),
-            radius=self.radius, relative_to_ligand=True)
+            self.base_path / rec_fname, self.base_path / lig_fname,
+            min_lig_rotation=aug_angle), radius=self.radius,
+            relative_to_ligand=True)
 
         if not self.polar_hydrogens:
             struct = struct[struct['atomic_number'] > 1]
