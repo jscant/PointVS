@@ -236,5 +236,5 @@ if __name__ == '__main__':
                 s += s_
 
     with open(expand_path(
-            output_path / output_path.name + '.types'), 'w') as f:
+            output_path / (output_path.name + '.types')), 'w') as f:
         f.write(s)
