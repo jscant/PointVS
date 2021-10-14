@@ -868,22 +868,18 @@ def parse_types_mp(types_file, input_base_path, output_base_path):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('input_file', type=str,
+    parser.add_argument('types_file', type=str,
                         help='Input file, any of sdf, pdb or mol2 format '
                              'accepted')
     parser.add_argument('output_path', type=str,
                         help='Directory in which to store resultant parquet '
                              'files')
-    parser.add_argument('--input_base_path', '-b', type=str,
-                        help='For types file conversion: root relative to '
-                             'which types file entries are made')
-    parser.add_argument('--mol_type', '-m', type=str, default='ligand',
-                        help='Type of molecule, one of ligand or receptor')
+    parser.add_argument('input_base_path', type=str,
+                        help='Root relative to which types file entries are '
+                             'made. This should contain all of the SDF files '
+                             'to be converted (the same as the argument '
+                             '--base_path in generate_types_file.py).')
     args = parser.parse_args()
 
-    if args.input_file.endswith('.types'):
-        parse_types_mp(args.input_file, Path(args.input_base_path).expanduser(),
-                       args.output_path)
-    else:
-        pdb_parser = StructuralFileParser(args.mol_type)
-        pdb_parser.file_to_parquets(args.input_file, args.output_path)
+    parse_types_mp(args.types_file, Path(args.input_base_path).expanduser(),
+                   args.output_path)
