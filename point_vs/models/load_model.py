@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from LieConv.lie_conv.lieGroups import SE3
+from lie_conv.lieGroups import SE3
 
 from point_vs.models.egnn_lucid import PygLucidEGNN
 from point_vs.models.egnn_satorras import SartorrasEGNN
