@@ -31,11 +31,11 @@ def are_points_on_plane(p1, p2, p3, p4, eps=1e-6):
 
 
 def pretify_dict(d, padding=5):
-    max_key_len = max([len(key) for key in d.keys()])
+    max_key_len = max([len(str(key)) for key in d.keys()])
     line_len = max_key_len + padding
     s = ''
     for key, value in d.items():
-        spaces = ' ' * (line_len - len(key))
+        spaces = ' ' * (line_len - len(str(key)))
         s += '{0}:{1}{2}\n'.format(
             key, spaces, value
         )
@@ -231,8 +231,8 @@ def mkdir(*paths):
     return path
 
 
-def expand_path(path):
-    return Path(path).expanduser().resolve()
+def expand_path(*paths):
+    return Path(*paths).expanduser().resolve()
 
 
 _use_gpu = False
