@@ -36,17 +36,27 @@ if __name__ == '__main__':
     else:
         dataset_class = PointCloudDataset
 
+    train_receptors = None
+    if isinstance(cmd_line_args['train_receptors'], str):
+        train_receptors = tuple([cmd_line_args['train_receptors']])
+
     train_dl = get_data_loader(
-        cmd_line_args['train_data_root'], receptors=None,
-        compact=cmd_line_args['compact'],
+        cmd_line_args['train_data_root'],
+        cmd_line_args['translated_actives'],
         dataset_class=dataset_class,
-        use_atomic_numbers=cmd_line_args['use_atomic_numbers'],
-        radius=cmd_line_args['radius'],
-        polar_hydrogens=cmd_line_args['hydrogens'],
         batch_size=cmd_line_args['batch_size'],
+        compact=cmd_line_args['compact'], radius=cmd_line_args['radius'],
+        use_atomic_numbers=cmd_line_args['use_atomic_numbers'], rot=False,
+        augmented_actives=cmd_line_args['augmented_actives'],
+        min_aug_angle=cmd_line_args['min_aug_angle'],
+        max_active_rms_distance=cmd_line_args['max_active_rmsd'],
+        min_inactive_rms_distance=cmd_line_args['min_inactive_rmsd'],
+        polar_hydrogens=cmd_line_args['hydrogens'],
+        receptors=train_receptors, mode='train',
         types_fname=cmd_line_args['train_types'],
-        edge_radius=cmd_line_args['edge_radius'],
-        rot=False, mode='train', fname_suffix=cmd_line_args['input_suffix'])
+        fname_suffix=cmd_line_args['input_suffix'],
+        edge_radius=cmd_line_args['edge_radius']
+    )
 
     if cmd_line_args['test_data_root'] is not None:
         test_dl = get_data_loader(
