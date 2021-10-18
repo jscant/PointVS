@@ -218,3 +218,7 @@ if __name__ == '__main__':
             epoch_end_validation_set=test_dl if args.val_on_epoch_end else None)
     if test_dl is not None:
         model.test(test_dl)
+
+    if args.end_flag:
+        with open(save_path / '_FINISHED', 'w') as f:
+            f.write()

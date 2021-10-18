@@ -158,4 +158,7 @@ def parse_args():
     parser.add_argument('--edge_radius', type=float, default=4.0,
                         help='Maximum interatomic distance for an edge to '
                              'exist (EGNN)')
+    parser.add_argument('--end_flag', action='store_true',
+                        help='Add a file named "_FINISHED" to the save_path '
+                             'upon training and test completion')
     return parser.parse_args()
