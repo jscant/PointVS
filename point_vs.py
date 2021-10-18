@@ -24,7 +24,7 @@ import yaml
 from lie_conv.lieGroups import SE3
 
 from point_vs import utils
-from point_vs.utils import load_yaml, expand_path
+from point_vs.utils import load_yaml, mkdir
 
 try:
     from point_vs.models.egnn_satorras import SartorrasEGNN
@@ -187,7 +187,7 @@ if __name__ == '__main__':
     if args.wandb_path is None:
         wandb_path = save_path
     else:
-        wandb_path = expand_path(args.wandb_path)
+        wandb_path = mkdir(args.wandb_path)
     wandb_init_kwargs = {
         'project': args.wandb_project, 'allow_val_change': True,
         'config': args_to_record, 'dir': wandb_path
