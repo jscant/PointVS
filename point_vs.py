@@ -184,7 +184,7 @@ if __name__ == '__main__':
             args.load_weights).parents[1].expanduser(), 'model_kwargs.yaml'))
         model_kwargs['group'] = SE3(0.2)
 
-    if args.wandb_path is None:
+    if args.wandb_dir is None:
         wandb_dir = save_path
     else:
         wandb_dir = mkdir(args.wandb_dir)
