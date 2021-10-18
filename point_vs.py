@@ -185,12 +185,12 @@ if __name__ == '__main__':
         model_kwargs['group'] = SE3(0.2)
 
     if args.wandb_path is None:
-        wandb_path = save_path
+        wandb_dir = save_path
     else:
-        wandb_path = mkdir(args.wandb_path)
+        wandb_dir = mkdir(args.wandb_dir)
     wandb_init_kwargs = {
         'project': args.wandb_project, 'allow_val_change': True,
-        'config': args_to_record, 'dir': wandb_path
+        'config': args_to_record, 'dir': wandb_dir
     }
     if args.wandb_project is not None:
         wandb.init(**wandb_init_kwargs)
