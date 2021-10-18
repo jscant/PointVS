@@ -186,7 +186,7 @@ if __name__ == '__main__':
 
     wandb_init_kwargs = {
         'project': args.wandb_project, 'allow_val_change': True,
-        'config': args_to_record
+        'config': args_to_record, 'dir': save_path
     }
     if args.wandb_project is not None:
         wandb.init(**wandb_init_kwargs)
