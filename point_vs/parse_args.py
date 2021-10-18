@@ -161,4 +161,7 @@ def parse_args():
     parser.add_argument('--end_flag', action='store_true',
                         help='Add a file named "_FINISHED" to the save_path '
                              'upon training and test completion')
+    parser.add_argument('--wandb_dir', type=str,
+                        help='Location to store wandb files. Defaults to '
+                             '<save_path>/<wandb_project>/<wandb_run>/wandb.')
     return parser.parse_args()
