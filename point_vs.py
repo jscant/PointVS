@@ -225,4 +225,4 @@ if __name__ == '__main__':
 
     if args.end_flag:
         with open(save_path / '_FINISHED', 'w') as f:
-            f.write()
+            f.write('')
