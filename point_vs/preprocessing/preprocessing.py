@@ -59,12 +59,13 @@ def angle_3d(v1, v2):
     return angle
 
 
-def generate_edges(struct, radius=4):
+def generate_edges(struct, inter_radius=4.0, intra_radius=2.0):
     """Generate edges of graph with specified distance cutoff.
 
     Arguments:
         struct: DataFrame containing x, y, z, types, bp series.
-        radius: maximum distance below which there is an edge between two atoms
+        inter_radius: maximum distance below which there is an edge between
+        two atoms
 
     Returns:
         Tuple containing the edge indices and edge attributes. Edge attributes
@@ -74,17 +75,40 @@ def generate_edges(struct, radius=4):
     coords = extract_coords(struct)
     lig_or_rec = struct.bp.to_numpy()
     distances = cdist(coords, coords, 'euclidean')
-    adj = (distances < radius) & (distances > 1e-7)
-    n_edges = np.sum(adj)
-    edge_indices = np.where(adj)
 
-    bp_0 = lig_or_rec[edge_indices[0]]
-    bp_1 = lig_or_rec[edge_indices[1]]
+    adj_inter = (distances < inter_radius) & (distances > 1e-7)
+    edge_indices_inter = np.where(adj_inter)
 
-    edge_attrs = np.zeros((n_edges,), dtype='int32')
-    edge_attrs[np.where((bp_0 == 0) & (bp_1 == 1))] = 1
-    edge_attrs[np.where((bp_0 == 1) & (bp_1 == 0))] = 1
-    edge_attrs[np.where((bp_0 == 1) & (bp_1 == 1))] = 2
+    inter_mask = abs(
+        lig_or_rec[edge_indices_inter[0]] - lig_or_rec[edge_indices_inter[1]])
+    edge_indices_inter = (edge_indices_inter[0][np.where(inter_mask)],
+                          edge_indices_inter[1][np.where(inter_mask)])
+    n_edges_inter = sum(inter_mask)
+
+    adj_intra = (distances < intra_radius) & (distances > 1e-7)
+    n_edges_intra = np.sum(adj_intra)
+    edge_indices_intra = np.where(adj_intra)
+
+    bp_0_inter = lig_or_rec[edge_indices_inter[0]]
+    bp_1_inter = lig_or_rec[edge_indices_inter[1]]
+
+    bp_0_intra = lig_or_rec[edge_indices_inter[0]]
+    bp_1_intra = lig_or_rec[edge_indices_inter[1]]
+
+    edge_attrs_inter = np.zeros((n_edges_inter,), dtype='int32')
+    edge_attrs_intra = np.zeros((n_edges_intra,), dtype='int32')
+
+    edge_attrs_inter[np.where((bp_0_inter == 0) & (bp_1_inter == 1))] = 1
+    edge_attrs_inter[np.where((bp_0_inter == 1) & (bp_1_inter == 0))] = 1
+
+    edge_attrs_intra[np.where((bp_0_intra == 1) & (bp_1_intra == 1))] = 2
+
+    edge_attrs = np.concatenate([edge_attrs_inter, edge_attrs_intra])
+
+    edge_indices = (
+        np.concatenate([edge_indices_inter[0], edge_indices_intra[0]]),
+        np.concatenate([edge_indices_inter[1], edge_indices_intra[1]])
+    )
 
     return edge_indices, edge_attrs
 
@@ -125,6 +149,7 @@ def make_box(struct, radius=4, relative_to_ligand=True):
         result = result.append(rec_struct[rec_struct.index.isin(keep)],
                                ignore_index=True)
         result.reset_index(drop=True, inplace=True)
+        del result['index']
         return result
 
     ligand_centre = np.mean(ligand_np, axis=0)
@@ -195,15 +220,6 @@ def concat_structs(rec, lig, min_lig_rotation=0, parsers=None):
         lig_struct = parsers[0].file_to_parquets(lig, add_polar_hydrogens=True)
         rec_struct = parsers[1].file_to_parquets(rec, add_polar_hydrogens=True)
 
-    ############################################################################
-    # Uncommenting the following would result in excluding 'other' atoms:
-
-    # lig_struct = lig_struct[lig_struct.types != 10]
-    # lig_struct.types = lig_struct.types.clip(upper=10)
-    # rec_struct = rec_struct[rec_struct.types != 10]
-    # lig_struct.types = rec_struct.types.clip(upper=10)
-    # rec.struct.types += 11 # (replace the analogous line below)
-    ############################################################################
     rec_struct.types += 12
 
     if min_lig_rotation:
@@ -294,4 +310,4 @@ if __name__ == '__main__':
         bp / 'ligands/12968_actives/mol25_7.parquet',
         min_lig_rotation=0),
         radius=6, relative_to_ligand=True)
-    plot_struct(struct, generate_edges(struct, radius=4))
+    plot_struct(struct, generate_edges(struct, inter_radius=6.0, intra_radius=2.0))
