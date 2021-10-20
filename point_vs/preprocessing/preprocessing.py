@@ -124,7 +124,8 @@ def make_box(struct, radius=4, relative_to_ligand=True):
         keep = np.where(np.sum(mask, axis=0))[0]
         result = result.append(rec_struct[rec_struct.index.isin(keep)],
                                ignore_index=True)
-        del result['index']
+        result.reset_index(drop=True, inplace=True)
+        return result
 
     ligand_centre = np.mean(ligand_np, axis=0)
 
@@ -256,7 +257,7 @@ def plot_struct(struct, edges=None):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     s = struct
-    xyz = s[s.columns[:3]].to_numpy()
+    xyz = np.vstack([s['x'], s['y'], s['z']]).T
     x, y, z = xyz[:, 0], xyz[:, 1], xyz[:, 2]
     atoms = s.bp.to_numpy()
     colours = ['black', 'red']
@@ -292,5 +293,5 @@ if __name__ == '__main__':
         bp / 'receptors/12968.parquet',
         bp / 'ligands/12968_actives/mol25_7.parquet',
         min_lig_rotation=0),
-        radius=9, relative_to_ligand=True)
+        radius=6, relative_to_ligand=True)
     plot_struct(struct, generate_edges(struct, radius=4))

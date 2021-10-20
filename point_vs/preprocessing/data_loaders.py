@@ -267,7 +267,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
 
         p = torch.from_numpy(
             self.transformation(
-                struct[struct.columns[:3]].to_numpy()))
+                np.vstack([struct['x'], struct['y'], struct['z']]).T))
 
         v = make_bit_vector(
             struct.types.to_numpy(), self.max_feature_id + 1, self.compact)
