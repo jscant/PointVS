@@ -3,7 +3,6 @@
 
 import torch
 from torch import nn
-from torch_geometric.nn import global_mean_pool
 
 from point_vs.models.point_neural_network_pyg import PygPointNeuralNetwork
 
@@ -164,7 +163,7 @@ class SartorrasEGNN(PygPointNeuralNetwork):
             self.add_module(str(idx) + '_', layer)
         return nn.Sequential(*layers)
 
-    def forward(self, graph):
+    def get_embeddings(self, graph):
         feats = graph.x.float().cuda()
         edges = graph.edge_index.cuda()
         coords = graph.pos.float().cuda()
@@ -174,8 +173,6 @@ class SartorrasEGNN(PygPointNeuralNetwork):
         for i in range(1, self.n_layers + 1):
             feats, coords, edge_attributes = self._modules[str(i) + '_'](
                 feats, edges, coords, edge_attr=edge_attributes)
-        feats = self._modules[str(self.n_layers + 1) + '_'](feats)
-        feats = global_mean_pool(feats, graph.batch.cuda())
         return feats
 
 

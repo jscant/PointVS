@@ -1,11 +1,13 @@
 import math
 import time
+from abc import abstractmethod
 from pathlib import Path
 
 import numpy as np
 import torch
 import wandb
 from torch import nn
+from torch_geometric.nn import global_mean_pool
 
 from point_vs.models.point_neural_network import PointNeuralNetwork
 from point_vs.utils import get_eta, format_time, print_with_overwrite, to_numpy
@@ -244,3 +246,14 @@ class PygPointNeuralNetwork(PointNeuralNetwork):
                     with open(predictions_file, 'a') as f:
                         f.write(predictions)
                         predictions = ''
+
+    @abstractmethod
+    def get_embeddings(self, graph):
+        """"""
+        pass
+
+    def forward(self, graph):
+        feats = self.get_embeddings(graph)
+        feats = global_mean_pool(feats, graph.batch.cuda())
+        feats = self._modules[str(self.n_layers + 1) + '_'](feats)
+        return feats

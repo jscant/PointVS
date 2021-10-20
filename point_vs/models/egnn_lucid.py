@@ -2,7 +2,6 @@ import torch
 from egnn_pytorch.egnn_pytorch_geometric import EGNN_Sparse
 from torch import nn
 from torch.nn import SiLU
-from torch_geometric.nn import global_mean_pool
 
 from point_vs.models.point_neural_network_pyg import PygPointNeuralNetwork
 
@@ -40,13 +39,13 @@ class PygLucidEGNN(PygPointNeuralNetwork):
                     nn.Linear(layer.m_dim * 4, 1),
                     nn.Tanh()
                 )
-                layers.append(layer)
+            layers.append(layer)
         layers.append(nn.Linear(k, dim_output))
         for idx, layer in enumerate(layers):
             self.add_module(str(idx) + '_', layer)
         return nn.Sequential(*layers)
 
-    def forward(self, graph):
+    def get_embeddings(self, graph):
         feats = graph.x.float().cuda()
         edges = graph.edge_index.cuda()
         coords = graph.pos.float().cuda()
@@ -58,6 +57,4 @@ class PygLucidEGNN(PygPointNeuralNetwork):
         for i in range(1, self.n_layers + 1):
             x = self._modules[str(i) + '_'](
                 x=x, edge_index=edges, edge_attr=edge_attributes, batch=batch)
-        feats = self._modules[str(self.n_layers + 1) + '_'](x[:, 3:])
-        feats = global_mean_pool(feats, graph.batch.cuda())
-        return feats
+        return x[:, 3:]
