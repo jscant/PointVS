@@ -55,7 +55,8 @@ if __name__ == '__main__':
         receptors=train_receptors, mode='train',
         types_fname=cmd_line_args['train_types'],
         fname_suffix=cmd_line_args['input_suffix'],
-        edge_radius=cmd_line_args['edge_radius']
+        edge_radius=cmd_line_args['edge_radius'],
+        estimate_bonds=cmd_line_args.get('estimate_bonds', False),
     )
 
     if cmd_line_args['test_data_root'] is not None:
@@ -69,6 +70,7 @@ if __name__ == '__main__':
             batch_size=cmd_line_args['batch_size'],
             types_fname=cmd_line_args['test_types'],
             edge_radius=cmd_line_args['edge_radius'],
+            estimate_bonds=cmd_line_args.get('estimate_bonds', False),
             rot=False, mode='val', fname_suffix=cmd_line_args['input_suffix'])
     else:
         test_dl = None

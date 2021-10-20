@@ -164,4 +164,11 @@ def parse_args():
     parser.add_argument('--wandb_dir', type=str,
                         help='Location to store wandb files. Defaults to '
                              '<save_path>/<wandb_project>/<wandb_run>/wandb.')
+    parser.add_argument('--estimate_bonds', action='store_true',
+                        help='(EGNN): Instead of using a fixed edge radius,'
+                             'the intermolecular radius is set at '
+                             '--edge_radius Angstroms but the intramolecular '
+                             'radius is set at 2A, which has the effect of '
+                             'putting edges where there are covalent bonds '
+                             'between atoms in the same molecule.')
     return parser.parse_args()

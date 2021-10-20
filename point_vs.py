@@ -118,7 +118,7 @@ if __name__ == '__main__':
         min_inactive_rms_distance=args.min_inactive_rmsd,
         polar_hydrogens=args.hydrogens, receptors=train_receptors, mode='train',
         types_fname=args.train_types, fname_suffix=args.input_suffix,
-        edge_radius=args.edge_radius
+        edge_radius=args.edge_radius, estimate_bonds=args.estimate_bonds,
     )
 
     # Is a validation set specified?
@@ -131,6 +131,7 @@ if __name__ == '__main__':
             polar_hydrogens=args.hydrogens, batch_size=args.batch_size,
             types_fname=args.test_types,
             edge_radius=args.edge_radius,
+            estimate_bonds=args.estimate_bonds,
             rot=False, mode='val', fname_suffix=args.input_suffix)
 
     args_to_record = vars(args)

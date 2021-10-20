@@ -77,6 +77,7 @@ if __name__ == '__main__':
         batch_size=cmd_line_args['batch_size'],
         types_fname=args.test_types,
         edge_radius=cmd_line_args['edge_radius'],
+        estimate_bonds=cmd_line_args.get('estimate_bonds', False),
         rot=False, mode='val', fname_suffix=cmd_line_args['input_suffix'])
 
     args_to_record = vars(args)
