@@ -22,6 +22,7 @@ dependencies:
   - curl=7.78.0=h1ccaba5_0
   - dbus=1.13.18=hb2f20db_0
   - expat=2.4.1=h2531618_2
+  - fastparquet=0.5.0
   - ffmpeg=4.2.2=h20bf706_0
   - fontconfig=2.13.1=h6c09931_0
   - freemol=1.158=py_2
