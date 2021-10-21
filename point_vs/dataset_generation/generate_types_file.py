@@ -201,6 +201,20 @@ def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
     return types_str
 
 
+def get_intra_rmsd(docked_fname):
+    """Get the cross-RMSD using obrms for all structures in an sdf file."""
+    docked_fname = expand_path(docked_fname)
+    cmd = 'obrms {0} -x'.format(docked_fname)
+    output = execute_cmd(cmd, silent=True).stdout
+    lines = output.split('\n')[:-1]
+    idx_pair_to_rmsd = {}
+    for line_idx, line in enumerate(lines):
+        rmsds = line.split(', ')[1:][line_idx + 1:]
+        for chunks_idx, rmsd in enumerate(rmsds):
+            idx_pair_to_rmsd[(line_idx, line_idx + chunks_idx + 1)] = rmsd
+    return idx_pair_to_rmsd
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('base_path', type=str,
