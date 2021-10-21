@@ -4,7 +4,8 @@
 import torch
 from torch import nn
 
-from point_vs.models.point_neural_network_pyg import PygPointNeuralNetwork
+from point_vs.models.point_neural_network_pyg import PygPointNeuralNetwork, \
+    PygLinearPass
 
 
 class EGNNPass(nn.Module):
@@ -113,22 +114,21 @@ class E_GCL(nn.Module):
 
         return radial, coord_diff
 
-    def forward(self, h, edge_index, coord, edge_attr=None):
+    def forward(self, x, edge_index, coord, edge_attr=None):
         row, col = edge_index
         radial, coord_diff = self.coord2radial(edge_index, coord)
 
-        edge_feat = self.edge_model(h[row], h[col], radial, edge_attr)
+        edge_feat = self.edge_model(x[row], x[col], radial, edge_attr)
         coord = self.coord_model(coord, edge_index, coord_diff, edge_feat)
-        h, agg = self.node_model(h, edge_index, edge_feat)
+        x, agg = self.node_model(x, edge_index, edge_feat)
 
-        return h, coord, edge_attr
+        return x, coord, edge_attr
 
 
 class SartorrasEGNN(PygPointNeuralNetwork):
     def build_net(self, dim_input, k, dim_output,
                   act_fn=nn.SiLU(), num_layers=4, residual=True,
-                  attention=False, normalize=True, tanh=True,
-                  **kwargs):
+                  attention=False, normalize=True, tanh=True, **kwargs):
         """
         Arguments:
             dim_input: Number of features for 'h' at the input
@@ -148,7 +148,8 @@ class SartorrasEGNN(PygPointNeuralNetwork):
                 m_ij). I.e. it bounds the output of phi_x(m_ij) which definitely
                 improves in stability but it may decrease in accuracy.
         """
-        layers = [nn.Linear(dim_input, k)]
+        layers = [PygLinearPass(nn.Linear(dim_input, k),
+                                return_coords_and_edges=True)]
         self.n_layers = num_layers
         for i in range(0, num_layers):
             layers.append(E_GCL(k, k, k,
@@ -158,21 +159,15 @@ class SartorrasEGNN(PygPointNeuralNetwork):
                                 attention=attention,
                                 normalize=normalize,
                                 tanh=tanh))
-        layers.append(nn.Linear(k, dim_output))
-        for idx, layer in enumerate(layers):
-            self.add_module(str(idx) + '_', layer)
+        layers.append(PygLinearPass(nn.Linear(k, dim_output),
+                                    return_coords_and_edges=False))
         return nn.Sequential(*layers)
 
-    def get_embeddings(self, graph):
-        feats = graph.x.float().cuda()
-        edges = graph.edge_index.cuda()
-        coords = graph.pos.float().cuda()
-        edge_attributes = graph.edge_attr.cuda()
-
-        feats = self._modules['0_'](feats)
-        for i in range(1, self.n_layers + 1):
-            feats, coords, edge_attributes = self._modules[str(i) + '_'](
-                feats, edges, coords, edge_attr=edge_attributes)
+    def get_embeddings(self, feats, edges, coords, edge_attributes, batch):
+        for i in self.layers[:-1]:
+            feats, coords, edge_attributes = i(
+                x=feats, edge_index=edges, coord=coords,
+                edge_attr=edge_attributes)
         return feats
 
 

@@ -24,6 +24,7 @@ class PointNeuralNetwork(nn.Module):
         self.losses = []
         self.final_activation = nn.CrossEntropyLoss()
         self.save_path = Path(save_path).expanduser()
+        self.linear_gap = model_kwargs.get('linear_gap', True)
         if not silent:
             mkdir(self.save_path)
         self.predictions_file = self.save_path / 'predictions.txt'

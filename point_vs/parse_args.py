@@ -171,4 +171,8 @@ def parse_args():
                              'radius is set at 2A, which has the effect of '
                              'putting edges where there are covalent bonds '
                              'between atoms in the same molecule.')
+    parser.add_argument('--linear_gap', action='store_true',
+                        help='Final linear layer comes after rather than '
+                             'before the global average pooling layer. This '
+                             'can improve performance significantly.')
     return parser.parse_args()

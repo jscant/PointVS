@@ -3,7 +3,8 @@ from egnn_pytorch.egnn_pytorch_geometric import EGNN_Sparse
 from torch import nn
 from torch.nn import SiLU
 
-from point_vs.models.point_neural_network_pyg import PygPointNeuralNetwork
+from point_vs.models.point_neural_network_pyg import PygPointNeuralNetwork, \
+    PygLinearPass
 
 
 class PygLucidEGNN(PygPointNeuralNetwork):
@@ -11,8 +12,9 @@ class PygLucidEGNN(PygPointNeuralNetwork):
 
     def build_net(self, dim_input, k, dim_output, num_layers=4, dropout=0.0,
                   norm_coords=True, norm_feats=True, fourier_features=0,
-                  attention=False, tanh=True, **kwargs):
-        layers = [nn.Linear(dim_input, k)]
+                  attention=False, tanh=True, linear_gap=False, **kwargs):
+        layers = [PygLinearPass(
+            nn.Linear(dim_input, k), feats_appended_to_coords=True)]
         for i in range(0, num_layers):
             layer = EGNN_Sparse(
                 k,
@@ -40,21 +42,11 @@ class PygLucidEGNN(PygPointNeuralNetwork):
                     nn.Tanh()
                 )
             layers.append(layer)
-        layers.append(nn.Linear(k, dim_output))
-        for idx, layer in enumerate(layers):
-            self.add_module(str(idx) + '_', layer)
+        layers.append(PygLinearPass(nn.Linear(k, dim_output)))
         return nn.Sequential(*layers)
 
-    def get_embeddings(self, graph):
-        feats = graph.x.float().cuda()
-        edges = graph.edge_index.cuda()
-        coords = graph.pos.float().cuda()
-        edge_attributes = graph.edge_attr.cuda()
-        batch = graph.batch.cuda()
-
-        feats = self._modules['0_'](feats)
+    def get_embeddings(self, feats, edges, coords, edge_attributes, batch):
         x = torch.cat([coords, feats], dim=-1).cuda()
-        for i in range(1, self.n_layers + 1):
-            x = self._modules[str(i) + '_'](
-                x=x, edge_index=edges, edge_attr=edge_attributes, batch=batch)
+        for i in self.layers[:-1]:
+            x = i(x=x, edge_index=edges, edge_attr=edge_attributes, batch=batch)
         return x[:, 3:]

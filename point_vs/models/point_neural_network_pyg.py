@@ -13,6 +13,38 @@ from point_vs.models.point_neural_network import PointNeuralNetwork
 from point_vs.utils import get_eta, format_time, print_with_overwrite, to_numpy
 
 
+class PygLinearPass(nn.Module):
+    """Helper class for neater forward passes.
+
+    Gives a linear layer with the same semantic behaviour as the E_GCL and
+    EGNN_Sparse layers.
+
+    Arguments:
+        module: nn.Module (usually a linear layer)
+        feats_appended_to_coords: does the input include coordinates in the
+            first three columns of the node feature vector
+        return_coords_and_edges: return a tuple containing the node features,
+            the coords and the edges rather than just the node features
+    """
+
+    def __init__(self, module, feats_appended_to_coords=False,
+                 return_coords_and_edges=False):
+        super().__init__()
+        self.m = module
+        self.feats_appended_to_coords = feats_appended_to_coords
+        self.return_coords_and_edges = return_coords_and_edges
+
+    def forward(self, x, *args, **kwargs):
+        if self.feats_appended_to_coords:
+            feats = x[:, 3:]
+            res = torch.hstack([x[:, :3], self.m(feats)])
+        else:
+            res = self.m(x)
+        if self.return_coords_and_edges:
+            return res, kwargs['coord'], kwargs['edge_attr']
+        return res
+
+
 class PygPointNeuralNetwork(PointNeuralNetwork):
     """Base (abstract) class for all point cloud based binary classifiers."""
 
@@ -248,12 +280,22 @@ class PygPointNeuralNetwork(PointNeuralNetwork):
                         predictions = ''
 
     @abstractmethod
-    def get_embeddings(self, graph):
-        """"""
+    def get_embeddings(self, feats, edges, coords, edge_attributes, batch):
+        """Implement code to go from input features to final node embeddings."""
         pass
 
     def forward(self, graph):
-        feats = self.get_embeddings(graph)
-        feats = global_mean_pool(feats, graph.batch.cuda())
-        feats = self._modules[str(self.n_layers + 1) + '_'](feats)
+        feats = graph.x.float().cuda()
+        edges = graph.edge_index.cuda()
+        coords = graph.pos.float().cuda()
+        edge_attributes = graph.edge_attr.cuda()
+        batch = graph.batch.cuda()
+        feats = self.get_embeddings(
+            feats, edges, coords, edge_attributes, batch)
+        if self.linear_gap:
+            feats = self.layers[-1](feats, edges, edge_attributes, batch)
+            feats = global_mean_pool(feats, graph.batch.cuda())
+        else:
+            feats = global_mean_pool(feats, graph.batch.cuda())
+            feats = self.layers[-1](feats, edges, edge_attributes, batch)
         return feats

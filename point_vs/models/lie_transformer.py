@@ -38,15 +38,22 @@ class EquivariantTransformer(PointNeuralNetwork):
             attention_fn=attention_fn, feature_embed_dim=feature_embed_dim,
         )
 
-        layers = nn.Sequential(
-            Pass(nn.Linear(dim_input, dim_hidden[0]), dim=1),
-            *[
-                attention_block(dim_hidden[i], num_heads[i])
-                for i in range(num_layers)
-            ],
-            GlobalPool(mean=global_pool_mean),
-            nn.Linear(dim_hidden[-1], dim_output)
-        )
+        layers = [Pass(nn.Linear(dim_input, dim_hidden[0]), dim=1),
+                  *[attention_block(dim_hidden[i], num_heads[i])
+                    for i in range(num_layers)]]
+
+        if self.linear_gap:
+            layers += [
+                Pass(nn.Linear(dim_hidden[-1], dim_output), dim=1),
+                GlobalPool(mean=global_pool_mean),
+            ]
+        else:
+            layers += [
+                GlobalPool(mean=global_pool_mean),
+                nn.Linear(dim_hidden[-1], dim_output)
+            ]
+
+        layers = nn.Sequential(*layers)
 
         self.group = group
         self.liftsamples = liftsamples
