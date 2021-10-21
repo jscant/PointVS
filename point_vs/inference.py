@@ -78,6 +78,7 @@ if __name__ == '__main__':
         types_fname=args.test_types,
         edge_radius=cmd_line_args['edge_radius'],
         estimate_bonds=cmd_line_args.get('estimate_bonds', False),
+        prune=cmd_line_args.get('prune', False),
         rot=False, mode='val', fname_suffix=cmd_line_args['input_suffix'])
 
     args_to_record = vars(args)

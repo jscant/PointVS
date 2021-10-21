@@ -2,11 +2,11 @@
 import numpy as np
 import torch
 from torch_geometric.data import Data
-from torch_geometric.loader import DataLoader
 
 from point_vs.models.point_neural_network import to_numpy
 from point_vs.models.point_neural_network_pyg import PygPointNeuralNetwork
-from point_vs.preprocessing.pyg_single_item_dataset import SingleItemDataset
+from point_vs.preprocessing.pyg_single_item_dataset import \
+    get_pyg_single_graph_for_inference
 
 
 def cam(model, p, v, m, edge_indices=None, edge_attrs=None, **kwargs):
@@ -29,7 +29,7 @@ def cam(model, p, v, m, edge_indices=None, edge_attrs=None, **kwargs):
             edge_attr=edge_attrs,
             pos=p.squeeze(),
         )
-        g_input = list(DataLoader(SingleItemDataset(graph)))[0]
+        g_input = get_pyg_single_graph_for_inference(graph)
         feats = g_input.x.float().cuda()
         edges = g_input.edge_index.cuda()
         coords = g_input.pos.float().cuda()

@@ -1,5 +1,7 @@
 """Some helper functions for cutting inputs down to size."""
 import argparse
+import sys
+from collections import defaultdict
 
 import matplotlib
 import numpy as np
@@ -10,6 +12,9 @@ from matplotlib import pyplot as plt
 from scipy.spatial.distance import cdist
 
 from point_vs.utils import expand_path
+
+# For graph walking
+sys.setrecursionlimit(10000)
 
 
 def generate_random_z_axis_rotation():
@@ -60,7 +65,7 @@ def angle_3d(v1, v2):
     return angle
 
 
-def generate_edges(struct, inter_radius=4.0, intra_radius=2.0):
+def generate_edges(struct, inter_radius=4.0, intra_radius=2.0, prune=True):
     """Generate edges of graph with specified distance cutoff.
 
     Arguments:
@@ -74,6 +79,23 @@ def generate_edges(struct, inter_radius=4.0, intra_radius=2.0):
         are 0 for ligand-ligand edges, 1 for ligand-receptor edges, and 2 for
         receptor-receptor edges.
     """
+
+    def bfs(starting_node, node_list):
+        def _bfs(visited, to_visit):
+            while len(to_visit):
+                s = to_visit.pop()
+                visited.append(s)
+                for child in node_list[s]:
+                    if child not in visited:
+                        to_visit.append(child)
+                return _bfs(visited, to_visit)
+            return list(set(visited))
+
+        visited_nodes = []
+        to_visit = [starting_node]
+        return np.array(_bfs(visited_nodes, to_visit))
+
+    struct.reset_index(inplace=True, drop=True)
     coords = extract_coords(struct)
     lig_or_rec = struct.bp.to_numpy()
     distances = cdist(coords, coords, 'euclidean')
@@ -111,6 +133,18 @@ def generate_edges(struct, inter_radius=4.0, intra_radius=2.0):
         np.concatenate([edge_indices_inter[0], edge_indices_intra[0]]),
         np.concatenate([edge_indices_inter[1], edge_indices_intra[1]])
     )
+
+    node_list = defaultdict(list)
+    for idx in range(len(edge_indices[0])):
+        node_list[edge_indices[0][idx]].append(edge_indices[1][idx])
+        node_list[edge_indices[1][idx]].append(edge_indices[0][idx])
+
+    if prune and n_edges_inter:
+        starting_node = edge_indices[0][0]
+        nodes_to_keep = bfs(starting_node, node_list)
+        nodes_to_drop = np.setdiff1d(struct.index, nodes_to_keep)
+        struct.drop(nodes_to_drop, inplace=True)
+        return generate_edges(struct.copy(), inter_radius, intra_radius, False)
 
     return edge_indices, edge_attrs
 
@@ -318,6 +352,9 @@ if __name__ == '__main__':
     parser.add_argument('intra_radius', type=float,
                         help='Maximum inter-atomic distance for an edge '
                              'between atoms in the same molecule')
+    parser.add_argument('--prune', '-p', action='store_true',
+                        help='Prune graphs which are disconnected from '
+                             'main protein-ligand graph')
     args = parser.parse_args()
     bp = expand_path('data/small_chembl_test')
     struct = make_box(concat_structs(
@@ -325,7 +362,7 @@ if __name__ == '__main__':
         bp / 'ligands/12968_actives/mol25_7.parquet',
         min_lig_rotation=0),
         radius=args.max_dist_from_lig, relative_to_ligand=True)
-    plot_struct(struct,
-                generate_edges(
-                    struct, inter_radius=args.inter_radius,
-                    intra_radius=args.intra_radius))
+
+    plot_struct(struct, generate_edges(
+        struct, inter_radius=args.inter_radius,
+        intra_radius=args.intra_radius, prune=args.prune))

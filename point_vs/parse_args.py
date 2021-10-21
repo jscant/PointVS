@@ -175,4 +175,7 @@ def parse_args():
                         help='Final linear layer comes after rather than '
                              'before the global average pooling layer. This '
                              'can improve performance significantly.')
+    parser.add_argument('--prune', action='store_true',
+                        help='(EGNN) Prune subgraphs which are not connected '
+                             'to the ligand')
     return parser.parse_args()

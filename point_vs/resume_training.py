@@ -57,6 +57,7 @@ if __name__ == '__main__':
         fname_suffix=cmd_line_args['input_suffix'],
         edge_radius=cmd_line_args['edge_radius'],
         estimate_bonds=cmd_line_args.get('estimate_bonds', False),
+        prune=cmd_line_args.get('prune', False)
     )
 
     if cmd_line_args['test_data_root'] is not None:
@@ -71,6 +72,7 @@ if __name__ == '__main__':
             types_fname=cmd_line_args['test_types'],
             edge_radius=cmd_line_args['edge_radius'],
             estimate_bonds=cmd_line_args.get('estimate_bonds', False),
+            prune=cmd_line_args.get('prune', False),
             rot=False, mode='val', fname_suffix=cmd_line_args['input_suffix'])
     else:
         test_dl = None

@@ -26,7 +26,8 @@ class PointCloudDataset(torch.utils.data.Dataset):
             compact=True, rot=False, augmented_active_count=0,
             augmented_active_min_angle=90, max_active_rms_distance=None,
             min_inactive_rms_distance=None, fname_suffix='parquet',
-            types_fname=None, edge_radius=None, estimate_bonds=False, **kwargs):
+            types_fname=None, edge_radius=None, estimate_bonds=False,
+            prune=False, **kwargs):
         """Initialise dataset.
 
         Arguments:
@@ -68,6 +69,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
         self.radius = radius
         self.estimate_bonds = estimate_bonds
         self.base_path = Path(base_path).expanduser()
+        self.prune = prune
         if edge_radius > 0:
             self.edge_radius = edge_radius
 
@@ -322,7 +324,8 @@ class PygPointCloudDataset(PointCloudDataset):
             edge_radius = 4
         intra_radius = 2.0 if self.estimate_bonds else edge_radius
         edge_indices, edge_attrs = generate_edges(
-            struct, inter_radius=edge_radius, intra_radius=intra_radius)
+            struct, inter_radius=edge_radius, intra_radius=intra_radius,
+            prune=self.prune)
 
         edge_indices = torch.from_numpy(np.vstack(edge_indices)).long()
         edge_attrs = one_hot(torch.from_numpy(edge_attrs).long(), 3)
@@ -346,7 +349,7 @@ def get_data_loader(
         polar_hydrogens=True, mode='train',
         max_active_rms_distance=None, fname_suffix='parquet',
         min_inactive_rms_distance=None, types_fname=None, edge_radius=None,
-        estimate_bonds=False):
+        prune=False, estimate_bonds=False):
     """Give a DataLoader from a list of receptors and data roots."""
     ds_kwargs = {
         'receptors': receptors,
@@ -360,7 +363,8 @@ def get_data_loader(
         max_active_rms_distance=max_active_rms_distance,
         min_inactive_rms_distance=min_inactive_rms_distance,
         fname_suffix=fname_suffix, types_fname=types_fname,
-        edge_radius=edge_radius, estimate_bonds=estimate_bonds, **ds_kwargs)
+        edge_radius=edge_radius, estimate_bonds=estimate_bonds, prune=prune,
+        **ds_kwargs)
     sampler = ds.sampler if mode == 'train' else None
     if dataset_class == PointCloudDataset:
         collate = get_collate_fn(ds.feature_dim)
@@ -377,7 +381,7 @@ def multiple_source_dataset(
         loader_class, *base_paths, receptors=None, polar_hydrogens=True,
         augmented_actives=0, min_aug_angle=30, max_active_rms_distance=None,
         min_inactive_rms_distance=None, compact=True, use_atomic_numbers=False,
-        fname_suffix='parquet', balanced=True, types_fname=None,
+        fname_suffix='parquet', balanced=True, types_fname=None, prune=False,
         edge_radius=None, estimate_bonds=False, **kwargs):
     """Concatenate mulitple datasets into one, preserving balanced sampling.
 
@@ -430,6 +434,7 @@ def multiple_source_dataset(
                 types_fname=types_fname,
                 edge_radius=edge_radius,
                 estimate_bonds=estimate_bonds,
+                prune=prune
                 **kwargs)
             labels += list(dataset.labels)
             filenames += dataset.ligand_fnames
