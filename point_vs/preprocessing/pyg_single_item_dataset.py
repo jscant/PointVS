@@ -16,4 +16,4 @@ class SingleItemDataset(Dataset):
 
 
 def get_pyg_single_graph_for_inference(graph):
-    return list(DataLoader(SingleItemDataset(graph)))[0]
+    return list(DataLoader(SingleItemDataset(graph), batch_size=1))[0]
