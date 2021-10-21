@@ -5,14 +5,17 @@ import pandas as pd
 
 from point_vs.utils import expand_path
 
-with open('data/val_pdbids.txt', 'r') as f:
-    VAL_PDBIDS = set([line.lower().strip() for line in f.readlines()])
+try:
+    with open('data/val_pdbids.txt', 'r') as f:
+        VAL_PDBIDS = set([line.lower().strip() for line in f.readlines()])
+except FileNotFoundError:  # File is not in repo as it is not ready
+    VAL_PDBIDS = []
 
 
-def _extract_scores(types_file, omit_pdbids=None):
+def _extract_scores(types_file, pdbid_whitelist=None):
     def extract_pdbid(rec):
         pdbid = rec.split('/')[-1].split('_')[0].lower()
-        return pdbid in VAL_PDBIDS
+        return pdbid in VAL_PDBIDS if pdbid_whitelist else True
 
     def extract_dock_sdf_name(pth):
         return '_'.join(str(Path(pth).with_suffix('')).split('_')[:-1]) + '.sdf'
@@ -39,9 +42,9 @@ def _extract_scores(types_file, omit_pdbids=None):
     return df
 
 
-def _gnn_score(types_file, omit_pdbids=None):
+def _gnn_score(types_file, pdbid_whitelist=None):
     scores = defaultdict(list)
-    df = _extract_scores(types_file, omit_pdbids)
+    df = _extract_scores(types_file, pdbid_whitelist)
     y_trues = df['y_true'].to_numpy()
     y_preds = df['y_pred'].to_numpy()
     recligs = df['reclig'].to_numpy()
@@ -52,7 +55,7 @@ def _gnn_score(types_file, omit_pdbids=None):
     return scores
 
 
-def top_1(types_file, omit_pdbids=None):
-    scores = _gnn_score(types_file, omit_pdbids=omit_pdbids)
+def top_1(types_file, pdbid_whitelist=True):
+    scores = _gnn_score(types_file, pdbid_whitelist=pdbid_whitelist)
     s = [[j[1] for j in i] for i in scores.values()]
     return sum([i[0] for i in s]) / len(scores)
