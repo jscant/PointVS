@@ -227,7 +227,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
         """Return the total size of the dataset."""
         return len(self.ligand_fnames)
 
-    def get_item(self, item):
+    def index_to_parquets(self, item):
         label = self.labels[item]
         if self.use_types:
             lig_fname = Path(self.ligand_fnames[item])
@@ -243,12 +243,15 @@ class PointCloudDataset(torch.utils.data.Dataset):
                     'Receptor for ligand {0} not found. Looking for file '
                     'named {1}'.format(
                         lig_fname, rec_name + '.' + self.fname_suffix))
+        return lig_fname, rec_fname, label
+
+    def parquets_to_inputs(self, lig_fname, rec_fname, item=None):
 
         # Are we using an active and labelling it as a decoy through random
         # rotation? This determination is made using the index, made possible
         # due to the construction of the filenames class variable in the
         # constructor: all actives labelled as decoys are found at the end.
-        if item < self.pre_aug_ds_len:
+        if item is None or item < self.pre_aug_ds_len:
             aug_angle = 0
         else:
             aug_angle = self.augmented_active_min_angle
@@ -273,7 +276,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
         v = make_bit_vector(
             struct.types.to_numpy(), self.max_feature_id + 1, self.compact)
 
-        return p, v, label, lig_fname, rec_fname, struct
+        return p, v, struct
 
     def __getitem__(self, item):
         """Given an index, locate and preprocess relevant parquet file.
@@ -288,7 +291,8 @@ class PointCloudDataset(torch.utils.data.Dataset):
             the number of points in the structure and (b) the label \in \{0, 1\}
             denoting whether the structure is an active or a decoy.
         """
-        p, v, label, lig_fname, rec_fname, struct = self.get_item(item)
+        lig_fname, rec_fname, label = self.index_to_parquets(item)
+        p, v, struct = self.parquets_to_inputs(lig_fname, rec_fname, item=item)
 
         return (p, v, len(struct)), lig_fname, rec_fname, label
 
@@ -309,7 +313,8 @@ class PygPointCloudDataset(PointCloudDataset):
             the number of points in the structure and (b) the label \in \{0, 1\}
             denoting whether the structure is an active or a decoy.
         """
-        p, v, label, lig_fname, rec_fname, struct = self.get_item(item)
+        lig_fname, rec_fname, label = self.index_to_parquets(item)
+        p, v, struct = self.parquets_to_inputs(lig_fname, rec_fname, item=item)
 
         if hasattr(self, 'edge_radius'):
             edge_radius = self.edge_radius
@@ -474,6 +479,8 @@ def types_to_list(types_fname):
     def find_paths(types_line):
         recpath, ligpath = None, None
         chunks = types_line.strip().split()
+        if not len(chunks):
+            return None, None, None, None
         label = int(chunks[0])
         for idx, chunk in enumerate(chunks):
             if chunk.startswith('#'):
@@ -527,8 +534,6 @@ def get_collate_fn(dim):
         m_batch = torch.zeros(batch_size, max_len)
         label_batch = torch.zeros(batch_size, )
         ligands, receptors = [], []
-        if max_len > 300:
-            print('\n\n\n\n\n\n')
         for batch_index, ((p, v, size), ligand, receptor, label) in enumerate(
                 batch):
             p_batch[batch_index, :size, :] = p
@@ -537,10 +542,6 @@ def get_collate_fn(dim):
             label_batch[batch_index] = label
             ligands.append(ligand)
             receptors.append(receptor)
-            if max_len > 300:
-                print(receptor, ligand, size)
-        if max_len > 300:
-            print('\n\n\n\n\n\n')
         return (p_batch, v_batch,
                 m_batch.bool()), label_batch.float(), ligands, receptors
 

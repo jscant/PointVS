@@ -6,8 +6,13 @@ from pathlib import Path
 import numpy as np
 import torch
 from lie_conv.lieGroups import SE3
+from torch_geometric.data import Data
 
+from point_vs.preprocessing.data_loaders import get_data_loader, \
+    PygPointCloudDataset
 from point_vs.preprocessing.preprocessing import uniform_random_rotation
+from point_vs.preprocessing.pyg_single_item_dataset import \
+    get_pyg_single_graph_for_inference
 from point_vs.utils import to_numpy, _set_precision
 
 
@@ -27,7 +32,34 @@ def setup():
     return dump_path
 
 
-EPS = 3e-2
+_test_dl = get_data_loader(
+    Path('test/resources'),
+    dataset_class=PygPointCloudDataset,
+    batch_size=1, compact=True, radius=4,
+    use_atomic_numbers=False, rot=False,
+    augmented_actives=0,
+    min_aug_angle=0,
+    polar_hydrogens=False, receptors=None, mode='val',
+    types_fname=Path('test/resources/test.types'),
+    fname_suffix='.parquet',
+    edge_radius=4,
+    estimate_bonds=True,
+)
+
+ORIGINAL_GRAPH = list(_test_dl)[0]
+
+rotated_coords = torch.from_numpy(
+        uniform_random_rotation(to_numpy(ORIGINAL_GRAPH.pos)))
+ROTATED_GRAPH = get_pyg_single_graph_for_inference(Data(
+    x=ORIGINAL_GRAPH.x,
+    edge_index=ORIGINAL_GRAPH.edge_index,
+    edge_attr=ORIGINAL_GRAPH.edge_attr,
+    pos=rotated_coords,
+))
+
+
+EGNN_EPS = 3e-5
+LIFT_EPS = 3e-2
 MODEL_KWARGS = {
     'act': 'relu',
     'bn': True,
@@ -37,7 +69,7 @@ MODEL_KWARGS = {
     'group': SE3(0.2),
     'k': 32,
     'knn': False,
-    'liftsamples': 1,
+    'liftsamples': 4,
     'mean': True,
     'nbhd': 32,
     'num_layers': 6,
@@ -60,7 +92,8 @@ MODEL_KWARGS = {
     'feature_embed_dim': None,
     'max_sample_norm': None,
     'lie_algebra_nonlinearity': None,
-    'pooling_only': True
+    'pooling_only': True,
+    'linear_gap': True
 }
 
 N_SAMPLES = 10
