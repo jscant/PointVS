@@ -6,6 +6,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
+import psutil
 import torch
 from torch.nn.functional import one_hot
 from torch.utils.data import DataLoader
@@ -370,11 +371,13 @@ def get_data_loader(
         collate = get_collate_fn(ds.feature_dim)
         return DataLoader(
             ds, batch_size, False, sampler=sampler,
-            collate_fn=collate, drop_last=False, pin_memory=True)
+            collate_fn=collate, drop_last=False, pin_memory=True,
+            num_workers=min(4, psutil.cpu_count()))
     else:
         return GeoDataLoader(
             ds, batch_size, False, sampler=sampler,
-            drop_last=False, pin_memory=True)
+            drop_last=False, pin_memory=True,
+            num_workers=min(4, psutil.cpu_count()))
 
 
 def multiple_source_dataset(
