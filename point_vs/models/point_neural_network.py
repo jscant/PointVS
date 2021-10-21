@@ -8,6 +8,7 @@ import wandb
 import yaml
 from torch import nn
 
+from point_vs.analysis.top1 import top_1
 from point_vs.utils import get_eta, format_time, print_with_overwrite, mkdir, \
     to_numpy
 
@@ -78,7 +79,8 @@ class PointNeuralNetwork(nn.Module):
     def forward_pass(self, x):
         return self.forward(x).squeeze()
 
-    def optimise(self, data_loader, epochs=1, epoch_end_validation_set=None):
+    def optimise(self, data_loader, epochs=1, epoch_end_validation_set=None,
+                 top1_on_end=False):
         """Train the network.
 
         Trains the neural network. Displays training information and plots the
@@ -213,10 +215,11 @@ class PointNeuralNetwork(nn.Module):
                     'predictions_epoch_{}.txt'.format(self.epoch + 1))
                 self.test(
                     epoch_end_validation_set,
-                    predictions_file=epoch_end_predictions_fname)
+                    predictions_file=epoch_end_predictions_fname,
+                    top1_on_end=top1_on_end)
             self.train()
 
-    def test(self, data_loader, predictions_file=None):
+    def test(self, data_loader, predictions_file=None, top1_on_end=False):
         """Use trained network to perform inference on the test set.
 
         Uses the neural network (in Session.network), to perform predictions
@@ -301,6 +304,14 @@ class PointNeuralNetwork(nn.Module):
                     with open(predictions_file, 'a') as f:
                         f.write(predictions)
                         predictions = ''
+        if top1_on_end:
+            try:
+                wandb.log({
+                    'Validation Top1 at end of epoch {}'.format(self.epoch + 1):
+                        top_1(predictions_file)
+                })
+            except Exception:
+                pass  # wandb has not been initialised so ignore
 
     def save(self, save_path=None):
         """Save all network attributes, including internal states."""

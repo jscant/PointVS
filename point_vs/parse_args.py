@@ -178,4 +178,6 @@ def parse_args():
     parser.add_argument('--prune', action='store_true',
                         help='(EGNN) Prune subgraphs which are not connected '
                              'to the ligand')
+    parser.add_argument('--top1', action='store_true',
+                        help='A poorly kept secret ;)')
     return parser.parse_args()

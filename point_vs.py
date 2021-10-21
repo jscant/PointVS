@@ -222,10 +222,10 @@ if __name__ == '__main__':
 
     if args.epochs:
         model.optimise(
-            train_dl, epochs=args.epochs,
+            train_dl, epochs=args.epochs, top1_on_end=args.top1,
             epoch_end_validation_set=test_dl if args.val_on_epoch_end else None)
     if test_dl is not None:
-        model.test(test_dl)
+        model.test(test_dl, top1_on_end=args.top1)
 
     if args.end_flag:
         with open(save_path / '_FINISHED', 'w') as f:
