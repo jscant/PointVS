@@ -1,4 +1,5 @@
 """Some helper functions for cutting inputs down to size."""
+import argparse
 
 import matplotlib
 import numpy as np
@@ -64,9 +65,10 @@ def generate_edges(struct, inter_radius=4.0, intra_radius=2.0):
 
     Arguments:
         struct: DataFrame containing x, y, z, types, bp series.
-        inter_radius: maximum distance below which there is an edge between
-        two atoms
-
+        inter_radius: maximum distance between two atoms different molecules
+            for there to be an edge\
+        intra_radius: maximum distance between two atoms in the same molecule
+            for there to be an edge\
     Returns:
         Tuple containing the edge indices and edge attributes. Edge attributes
         are 0 for ligand-ligand edges, 1 for ligand-receptor edges, and 2 for
@@ -92,8 +94,8 @@ def generate_edges(struct, inter_radius=4.0, intra_radius=2.0):
     bp_0_inter = lig_or_rec[edge_indices_inter[0]]
     bp_1_inter = lig_or_rec[edge_indices_inter[1]]
 
-    bp_0_intra = lig_or_rec[edge_indices_inter[0]]
-    bp_1_intra = lig_or_rec[edge_indices_inter[1]]
+    bp_0_intra = lig_or_rec[edge_indices_intra[0]]
+    bp_1_intra = lig_or_rec[edge_indices_intra[1]]
 
     edge_attrs_inter = np.zeros((n_edges_inter,), dtype='int32')
     edge_attrs_intra = np.zeros((n_edges_intra,), dtype='int32')
@@ -306,11 +308,24 @@ def plot_struct(struct, edges=None):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('max_dist_from_lig', type=float,
+                        help='Maximum distance from a ligand atom that a '
+                             'receptor atom can be to be included')
+    parser.add_argument('inter_radius', type=float,
+                        help='Maximum inter-atomic distance for an edge '
+                             'between atoms in different molecules')
+    parser.add_argument('intra_radius', type=float,
+                        help='Maximum inter-atomic distance for an edge '
+                             'between atoms in the same molecule')
+    args = parser.parse_args()
     bp = expand_path('data/small_chembl_test')
     struct = make_box(concat_structs(
         bp / 'receptors/12968.parquet',
         bp / 'ligands/12968_actives/mol25_7.parquet',
         min_lig_rotation=0),
-        radius=6, relative_to_ligand=True)
+        radius=args.max_dist_from_lig, relative_to_ligand=True)
     plot_struct(struct,
-                generate_edges(struct, inter_radius=6.0, intra_radius=2.0))
+                generate_edges(
+                    struct, inter_radius=args.inter_radius,
+                    intra_radius=args.intra_radius))
