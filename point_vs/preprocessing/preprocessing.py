@@ -140,7 +140,7 @@ def make_box(struct, radius=4, relative_to_ligand=True):
     receptor_np = extract_coords(struct, 1)
 
     if relative_to_ligand:
-        result = struct[struct.bp == 0]
+        result = struct[struct.bp == 0].copy()
         rec_struct = struct[struct.bp == 1].copy()
         rec_struct.reset_index(inplace=True)
         distances = cdist(ligand_np, receptor_np, 'euclidean')
@@ -160,7 +160,9 @@ def make_box(struct, radius=4, relative_to_ligand=True):
 
     struct = struct[
         (struct.sq_dist < radius ** 2) | (struct.bp == 0)].copy()
+    struct.reset_index(drop=True, inplace=True)
     del struct['sq_dist']
+    del struct['index']
     return struct
 
 
@@ -310,4 +312,5 @@ if __name__ == '__main__':
         bp / 'ligands/12968_actives/mol25_7.parquet',
         min_lig_rotation=0),
         radius=6, relative_to_ligand=True)
-    plot_struct(struct, generate_edges(struct, inter_radius=6.0, intra_radius=2.0))
+    plot_struct(struct,
+                generate_edges(struct, inter_radius=6.0, intra_radius=2.0))
