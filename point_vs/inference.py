@@ -53,7 +53,8 @@ if __name__ == '__main__':
                              ' will be used.')
     args = parser.parse_args()
 
-    model, model_kwargs, cmd_line_args = load_model(args.model_checkpoint)
+    model, model_kwargs, cmd_line_args = load_model(
+        args.model_checkpoint, silent=False)
 
     results_fname = expand_path(Path(
         expand_path(args.model_checkpoint).parents[1],

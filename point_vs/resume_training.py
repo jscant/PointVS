@@ -29,7 +29,7 @@ if __name__ == '__main__':
     base_path = expand_path(parser.parse_args().base_path)
     ckpt = find_latest_checkpoint(base_path)
 
-    model, model_kwargs, cmd_line_args = load_model(ckpt)
+    model, model_kwargs, cmd_line_args = load_model(ckpt, silent=False)
 
     if cmd_line_args['model'] in ('lucid', 'egnn'):
         dataset_class = PygPointCloudDataset
