@@ -21,6 +21,12 @@ conda env create -f environment.yml python=3.8
 conda activate pointvs
 pip install -e .
 ```
+
+To run tests for invariance under SE(3) transformations:
+```
+pytest -vvv
+```
+
 If you would like to use wandb for logging information on loss, performance and
 hyperparameters (recommended), you must first create an account at
 [wandb.ai](https://wandb.ai). You must then log into your account on your local
