@@ -9,7 +9,7 @@ import wandb
 from torch import nn
 from torch_geometric.nn import global_mean_pool
 
-from point_vs.analysis.top1 import top_1
+from point_vs.analysis.top1 import top_n
 from point_vs.models.point_neural_network import PointNeuralNetwork
 from point_vs.utils import get_eta, format_time, print_with_overwrite, to_numpy
 
@@ -285,7 +285,7 @@ class PygPointNeuralNetwork(PointNeuralNetwork):
             try:
                 wandb.log({
                     'Validation Top1 at end of epoch {}'.format(self.epoch + 1):
-                        top_1(predictions_file)
+                        top_n(predictions_file)
                 })
             except Exception:
                 pass  # wandb has not been initialised so ignore

@@ -13,6 +13,7 @@ except FileNotFoundError:  # File is not in repo as it is not ready
 
 
 def _extract_scores(types_file, pdbid_whitelist=None):
+    print(VAL_PDBIDS)
     def extract_pdbid(rec):
         pdbid = rec.split('/')[-1].split('_')[0].lower()
         return pdbid in VAL_PDBIDS if pdbid_whitelist else True
@@ -55,7 +56,7 @@ def _gnn_score(types_file, pdbid_whitelist=None):
     return scores
 
 
-def top_1(types_file, pdbid_whitelist=True):
+def top_n(types_file, n=1, pdbid_whitelist=True):
     scores = _gnn_score(types_file, pdbid_whitelist=pdbid_whitelist)
     s = [[j[1] for j in i] for i in scores.values()]
-    return sum([i[0] for i in s]) / len(scores)
+    return sum([1 for i in s if sum(i[:n])]) / len(scores)
