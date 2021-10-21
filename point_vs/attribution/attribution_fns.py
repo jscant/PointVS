@@ -1,42 +1,68 @@
 """Perform masking on inputs"""
 import numpy as np
 import torch
+from torch_geometric.data import Data
+from torch_geometric.loader import DataLoader
 
 from point_vs.models.point_neural_network import to_numpy
+from point_vs.models.point_neural_network_pyg import PygPointNeuralNetwork
+from point_vs.preprocessing.pyg_single_item_dataset import SingleItemDataset
 
 
-def cam(model, p, v, m, **kwargs):
+def cam(model, p, v, m, edge_indices=None, edge_attrs=None, **kwargs):
     """Perform class activation mapping (CAM) on input.
 
     Arguments:
         p: matrix of size (1, n, 3) with atom positions
         v: matrix of size (1, n, d) with atom features
         m: matrix of ones of size (1, n)
+        edge_indices: (EGNN) indices of connected atoms
+        edge_attrs: (EGNN) type of bond (inter/intra ligand/receptor)
 
     Returns:
         Numpy array containing CAM score attributions for each atom
     """
-    if hasattr(model, 'group') and hasattr(model.group, 'lift'):
-        x = model.group.lift((p, v, m), model.liftsamples)
-        liftsamples = model.liftsamples
-    else:
-        x = p, v, m
-        liftsamples = 1
-    for layer in model.layers:
-        if layer.__class__.__name__.find('GlobalPool') != -1:
-            break
-        x = layer(x)
+    if isinstance(model, PygPointNeuralNetwork):
+        graph = Data(
+            x=v.squeeze(),
+            edge_index=edge_indices,
+            edge_attr=edge_attrs,
+            pos=p.squeeze(),
+        )
+        g_input = list(DataLoader(SingleItemDataset(graph)))[0]
+        feats = g_input.x.float().cuda()
+        edges = g_input.edge_index.cuda()
+        coords = g_input.pos.float().cuda()
+        edge_attributes = g_input.edge_attr.cuda()
+        batch = g_input.batch.cuda()
 
-    # We can directly look at the contribution of each node by taking the
-    # dot product between each node's features and the final FC layer
-    final_layer_weights = to_numpy(model.layers[-1].weight).T
-    node_features = to_numpy(x[1].squeeze())
-    scores = node_features @ final_layer_weights
-    if liftsamples == 1:
-        return scores
-    avg_scores = [np.mean(scores[n:n + liftsamples]) for n in
-                  range(len(scores) // liftsamples)]
-    return np.array(avg_scores)
+        feats = model.get_embeddings(
+            feats, edges, coords, edge_attributes, batch)
+        x = to_numpy(model.layers[-1](feats))
+
+    else:
+        if hasattr(model, 'group') and hasattr(model.group, 'lift'):
+            x = model.group.lift((p, v, m), model.liftsamples)
+            liftsamples = model.liftsamples
+        else:
+            x = p, v, m
+            liftsamples = 1
+        for layer in model.layers:
+            if layer.__class__.__name__.find('GlobalPool') != -1:
+                break
+            x = layer(x)
+        x = to_numpy(x[1].squeeze())
+        if not model.linear_gap:
+            # We can directly look at the contribution of each node by taking
+            # the
+            # dot product between each node's features and the final FC layer
+            final_layer_weights = to_numpy(model.layers[-1].weight).T
+            x = x @ final_layer_weights
+            if liftsamples == 1:
+                return x
+            x = [np.mean(x[n:n + liftsamples]) for n in
+                 range(len(x) // liftsamples)]
+    return np.array(x)
 
 
 def masking(model, p, v, m, bs=16):

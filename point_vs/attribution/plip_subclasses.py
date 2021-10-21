@@ -7,9 +7,15 @@ from pandas import DataFrame
 from plip.basic.remote import VisualizerData
 from plip.visualization.pymol import PyMOLVisualizer
 from pymol import cmd
+from torch.nn.functional import one_hot
+from torch_geometric.data import Data
+from torch_geometric.loader import DataLoader
 
 from point_vs.models.point_neural_network import to_numpy
-from point_vs.preprocessing.preprocessing import make_bit_vector, make_box
+from point_vs.models.point_neural_network_pyg import PygPointNeuralNetwork
+from point_vs.preprocessing.preprocessing import make_bit_vector, make_box, \
+    generate_edges
+from point_vs.preprocessing.pyg_single_item_dataset import SingleItemDataset
 from point_vs.utils import coords_to_string, PositionDict
 
 
@@ -46,7 +52,8 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
         if not quiet:
             print('Attributing scores to site:', self.plcomplex.uid)
 
-        df = make_box(df, radius=radius, relative_to_ligand=False)
+        # CHANGE RELATIVE_TO_LIGAND TO CORRECT ARGUMENT
+        df = make_box(df, radius=radius, relative_to_ligand=True)
 
         if use_atomic_numbers:
             # H C N O F P S Cl
@@ -80,7 +87,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
         if not polar_hydrogens:
             df = df[df['atomic_number'] > 1]
 
-        coords = np.vstack([df.x.to_numpy(), df.y.to_numpy(), df.z.to_numpy()]).T
+        coords = np.vstack([df.x, df.y, df.z]).T
 
         p = torch.from_numpy(coords).float()
         p = repeat(p, 'n d -> b n d', b=1)
@@ -93,13 +100,46 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
         v = repeat(v, 'n d -> b n d', b=1)
 
         model = model.eval().cuda()
-        score = float(to_numpy(
-            torch.sigmoid(model((p.cuda(), v.cuda(), m.cuda()))[0, ...])))
+        if isinstance(model, PygPointNeuralNetwork):
+            if hasattr(model, 'edge_radius'):
+                edge_radius = model.edge_radius
+            else:
+                edge_radius = 4
+            if hasattr(model, 'estimate_bonds') and model.estimate_bonds:
+                intra_radius = 2.0
+            else:
+                intra_radius = edge_radius
+            edge_indices, edge_attrs = generate_edges(
+                df, inter_radius=edge_radius, intra_radius=intra_radius)
+
+            edge_indices = torch.from_numpy(np.vstack(edge_indices)).long()
+            edge_attrs = one_hot(torch.from_numpy(edge_attrs).long(), 3)
+
+            graph = Data(
+                x=v.squeeze(),
+                edge_index=edge_indices,
+                edge_attr=edge_attrs,
+                pos=p.squeeze(),
+            )
+
+            ds = SingleItemDataset(graph)
+            dl = DataLoader(batch_size=1, shuffle=False, dataset=ds)
+
+            g = list(dl)[0]
+            pre_activation = model(g)
+
+        else:
+            pre_activation = model((p.cuda(), v.cuda(), m.cuda()))[0, ...]
+            edge_indices, edge_attrs = None, None
+
+        score = float(to_numpy(torch.sigmoid(pre_activation)))
+
         if not quiet:
             print('Original score: {:.4}'.format(score))
 
         model_labels = attribution_fn(
-            model, p.cuda(), v.cuda(), m.cuda(), bs=bs)
+            model, p.cuda(), v.cuda(), m.cuda(), edge_attrs=edge_attrs,
+            edge_indices=edge_indices, bs=bs)
         df['attribution'] = model_labels
         df['any_interaction'] = df['hba'] | df['hbd'] | df['pistacking']
 

@@ -4,8 +4,6 @@ import urllib
 from pathlib import Path
 
 import matplotlib
-import yaml
-from lie_conv.lieGroups import SE3
 from plip.basic.supplemental import extract_pdbid
 from plip.exchange.webservices import fetch_pdb
 from sklearn.metrics import average_precision_score, \
@@ -13,9 +11,7 @@ from sklearn.metrics import average_precision_score, \
 
 from point_vs.attribution.attribution_fns import masking, cam
 from point_vs.attribution.process_pdb import score_and_colour_pdb
-from point_vs.models.egnn_network import EGNN
-from point_vs.models.lie_conv import LieResNet
-from point_vs.models.lie_transformer import EquivariantTransformer
+from point_vs.models.load_model import load_model
 from point_vs.utils import mkdir, ensure_writable
 
 matplotlib.use('agg')
@@ -53,32 +49,6 @@ def download_pdb_file(pdbid, output_dir):
         g.write(pdbfile)
     print('File downloaded as', pdbpath)
     return pdbpath
-
-
-def load_model(weights_file):
-    model_path = Path(weights_file).expanduser()
-    with open(model_path.parents[1] / 'model_kwargs.yaml', 'r') as f:
-        model_kwargs = yaml.load(f, Loader=yaml.Loader)
-    model_kwargs['group'] = SE3(0.2)
-    with open(model_path.parents[1] / 'cmd_args.yaml', 'r') as f:
-        cmd_line_args = yaml.load(f, Loader=yaml.Loader)
-
-    model_type = cmd_line_args['model']
-
-    model_class = {
-        'lietransformer': EquivariantTransformer,
-        'lieconv': LieResNet,
-        'egnn': EGNN
-    }
-
-    model_class = model_class[model_type]
-    model = model_class(Path(), learning_rate=0, weight_decay=0,
-                        silent=True, **model_kwargs)
-
-    model.load_weights(model_path)
-    model = model.eval()
-
-    return model, model_kwargs, cmd_line_args
 
 
 def precision_recall(df, save_path=None):
@@ -129,7 +99,8 @@ def attribute(args):
                                str(pdbpath), str(output_dir),
                                model_args=cmd_line_args,
                                only_process=args.only_process)
-    precision_str = 'pdbid,lig:chain:res,rnd_avg_precision,model_avg_precision,score\n'
+    precision_str = 'pdbid,lig:chain:res,rnd_avg_precision,' \
+                    'model_avg_precision,score\n'
     for lig_id, (score, df) in dfs.items():
         r_ap, ap = precision_recall(
             df, save_path=Path(output_dir, 'precision_recall_{}.png'.format(

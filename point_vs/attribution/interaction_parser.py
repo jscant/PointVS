@@ -25,7 +25,7 @@ from urllib.request import urlopen
 import numpy as np
 import pandas as pd
 
-from point_vs.preprocessing.pdb_to_parquet import PDBFileParser
+from point_vs.dataset_generation.types_to_parquet import StructuralFileParser
 from point_vs.utils import coords_to_string, PositionDict, PositionSet
 
 try:
@@ -53,7 +53,7 @@ def fetch_pdb(pdbid):
     return [pdbfile, pdbid]
 
 
-class PDBInteractionParser(PDBFileParser):
+class StructuralInteractionParser(StructuralFileParser):
     """Python reimplementation of the gninatyper function,
     as per https://pubs.acs.org/doi/10.1021/acs.jcim.6b00740
     (some code modified from Constantin Schneider, OPIG)
