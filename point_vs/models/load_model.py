@@ -24,7 +24,8 @@ def load_model(weights_file):
     }
 
     model_class = model_class[model_type]
-    model = model_class(Path(), learning_rate=0, weight_decay=0,
+    model = model_class(Path(), learning_rate=cmd_line_args['learning_rate'],
+                        weight_decay=cmd_line_args['weight_decay'],
                         use_1cycle=cmd_line_args['use_1cycle'],
                         warm_restarts=cmd_line_args['warm_restarts'],
                         silent=True, **model_kwargs)
