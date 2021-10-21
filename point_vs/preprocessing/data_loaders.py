@@ -323,7 +323,7 @@ class PygPointCloudDataset(PointCloudDataset):
         else:
             edge_radius = 4
         intra_radius = 2.0 if self.estimate_bonds else edge_radius
-        edge_indices, edge_attrs = generate_edges(
+        struct, edge_indices, edge_attrs = generate_edges(
             struct, inter_radius=edge_radius, intra_radius=intra_radius,
             prune=self.prune)
 

@@ -146,7 +146,7 @@ def generate_edges(struct, inter_radius=4.0, intra_radius=2.0, prune=True):
         struct.drop(nodes_to_drop, inplace=True)
         return generate_edges(struct.copy(), inter_radius, intra_radius, False)
 
-    return edge_indices, edge_attrs
+    return struct, edge_indices, edge_attrs
 
 
 def extract_coords(struct, bp=None):
@@ -363,6 +363,7 @@ if __name__ == '__main__':
         min_lig_rotation=0),
         radius=args.max_dist_from_lig, relative_to_ligand=True)
 
-    plot_struct(struct, generate_edges(
+    struct, edge_indices, edge_attrs = generate_edges(
         struct, inter_radius=args.inter_radius,
-        intra_radius=args.intra_radius, prune=args.prune))
+        intra_radius=args.intra_radius, prune=args.prune)
+    plot_struct(struct, (edge_indices, edge_attrs))
