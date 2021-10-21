@@ -9,13 +9,13 @@ from plip.visualization.pymol import PyMOLVisualizer
 from pymol import cmd
 from torch.nn.functional import one_hot
 from torch_geometric.data import Data
-from torch_geometric.loader import DataLoader
 
 from point_vs.models.point_neural_network import to_numpy
 from point_vs.models.point_neural_network_pyg import PygPointNeuralNetwork
 from point_vs.preprocessing.preprocessing import make_bit_vector, make_box, \
     generate_edges
-from point_vs.preprocessing.pyg_single_item_dataset import SingleItemDataset
+from point_vs.preprocessing.pyg_single_item_dataset import \
+    get_pyg_single_graph_for_inference
 from point_vs.utils import coords_to_string, PositionDict
 
 
@@ -41,6 +41,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
         polar_hydrogens = model_args['hydrogens']
         compact = model_args['compact']
         use_atomic_numbers = model_args['use_atomic_numbers']
+        prune = model_args.get('prune', False)
 
         triplet_code = self.plcomplex.uid.split(':')[0]
         if len(only_process) and triplet_code not in only_process:
@@ -54,6 +55,19 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
 
         # CHANGE RELATIVE_TO_LIGAND TO CORRECT ARGUMENT
         df = make_box(df, radius=radius, relative_to_ligand=True)
+        if not polar_hydrogens:
+            df = df[df['atomic_number'] > 1]
+        if isinstance(model, PygPointNeuralNetwork):
+            edge_radius = model_args.get('edge_radius', 4)
+            if model_args.get('estimate_bonds', False):
+                intra_radius = 2.0
+            else:
+                intra_radius = edge_radius
+            df, edge_indices, edge_attrs = generate_edges(
+                df, inter_radius=edge_radius, intra_radius=intra_radius,
+                prune=prune)
+        else:
+            edge_indices, edge_attrs = None, None
 
         if use_atomic_numbers:
             # H C N O F P S Cl
@@ -84,11 +98,8 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
             max_feature_id = 11
         else:
             max_feature_id = 10
-        if not polar_hydrogens:
-            df = df[df['atomic_number'] > 1]
 
         coords = np.vstack([df.x, df.y, df.z]).T
-
         p = torch.from_numpy(coords).float()
         p = repeat(p, 'n d -> b n d', b=1)
 
@@ -101,36 +112,18 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
 
         model = model.eval().cuda()
         if isinstance(model, PygPointNeuralNetwork):
-            if hasattr(model, 'edge_radius'):
-                edge_radius = model.edge_radius
-            else:
-                edge_radius = 4
-            if hasattr(model, 'estimate_bonds') and model.estimate_bonds:
-                intra_radius = 2.0
-            else:
-                intra_radius = edge_radius
-            edge_indices, edge_attrs = generate_edges(
-                df, inter_radius=edge_radius, intra_radius=intra_radius)
 
             edge_indices = torch.from_numpy(np.vstack(edge_indices)).long()
             edge_attrs = one_hot(torch.from_numpy(edge_attrs).long(), 3)
 
-            graph = Data(
+            pre_activation = model(get_pyg_single_graph_for_inference(Data(
                 x=v.squeeze(),
                 edge_index=edge_indices,
                 edge_attr=edge_attrs,
-                pos=p.squeeze(),
-            )
-
-            ds = SingleItemDataset(graph)
-            dl = DataLoader(batch_size=1, shuffle=False, dataset=ds)
-
-            g = list(dl)[0]
-            pre_activation = model(g)
-
+                pos=p.squeeze()
+            )))
         else:
             pre_activation = model((p.cuda(), v.cuda(), m.cuda()))[0, ...]
-            edge_indices, edge_attrs = None, None
 
         score = float(to_numpy(torch.sigmoid(pre_activation)))
 
