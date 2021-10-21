@@ -434,7 +434,7 @@ def multiple_source_dataset(
                 types_fname=types_fname,
                 edge_radius=edge_radius,
                 estimate_bonds=estimate_bonds,
-                prune=prune
+                prune=prune,
                 **kwargs)
             labels += list(dataset.labels)
             filenames += dataset.ligand_fnames
