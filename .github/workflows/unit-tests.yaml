@@ -15,8 +15,11 @@ jobs:
       - uses: actions/setup-node@v2
         with:
           node-version: '14'
-      - run: git clone -q 'ssh://git@github.com/oxcsml/lie-transformer.git'
-      - run: conda env create -f environment.yml python=3.8
-      - run: conda activate pointvs
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          activate-environment: pointvs
+          environment-file: environment.yml
+          python-version: 3.8
+          auto-activate-base: false
       - run: pip install -e .
       - run: pytest -v
