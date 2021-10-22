@@ -126,8 +126,8 @@ dependencies:
   - zstd=1.4.9=haebb681_0
   - pip:
       - egnn-pytorch==0.2.6
-      - "--editable=git+https://git@github.com/oxcsml/lie-transformer.git#egg=Equivariant_Attention"
-      - "--editable=git+https://git@github.com/jscant/plip.git#egg=plip"
+      - "--editable=git+ssh://git@github.com/oxcsml/lie-transformer.git#egg=Equivariant_Attention"
+      - "--editable=git+ssh://git@github.com/jscant/plip.git#egg=plip"
       - --find-links https://data.pyg.org/whl/torch-1.9.0+cu102.html
       - torch-cluster==1.5.9
       - torch-geometric==2.0.1
