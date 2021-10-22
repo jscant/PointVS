@@ -9,6 +9,9 @@ jobs:
         with:
           node-version: '14'
           repo_token: ${{ secrets.GITHUB_TOKEN }}
+      - run: git config --global url."https://${GITHUB_TOKEN}:x-oauth-basic@github.com/"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: conda env create -f environment.yml python=3.8
       - run: conda activate pointvs
       - run: pip install -e .
