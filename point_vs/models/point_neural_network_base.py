@@ -171,7 +171,7 @@ class PointNeuralNetworkBase(nn.Module):
                         top_1,
                     'Validation Top1'.format(self.epoch + 1):
                         top_1,
-                    'Epoch': self.epoch
+                    'Epoch': self.epoch + 1
                 })
             except Exception:
                 pass  # wandb has not been initialised so ignore
