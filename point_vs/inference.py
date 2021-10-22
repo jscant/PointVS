@@ -110,4 +110,4 @@ if __name__ == '__main__':
         if wandb_run is not None:
             wandb.run.name = wandb_run
     model = model.eval()
-    model.test(test_dl, results_fname)
+    model.val(test_dl, results_fname)

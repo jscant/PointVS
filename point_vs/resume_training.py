@@ -97,10 +97,10 @@ if __name__ == '__main__':
             wandb.run.name = wandb_run
 
     if int(cmd_line_args['epochs']):
-        model.optimise(
+        model.train_model(
             train_dl, epochs=cmd_line_args['epochs'],
             epoch_end_validation_set=test_dl)
 
     model = model.eval()
     if test_dl is not None:
-        model.test(test_dl)
+        model.val(test_dl)

@@ -27,12 +27,12 @@ from point_vs import utils
 from point_vs.utils import load_yaml, mkdir
 
 try:
-    from point_vs.models.egnn_satorras import SartorrasEGNN
-    from point_vs.models.egnn_lucid import PygLucidEGNN
+    from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
+    from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
 except (ModuleNotFoundError, OSError):
     EGNNStack = None
-from point_vs.models.lie_conv import LieResNet
-from point_vs.models.lie_transformer import EquivariantTransformer
+from point_vs.models.vanilla.lie_conv import LieResNet
+from point_vs.models.vanilla.lie_transformer import EquivariantTransformer
 from point_vs.parse_args import parse_args
 from point_vs.preprocessing.data_loaders import get_data_loader, \
     PointCloudDataset, PygPointCloudDataset
@@ -221,11 +221,11 @@ if __name__ == '__main__':
         pass
 
     if args.epochs:
-        model.optimise(
+        model.train_model(
             train_dl, epochs=args.epochs, top1_on_end=args.top1,
             epoch_end_validation_set=test_dl if args.val_on_epoch_end else None)
     if test_dl is not None:
-        model.test(test_dl, top1_on_end=args.top1)
+        model.val(test_dl, top1_on_end=args.top1)
 
     if args.end_flag:
         with open(save_path / '_FINISHED', 'w') as f:

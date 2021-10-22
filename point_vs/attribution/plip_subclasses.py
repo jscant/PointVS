@@ -11,7 +11,7 @@ from torch.nn.functional import one_hot
 from torch_geometric.data import Data
 
 from point_vs.models.point_neural_network import to_numpy
-from point_vs.models.point_neural_network_pyg import PygPointNeuralNetwork
+from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase
 from point_vs.preprocessing.preprocessing import make_bit_vector, make_box, \
     generate_edges
 from point_vs.preprocessing.pyg_single_item_dataset import \
@@ -57,7 +57,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
         df = make_box(df, radius=radius, relative_to_ligand=True)
         if not polar_hydrogens:
             df = df[df['atomic_number'] > 1]
-        if isinstance(model, PygPointNeuralNetwork):
+        if isinstance(model, PNNGeometricBase):
             edge_radius = model_args.get('edge_radius', 4)
             if model_args.get('estimate_bonds', False):
                 intra_radius = 2.0
@@ -111,7 +111,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
         v = repeat(v, 'n d -> b n d', b=1)
 
         model = model.eval().cuda()
-        if isinstance(model, PygPointNeuralNetwork):
+        if isinstance(model, PNNGeometricBase):
 
             edge_indices = torch.from_numpy(np.vstack(edge_indices)).long()
             edge_attrs = one_hot(torch.from_numpy(edge_attrs).long(), 3)

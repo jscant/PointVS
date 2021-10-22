@@ -221,7 +221,7 @@ def _set_precision(precision):
 
 def to_numpy(torch_tensor):
     """Switch from a torch tensor to a numpy array (on cpu)."""
-    return torch_tensor.cpu().detach().numpy()
+    return torch_tensor.detach().cpu().numpy()
 
 
 def mkdir(*paths):

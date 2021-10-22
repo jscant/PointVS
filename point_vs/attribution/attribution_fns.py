@@ -3,8 +3,8 @@ import numpy as np
 import torch
 from torch_geometric.data import Data
 
+from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase
 from point_vs.models.point_neural_network import to_numpy
-from point_vs.models.point_neural_network_pyg import PygPointNeuralNetwork
 from point_vs.preprocessing.pyg_single_item_dataset import \
     get_pyg_single_graph_for_inference
 
@@ -22,19 +22,15 @@ def cam(model, p, v, m, edge_indices=None, edge_attrs=None, **kwargs):
     Returns:
         Numpy array containing CAM score attributions for each atom
     """
-    if isinstance(model, PygPointNeuralNetwork):
-        graph = Data(
+    if isinstance(model, PNNGeometricBase):
+        graph = get_pyg_single_graph_for_inference(Data(
             x=v.squeeze(),
             edge_index=edge_indices,
             edge_attr=edge_attrs,
             pos=p.squeeze(),
-        )
-        g_input = get_pyg_single_graph_for_inference(graph)
-        feats = g_input.x.float().cuda()
-        edges = g_input.edge_index.cuda()
-        coords = g_input.pos.float().cuda()
-        edge_attributes = g_input.edge_attr.cuda()
-        batch = g_input.batch.cuda()
+        ))
+        feats, edges, coords, edge_attributes, batch = model.unpack_graph(
+            graph)
 
         feats = model.get_embeddings(
             feats, edges, coords, edge_attributes, batch)

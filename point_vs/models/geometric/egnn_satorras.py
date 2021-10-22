@@ -4,7 +4,7 @@
 import torch
 from torch import nn
 
-from point_vs.models.point_neural_network_pyg import PygPointNeuralNetwork, \
+from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase, \
     PygLinearPass
 
 
@@ -125,7 +125,7 @@ class E_GCL(nn.Module):
         return x, coord, edge_attr
 
 
-class SartorrasEGNN(PygPointNeuralNetwork):
+class SartorrasEGNN(PNNGeometricBase):
     def build_net(self, dim_input, k, dim_output,
                   act_fn=nn.SiLU(), num_layers=4, residual=True,
                   attention=False, normalize=True, tanh=True, **kwargs):

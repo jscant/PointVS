@@ -7,7 +7,7 @@ from lie_conv.masked_batchnorm import MaskBatchNormNd
 from lie_conv.utils import Expression, Pass
 from torch import nn
 
-from point_vs.models.point_neural_network import PointNeuralNetwork
+from point_vs.models.vanilla.pnn_vanilla_base import PNNVanillaBase
 
 
 class LieConvBottleBlock(nn.Module):
@@ -46,13 +46,13 @@ class LieConvBottleBlock(nn.Module):
         return new_coords, new_values, mask
 
 
-class LieResNet(PointNeuralNetwork):
+class LieResNet(PNNVanillaBase):
     """Generic ResNet architecture from https://arxiv.org/abs/2002.12880"""
 
     def _get_y_true(self, y):
         return y.cuda()
 
-    def _process_inputs(self, x):
+    def prepare_input(self, x):
         return tuple([inp.cuda() for inp in x])
 
     def build_net(self, dim_input, dim_output, ds_frac=1, k=1536, nbhd=np.inf,
@@ -61,7 +61,8 @@ class LieResNet(PointNeuralNetwork):
                   **kwargs):
         """
         Arguments:
-            dim_input: number of input channels: 1 for MNIST, 3 for RGB images, other
+            dim_input: number of input channels: 1 for MNIST, 3 for RGB
+            images, other
                 for non images
             ds_frac: total downsampling to perform throughout the layers of the
                 net. In (0,1)

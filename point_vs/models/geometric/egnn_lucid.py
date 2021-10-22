@@ -3,11 +3,11 @@ from egnn_pytorch.egnn_pytorch_geometric import EGNN_Sparse
 from torch import nn
 from torch.nn import SiLU
 
-from point_vs.models.point_neural_network_pyg import PygPointNeuralNetwork, \
+from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase, \
     PygLinearPass
 
 
-class PygLucidEGNN(PygPointNeuralNetwork):
+class PygLucidEGNN(PNNGeometricBase):
     """Pytorch geometric version of LucidRains' EGNN implementation."""
 
     def build_net(self, dim_input, k, dim_output, num_layers=4, dropout=0.0,

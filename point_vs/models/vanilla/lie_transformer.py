@@ -5,16 +5,16 @@ from lie_conv.lieGroups import SE3
 from lie_conv.utils import Pass
 from torch import nn
 
-from point_vs.models.point_neural_network import PointNeuralNetwork
+from point_vs.models.vanilla.pnn_vanilla_base import PNNVanillaBase
 
 
-class EquivariantTransformer(PointNeuralNetwork):
+class EquivariantTransformer(PNNVanillaBase):
     """Adapted from https://github.com/anonymous-code-0/lie-transformer"""
 
     def _get_y_true(self, y):
         return y.cuda()
 
-    def _process_inputs(self, x):
+    def prepare_input(self, x):
         return tuple([ten.cuda() for ten in x])
 
     def build_net(self, dim_input, dim_output, dim_hidden, num_layers,
