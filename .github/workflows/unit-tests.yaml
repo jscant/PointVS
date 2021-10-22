@@ -23,6 +23,6 @@ jobs:
           auto-activate-base: false
           auto-update-conda: false
       - name: Activate conda
-        run: conda activate pointvs
+        run: /usr/share/miniconda/condabin/conda activate pointvs
       - run: pip install -e .
       - run: pytest -v
