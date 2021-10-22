@@ -155,6 +155,19 @@ optional arguments:
   --egnn_residual       Use residual connections (EGNN)
   --edge_radius EDGE_RADIUS
                         Maximum interatomic distance for an edge to exist (EGNN)
+  --end_flag            Add a file named "_FINISHED" to the save_path upon training and test
+                        completion
+  --wandb_dir WANDB_DIR
+                        Location to store wandb files. Defaults to
+                        <save_path>/<wandb_project>/<wandb_run>/wandb.
+  --estimate_bonds      (EGNN): Instead of using a fixed edge radius,the intermolecular radius is
+                        set at --edge_radius Angstroms but the intramolecular radius is set at 2A,
+                        which has the effect of putting edges where there are covalent bonds
+                        between atoms in the same molecule.
+  --linear_gap          Final linear layer comes after rather than before the global average
+                        pooling layer. This can improve performance significantly.
+  --prune               (EGNN) Prune subgraphs which are not connected to the ligand
+  --top1                A poorly kept secret ;)
 ```
 
 ## Dataset generation
