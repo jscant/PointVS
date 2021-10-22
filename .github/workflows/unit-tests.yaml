@@ -23,6 +23,8 @@ jobs:
           auto-activate-base: false
           auto-update-conda: false
       #- run: /usr/share/miniconda/condabin/conda list
+      - name: conda init
+        run: conda init bash
       - name: Activate conda
         run: conda activate pointvs
       - run: conda list
