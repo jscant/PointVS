@@ -1,6 +1,6 @@
 from abc import ABC
 
-from point_vs.models.point_neural_network import PointNeuralNetworkBase
+from point_vs.models.point_neural_network_base import PointNeuralNetworkBase
 
 
 class PNNVanillaBase(PointNeuralNetworkBase, ABC):

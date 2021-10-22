@@ -4,7 +4,7 @@ import torch
 from torch_geometric.data import Data
 
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase
-from point_vs.models.point_neural_network import to_numpy
+from point_vs.models.point_neural_network_base import to_numpy
 from point_vs.preprocessing.pyg_single_item_dataset import \
     get_pyg_single_graph_for_inference
 

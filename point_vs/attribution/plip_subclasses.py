@@ -10,7 +10,7 @@ from pymol import cmd
 from torch.nn.functional import one_hot
 from torch_geometric.data import Data
 
-from point_vs.models.point_neural_network import to_numpy
+from point_vs.models.point_neural_network_base import to_numpy
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase
 from point_vs.preprocessing.preprocessing import make_bit_vector, make_box, \
     generate_edges

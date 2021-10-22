@@ -165,9 +165,13 @@ class PointNeuralNetworkBase(nn.Module):
 
         if top1_on_end:
             try:
+                top_1 = top_n(predictions_file)
                 wandb.log({
                     'Validation Top1 at end of epoch {}'.format(self.epoch + 1):
-                        top_n(predictions_file)
+                        top_1,
+                    'Validation Top1'.format(self.epoch + 1):
+                        top_1,
+                    'Epoch': self.epoch
                 })
             except Exception:
                 pass  # wandb has not been initialised so ignore

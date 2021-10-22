@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from torch_geometric.nn import global_mean_pool
 
-from point_vs.models.point_neural_network import PointNeuralNetworkBase
+from point_vs.models.point_neural_network_base import PointNeuralNetworkBase
 
 
 class PygLinearPass(nn.Module):
