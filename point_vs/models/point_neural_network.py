@@ -71,7 +71,7 @@ class PointNeuralNetworkBase(nn.Module):
         print('Model parameters:', pc)
         if self.wandb_project is not None:
             wandb.log({'Parameters', pc})
-            
+
         self.cuda()
 
     @abstractmethod
@@ -243,8 +243,8 @@ class PointNeuralNetworkBase(nn.Module):
                 'Binary crossentropy (train)': loss,
                 'Batch (train)':
                     (self.epoch * len(data_loader) + self.batch + 1),
-                'Mean decoy prediction (train)': self.active_mean_pred,
-                'Mean active prediction (train)': self.decoy_mean_pred,
+                'Mean active prediction (train)': self.active_mean_pred,
+                'Mean decoy prediction (train)': self.decoy_mean_pred,
                 'Examples seen (train)':
                     self.epoch * len(
                         data_loader) * data_loader.batch_size +
