@@ -13,6 +13,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
       - run: echo $GITHUB_TOKEN
+      - run: echo $PATH
+      - run: echo "Hello world"
       - run: conda env create -f environment.yml python=3.8
       - run: conda activate pointvs
       - run: pip install -e .
