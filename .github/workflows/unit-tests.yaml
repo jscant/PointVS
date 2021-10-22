@@ -4,13 +4,17 @@ jobs:
   unit-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - name: Install SHH Key
+        uses: shimataro/ssh-key-action@v2
         with:
-          persist-credentials: false
+          key: ${{ secrets.SSH_KEY }}
+          name: id_rsa
+          known_hosts: ${{ secrets.KNOWN_HOSTS }}
+          if_key_exists: fail
+      - uses: actions/checkout@v2
       - uses: actions/setup-node@v2
         with:
           node-version: '14'
-          token: ${{ secrets.REPO_TOKEN }}
       - run: git config --global url."https://${{ secrets.REPO_TOKEN }}@github.com/".insteadOf ssh://git@github.com/
       - run: conda env create -f environment.yml python=3.8
       - run: conda activate pointvs
