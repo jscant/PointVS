@@ -6,10 +6,13 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-node@v2
-        with:
+      - with:
           node-version: '14'
           submodules: true
           token: ${{ secrets.REPO_TOKEN }}
+      - env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+      - run: echo $GITHUB_TOKEN
       - run: conda env create -f environment.yml python=3.8
       - run: conda activate pointvs
       - run: pip install -e .
