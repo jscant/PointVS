@@ -12,11 +12,10 @@ except FileNotFoundError:  # File is not in repo as it is not ready
     VAL_PDBIDS = []
 
 
-def _extract_scores(types_file, pdbid_whitelist=None):
-    print(VAL_PDBIDS)
-    def extract_pdbid(rec):
+def _extract_scores(types_file, pdbid_whitelist=False):
+    def drop_record(rec):
         pdbid = rec.split('/')[-1].split('_')[0].lower()
-        return pdbid in VAL_PDBIDS if pdbid_whitelist else True
+        return False if not pdbid_whitelist else pdbid not in VAL_PDBIDS
 
     def extract_dock_sdf_name(pth):
         return '_'.join(str(Path(pth).with_suffix('')).split('_')[:-1]) + '.sdf'
@@ -30,12 +29,10 @@ def _extract_scores(types_file, pdbid_whitelist=None):
     df = pd.read_csv(expand_path(types_file), sep=' ',
                      names=['y_true', '|', 'y_pred', 'rec', 'lig'])
     df['vina_rank'] = df['lig'].map(extract_vina_rank)
-    df['keep'] = df.rec.map(extract_pdbid)
-    df.drop(df[df.keep].index, inplace=True)
-    del df['keep']
+    df['remove'] = df.rec.map(drop_record)
+    df.drop(df[df.remove].index, inplace=True)
+    del df['remove']
     del df['|']
-    df.drop((df['rec'] == '3FZY/3FZY_PRO.parquet').index)
-    df.drop((df['rec'] == '3EEB/3EEB_PRO.parquet').index)
     df.reset_index(inplace=True, drop=True)
     df['lig_sdf'] = df['lig'].map(extract_dock_sdf_name)
     df['rec_pdb'] = df['rec'].map(extract_dock_pdb_name)
@@ -43,7 +40,7 @@ def _extract_scores(types_file, pdbid_whitelist=None):
     return df
 
 
-def _gnn_score(types_file, pdbid_whitelist=None):
+def _gnn_score(types_file, pdbid_whitelist=False):
     scores = defaultdict(list)
     df = _extract_scores(types_file, pdbid_whitelist)
     y_trues = df['y_true'].to_numpy()
