@@ -8,11 +8,12 @@ jobs:
       - uses: actions/setup-node@v2
         with:
           node-version: '14'
-          submodules: true
           token: ${{ secrets.REPO_TOKEN }}
         env:
-          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: echo $GITHUB_TOKEN
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: echo $PATH
       - run: echo "Hello world"
       - run: conda env create -f environment.yml python=3.8
