@@ -7,13 +7,6 @@ setup(
     description='SE(3)-equivariant neural networks for virtual screening.',
     author='Jack Scantlebury',
     install_requires=[
-        'torch',
-        'numpy',
-        'pandas',
-        'wandb',
-        'pyyaml',
-        'einops',
-        'matplotlib',
         'scipy'
     ],
 )
