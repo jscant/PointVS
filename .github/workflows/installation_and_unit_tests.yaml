@@ -1,7 +1,7 @@
 name: unit-tests
 on: [push]
 jobs:
-  installation:
+  installation-and-unit-tests:
     name: Installation
     runs-on: ubuntu-latest
     defaults:
@@ -19,13 +19,15 @@ jobs:
       - uses: actions/setup-node@v2
         with:
           node-version: '14'
-      - uses: conda-incubator/setup-miniconda@v2
+      - name: Create conda envionment from environment.yml
+        uses: conda-incubator/setup-miniconda@v2
         with:
           environment-file: environment.yml
           python-version: 3.8
           auto-activate-base: false
           auto-update-conda: false
           activate-environment: pointvs
+        run: tar -cvf
       - name: pip installation
         run: pip install -e .
       - name: Main script imports
@@ -40,3 +42,5 @@ jobs:
         run: python3 point_vs/preprocessing/data_loaders.py -h
       - name: Preprocessing imports
         run: python3 point_vs/preprocessing/preprocessing.py -h
+      - name: Unit tests
+        run: pytest --ignore=test/test_invariance.py  --ignore=test/test_consistency.py
