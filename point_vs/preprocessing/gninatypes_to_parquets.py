@@ -4,8 +4,9 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
 from atom_types import Typer
-from joblib import Parallel, delayed
+from point_vs.utils import mkdir, expand_path, no_return_parallelise
 
 
 def get_type_map(types: list = None):
@@ -40,48 +41,18 @@ def get_type_map(types: list = None):
     return out_dict
 
 
-def _gninatypes_to_parquet(receptor, ligand, output_filename, type_map):
-    bp_ints = []
-    coords = []
-    types = []
-    n_atom_types = len(set(type_map.values()))
-    for bp_int, gninatype in enumerate([receptor, ligand]):
-        with open(gninatype, 'rb') as f:
-            size = struct.calcsize("fffi")
-            bainfo = f.read(size)
-            while bainfo != b'':
-                ainfo = struct.unpack("fffi", bainfo)
-                coords.append(ainfo[:-1])
-                type_int = type_map[ainfo[-1]] + (bp_int * n_atom_types)
-                types.append(type_int)
-                bp_ints.append(bp_int)
-                bainfo = f.read(size)
-
-    types = np.array(types)
-    coords = np.array(coords)
-    bp_ints = np.array(bp_ints)
-
-    df = pd.DataFrame(coords, columns=['x', 'y', 'z'])
-    df['types'] = types
-    df['bp'] = bp_ints
-    Path(output_filename).parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(output_filename)
-    return 0
-
-
-def gninatypes_to_parquet(
-        input_filename, output_filename, type_map, struct_type):
+def gninatypes_to_parquet(input_filename, output_filename, struct_type):
     coords = []
     types = []
     bp_int = 1 if struct_type == 'receptor' else 0
-    n_atom_types = len(set(type_map.values()))
+    n_atom_types = 14
     with open(input_filename, 'rb') as f:
         size = struct.calcsize("fffi")
         bainfo = f.read(size)
         while bainfo != b'':
             ainfo = struct.unpack("fffi", bainfo)
             coords.append(ainfo[:-1])
-            type_int = type_map[ainfo[-1]] + (bp_int * n_atom_types)
+            type_int = ainfo[-1] + (bp_int * n_atom_types)
             types.append(type_int)
             bainfo = f.read(size)
 
@@ -100,30 +71,23 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('base_path', type=str)
     parser.add_argument('output_dir', type=str)
+    parser.add_argument('structure_type', type=str)
+
     args = parser.parse_args()
+    assert args.structure_type in ('receptor', 'ligand'), \
+        'structure_type must be either receptor or ligand'
 
     base_path = Path(args.base_path).expanduser()
     output_dir = Path(args.output_dir).expanduser()
 
-    type_map = get_type_map()
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = mkdir(output_dir)
+    input_dir = expand_path(args.base_path)
 
-    inf_outf = []
-    for rec in (base_path / 'receptors').glob('*.gninatypes'):
-        receptor = rec.stem.replace('_receptor', '')
-        inf_outf.append(
-            (rec, output_dir / 'receptors' / (receptor + '.parquet'),
-             'receptor')
-        )
-        for ad in ['actives', 'decoys']:
-            out_dir = receptor + '_' + ad
-            for lig in (base_path / 'ligands' / out_dir).glob('*.gninatypes'):
-                inf_outf.append((
-                    lig,
-                    output_dir / 'ligands' / out_dir / (lig.stem + '.parquet'),
-                    'ligand'))
-
-    with Parallel(n_jobs=12, verbose=5) as parallel:
-        parallel(delayed(gninatypes_to_parquet)(
-            inp, outp, type_map, struct_type) for (inp, outp, struct_type) in
-                 inf_outf)
+    input_fnames, output_fnames = [], []
+    for gt in input_dir.glob('**/*.gninatypes'):
+        input_fnames.append(str(gt))
+        output_fnames.append(str(output_dir / gt))
+    print(input_fnames)
+    print(output_fnames)
+    no_return_parallelise(
+        gninatypes_to_parquet, input_fnames, output_fnames, args.structure_type)

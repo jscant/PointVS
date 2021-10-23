@@ -2,8 +2,8 @@ from pathlib import Path
 
 from lie_conv.lieGroups import SE3
 
-from point_vs.models.egnn_lucid import PygLucidEGNN
-from point_vs.models.egnn_satorras import SartorrasEGNN
+from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
+from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
 from point_vs.models.vanilla.lie_conv import LieResNet
 from point_vs.models.vanilla.lie_transformer import EquivariantTransformer
 from point_vs.utils import load_yaml

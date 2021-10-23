@@ -2,7 +2,7 @@ name: unit-tests
 on: [push]
 jobs:
   unit-tests:
-    name: Install and pytest
+    name: Installation
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -26,5 +26,17 @@ jobs:
           auto-activate-base: false
           auto-update-conda: false
           activate-environment: pointvs
-      - run: pip install -e .
-      - run: pytest -v
+      - name: pip installation
+        run: pip install -e .
+      - name: Main script imports
+        run: python3 point_vs.py -h
+      - name: Attribution imports
+        run: python3 point_vs/attribution/attribution.py -h
+      - name: Types to parquet imports
+        run: python3 point_vs/dataset_generation/types_to_parquet.py -h
+      - name: Generate types file imports
+        run: python3 point_vs/dataset_generation/generate_types_file.py -h
+      - name: Data loaders imports
+        run: python3 point_vs/preprocessing/data_loaders.py -h
+      - name: Preprocessing imports
+        run: python3 point_vs/preprocessing/preprocessing.py -h
