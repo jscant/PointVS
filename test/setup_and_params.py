@@ -46,17 +46,31 @@ _test_dl = get_data_loader(
     estimate_bonds=True,
 )
 
+DATALOADER_KWARGS = {
+    'compact': True, 'receptors': None,
+    'augmented_active_count': 0,
+    'augmented_active_min_angle': 0,
+    'polar_hydrogens': True,
+    'max_active_rms_distance': None,
+    'min_inactive_rms_distance': None,
+    'use_atomic_numbers': False,
+    'fname_suffix': 'parquet',
+    'types_fname': 'test/resources/test.types',
+    'edge_radius': 6,
+    'estimate_bonds': True,
+    'prune': True
+}
+
 ORIGINAL_GRAPH = list(_test_dl)[0]
 
 rotated_coords = torch.from_numpy(
-        uniform_random_rotation(to_numpy(ORIGINAL_GRAPH.pos)))
+    uniform_random_rotation(to_numpy(ORIGINAL_GRAPH.pos)))
 ROTATED_GRAPH = get_pyg_single_graph_for_inference(Data(
     x=ORIGINAL_GRAPH.x,
     edge_index=ORIGINAL_GRAPH.edge_index,
     edge_attr=ORIGINAL_GRAPH.edge_attr,
     pos=rotated_coords,
 ))
-
 
 EGNN_EPS = 3e-5
 LIFT_EPS = 3e-2
