@@ -70,7 +70,7 @@ class PointNeuralNetworkBase(nn.Module):
         pc = self.param_count
         print('Model parameters:', pc)
         if self.wandb_project is not None:
-            wandb.log({'Parameters', pc})
+            wandb.log({'Parameters': pc})
 
         self.cuda()
 
