@@ -27,7 +27,6 @@ jobs:
           auto-activate-base: false
           auto-update-conda: false
           activate-environment: pointvs
-        run: tar -cvf
       - name: pip installation
         run: pip install -e .
       - name: Main script imports
