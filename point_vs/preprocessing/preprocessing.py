@@ -71,9 +71,11 @@ def generate_edges(struct, inter_radius=4.0, intra_radius=2.0, prune=True):
     Arguments:
         struct: DataFrame containing x, y, z, types, bp series.
         inter_radius: maximum distance between two atoms different molecules
-            for there to be an edge\
+            for there to be an edge
         intra_radius: maximum distance between two atoms in the same molecule
-            for there to be an edge\
+            for there to be an edge
+        prune: remove receptor atoms that are not connected (have no edges to)
+            the main graph containing ligand atoms
     Returns:
         Tuple containing the edge indices and edge attributes. Edge attributes
         are 0 for ligand-ligand edges, 1 for ligand-receptor edges, and 2 for
@@ -134,12 +136,11 @@ def generate_edges(struct, inter_radius=4.0, intra_radius=2.0, prune=True):
         np.concatenate([edge_indices_inter[1], edge_indices_intra[1]])
     )
 
-    node_list = defaultdict(list)
-    for idx in range(len(edge_indices[0])):
-        node_list[edge_indices[0][idx]].append(edge_indices[1][idx])
-        node_list[edge_indices[1][idx]].append(edge_indices[0][idx])
-
     if prune and n_edges_inter:
+        node_list = defaultdict(list)
+        for idx in range(len(edge_indices[0])):
+            node_list[edge_indices[0][idx]].append(edge_indices[1][idx])
+            node_list[edge_indices[1][idx]].append(edge_indices[0][idx])
         starting_node = edge_indices[0][0]
         nodes_to_keep = bfs(starting_node, node_list)
         nodes_to_drop = np.setdiff1d(struct.index, nodes_to_keep)
@@ -275,9 +276,6 @@ def concat_structs(rec, lig, min_lig_rotation=0, parsers=None):
 
     concatted_structs = lig_struct.append(rec_struct, ignore_index=True)
     return concatted_structs
-
-
-"""Everything below is for debugging (ignore)"""
 
 
 def plot_struct(struct, edges=None):
