@@ -22,7 +22,8 @@ jobs:
           python-version: 3.8
           auto-activate-base: false
           auto-update-conda: false
-      - run: $CONDA/bin/conda activate pointvs
+      - run: source $CONDA/etc/profile.d.conda.sh
+      - run: conda activate pointvs
       - run: $CODNA/bin/pytest -v
       - run: conda list
       - run: pip install -e .
