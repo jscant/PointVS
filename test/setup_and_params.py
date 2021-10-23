@@ -93,7 +93,8 @@ MODEL_KWARGS = {
     'max_sample_norm': None,
     'lie_algebra_nonlinearity': None,
     'pooling_only': True,
-    'linear_gap': True
+    'linear_gap': True,
+    'graphnorm': True
 }
 
 N_SAMPLES = 10
