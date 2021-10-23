@@ -22,12 +22,8 @@ jobs:
           python-version: 3.8
           auto-activate-base: false
           auto-update-conda: false
-      - name: conda init
-        run: conda init bash
-      - name: Source activate
-        run: source activate /home/runner/.bashrc
-      - name: Activate conda
-        run: source activate pointvs
+      - run: $CONDA/bin/conda activate pointvs
+      - run: $CODNA/bin/pytest -v
       - run: conda list
       - run: pip install -e .
       - run: pytest -v
