@@ -178,7 +178,8 @@ if __name__ == '__main__':
         'tanh': args.egnn_tanh,
         'normalize': args.egnn_normalise,
         'residual': args.egnn_residual,
-        'linear_gap': args.linear_gap
+        'linear_gap': args.linear_gap,
+        'graphnorm': args.graphnorm
     }
 
     args_to_record.update(model_kwargs)

@@ -3,6 +3,8 @@
 
 import torch
 from torch import nn
+from torch_geometric.utils import dropout_adj
+from torch_geometric.nn.norm import GraphNorm
 
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase, \
     PygLinearPass
@@ -30,7 +32,8 @@ class E_GCL(nn.Module):
 
     def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d=0,
                  act_fn=nn.SiLU(), residual=True, attention=False,
-                 normalize=False, coords_agg='mean', tanh=False):
+                 normalize=False, coords_agg='mean', tanh=False,
+                 graphnorm=False):
         super(E_GCL, self).__init__()
         input_edge = input_nf * 2
         self.residual = residual
@@ -49,6 +52,7 @@ class E_GCL(nn.Module):
 
         self.node_mlp = nn.Sequential(
             nn.Linear(hidden_nf + input_nf, hidden_nf),
+            GraphNorm(hidden_nf) if graphnorm else nn.Identity(),
             act_fn,
             nn.Linear(hidden_nf, output_nf))
 
@@ -128,7 +132,9 @@ class E_GCL(nn.Module):
 class SartorrasEGNN(PNNGeometricBase):
     def build_net(self, dim_input, k, dim_output,
                   act_fn=nn.SiLU(), num_layers=4, residual=True,
-                  attention=False, normalize=True, tanh=True, **kwargs):
+                  attention=False, normalize=True, tanh=True, dropout=0,
+                  graphnorm=True,
+                  **kwargs):
         """
         Arguments:
             dim_input: Number of features for 'h' at the input
@@ -151,6 +157,7 @@ class SartorrasEGNN(PNNGeometricBase):
         layers = [PygLinearPass(nn.Linear(dim_input, k),
                                 return_coords_and_edges=True)]
         self.n_layers = num_layers
+        self.dropout_p = dropout
         for i in range(0, num_layers):
             layers.append(E_GCL(k, k, k,
                                 edges_in_d=3,
@@ -158,12 +165,17 @@ class SartorrasEGNN(PNNGeometricBase):
                                 residual=residual,
                                 attention=attention,
                                 normalize=normalize,
+                                graphnorm=graphnorm,
                                 tanh=tanh))
         layers.append(PygLinearPass(nn.Linear(k, dim_output),
                                     return_coords_and_edges=False))
         return nn.Sequential(*layers)
 
     def get_embeddings(self, feats, edges, coords, edge_attributes, batch):
+        if self.dropout_p > 0:
+            edges, edge_attributes = dropout_adj(
+                edges, edge_attributes, self.dropout_p, force_undirected=True,
+                training=self.training)
         for i in self.layers[:-1]:
             feats, coords, edge_attributes = i(
                 x=feats, edge_index=edges, coord=coords,

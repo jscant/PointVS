@@ -180,4 +180,6 @@ def parse_args():
                              'to the ligand')
     parser.add_argument('--top1', action='store_true',
                         help='A poorly kept secret ;)')
+    parser.add_argument('--graphnorm', action='store_true',
+                        help='(EGNN) add GraphNorm layers to each node MLP')
     return parser.parse_args()
