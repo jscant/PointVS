@@ -1,7 +1,7 @@
 name: unit-tests
 on: [push]
 jobs:
-  unit-tests:
+  installation:
     name: Installation
     runs-on: ubuntu-latest
     defaults:
