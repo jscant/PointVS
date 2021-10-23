@@ -1,10 +1,7 @@
-"""Directly copied from https://github.com/vgsatorras/egnn/blob
-/3c079e7267dad0aa6443813ac1a12425c3717558/models/egnn_clean/egnn_clean.py"""
-
 import torch
 from torch import nn
-from torch_geometric.utils import dropout_adj
 from torch_geometric.nn.norm import GraphNorm
+from torch_geometric.utils import dropout_adj
 
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase, \
     PygLinearPass
@@ -26,9 +23,7 @@ class EGNNPass(nn.Module):
 
 
 class E_GCL(nn.Module):
-    """
-    E(n) Equivariant Convolutional Layer
-    """
+    """Directly copied from https://github.com/vgsatorras/egnn"""
 
     def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d=0,
                  act_fn=nn.SiLU(), residual=True, attention=False,
