@@ -20,12 +20,9 @@ from lie_conv.lieGroups import SE3
 from point_vs import utils
 from point_vs.utils import load_yaml, mkdir
 
-try:
-    from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
-    from point_vs.models.siamese import SiameseNeuralNetwork
-    from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
-except (ModuleNotFoundError, OSError):
-    EGNNStack = None
+from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
+from point_vs.models.siamese import SiameseNeuralNetwork
+from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
 from point_vs.models.vanilla.lie_conv import LieResNet
 from point_vs.models.vanilla.lie_transformer import EquivariantTransformer
 from point_vs.parse_args import parse_args
