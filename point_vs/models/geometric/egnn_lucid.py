@@ -12,7 +12,8 @@ class PygLucidEGNN(PNNGeometricBase):
 
     def build_net(self, dim_input, k, dim_output, num_layers=4, dropout=0.0,
                   norm_coords=True, norm_feats=True, fourier_features=0,
-                  attention=False, tanh=True, linear_gap=False, **kwargs):
+                  attention=False, tanh=True, update_coords=True,
+                  linear_gap=False, **kwargs):
         layers = [PygLinearPass(
             nn.Linear(dim_input, k), feats_appended_to_coords=True)]
         for i in range(0, num_layers):
@@ -27,7 +28,7 @@ class PygLucidEGNN(PNNGeometricBase):
                 norm_coors=norm_coords,
                 norm_coors_scale_init=1e-2,
                 update_feats=True,
-                update_coors=True,
+                update_coors=update_coords,
                 dropout=dropout,
                 coor_weights_clamp_value=2.0,
                 aggr='mean',

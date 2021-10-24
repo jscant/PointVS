@@ -4,15 +4,9 @@ screening on protein-ligand complexes. This is the main script, and can be used
 like so:
 
 python3 point_vs.py <model> <data_root> <save_path> --batch_size int
-    --receptors [str]
 
 for example:
 python3 point_vs.py lieconv data/small_chembl_test ~/test_output
-
-Specific receptors can be specified as a list for the final argument:
-python3 point_vs.py resnet data/small_chembl_test ~/test_output -r 20014 28
-
-<model> can be either of gnina or restnet.
 """
 import os
 import socket
@@ -28,6 +22,7 @@ from point_vs.utils import load_yaml, mkdir
 
 try:
     from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
+    from point_vs.models.siamese import SiameseNeuralNetwork
     from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
 except (ModuleNotFoundError, OSError):
     EGNNStack = None
@@ -92,49 +87,104 @@ if __name__ == '__main__':
         raise NotImplementedError(
             'model must be one of ' + ', '.join(model_classes.keys()))
 
-    if isinstance(args.train_receptors, str):
-        train_receptors = tuple([args.train_receptors])
-    else:
-        train_receptors = args.train_receptors
-
-    if isinstance(args.test_receptors, str):
-        test_receptors = tuple([args.test_receptors])
-    else:
-        test_receptors = args.test_receptors
-
     if args.model in ('lucid', 'egnn'):
         dataset_class = PygPointCloudDataset
     else:
         dataset_class = PointCloudDataset
 
-    train_dl = get_data_loader(
-        args.train_data_root, args.translated_actives,
-        dataset_class=dataset_class,
-        batch_size=args.batch_size, compact=args.compact, radius=args.radius,
-        use_atomic_numbers=args.use_atomic_numbers, rot=False,
-        augmented_actives=args.augmented_actives,
-        min_aug_angle=args.min_aug_angle,
-        max_active_rms_distance=args.max_active_rmsd,
-        min_inactive_rms_distance=args.min_inactive_rmsd,
-        polar_hydrogens=args.hydrogens, receptors=train_receptors, mode='train',
-        types_fname=args.train_types, fname_suffix=args.input_suffix,
-        edge_radius=args.edge_radius, estimate_bonds=args.estimate_bonds,
-        prune=args.prune
-    )
+    if args.siamese:
+        rec_train_dl = get_data_loader(
+            args.train_data_root,
+            dataset_class=dataset_class,
+            batch_size=args.batch_size, compact=args.compact,
+            radius=args.radius,
+            use_atomic_numbers=args.use_atomic_numbers, rot=False,
+            augmented_actives=args.augmented_actives,
+            min_aug_angle=args.min_aug_angle,
+            max_active_rms_distance=args.max_active_rmsd,
+            min_inactive_rms_distance=args.min_inactive_rmsd,
+            polar_hydrogens=args.hydrogens,
+            mode='train',
+            types_fname=args.train_types, fname_suffix=args.input_suffix,
+            edge_radius=args.edge_radius, estimate_bonds=args.estimate_bonds,
+            prune=args.prune, bp=1
+        )
+        lig_train_dl = get_data_loader(
+            args.train_data_root,
+            dataset_class=dataset_class,
+            batch_size=args.batch_size, compact=args.compact,
+            radius=args.radius,
+            use_atomic_numbers=args.use_atomic_numbers, rot=False,
+            augmented_actives=args.augmented_actives,
+            min_aug_angle=args.min_aug_angle,
+            max_active_rms_distance=args.max_active_rmsd,
+            min_inactive_rms_distance=args.min_inactive_rmsd,
+            polar_hydrogens=args.hydrogens,
+            mode='train',
+            types_fname=args.train_types, fname_suffix=args.input_suffix,
+            edge_radius=args.edge_radius, estimate_bonds=args.estimate_bonds,
+            prune=args.prune, bp=0
+        )
+        dim_input = lig_train_dl.dataset.feature_dim
+        train_dl = (rec_train_dl, lig_train_dl)
+    else:
+        train_dl = get_data_loader(
+            args.train_data_root,
+            dataset_class=dataset_class,
+            batch_size=args.batch_size, compact=args.compact,
+            radius=args.radius,
+            use_atomic_numbers=args.use_atomic_numbers, rot=False,
+            augmented_actives=args.augmented_actives,
+            min_aug_angle=args.min_aug_angle,
+            max_active_rms_distance=args.max_active_rmsd,
+            min_inactive_rms_distance=args.min_inactive_rmsd,
+            polar_hydrogens=args.hydrogens,
+            mode='train',
+            types_fname=args.train_types, fname_suffix=args.input_suffix,
+            edge_radius=args.edge_radius, estimate_bonds=args.estimate_bonds,
+            prune=args.prune
+        )
+        dim_input = train_dl.dataset.feature_dim
 
     # Is a validation set specified?
     test_dl = None
     if args.test_data_root is not None:
-        test_dl = get_data_loader(
-            args.test_data_root, receptors=test_receptors, compact=args.compact,
-            dataset_class=dataset_class,
-            use_atomic_numbers=args.use_atomic_numbers, radius=args.radius,
-            polar_hydrogens=args.hydrogens, batch_size=args.batch_size,
-            types_fname=args.test_types,
-            edge_radius=args.edge_radius,
-            estimate_bonds=args.estimate_bonds,
-            prune=args.prune,
-            rot=False, mode='val', fname_suffix=args.input_suffix)
+        if args.siamese:
+            rec_test_dl = get_data_loader(
+                args.test_data_root,
+                compact=args.compact,
+                dataset_class=dataset_class,
+                use_atomic_numbers=args.use_atomic_numbers, radius=args.radius,
+                polar_hydrogens=args.hydrogens, batch_size=args.batch_size,
+                types_fname=args.test_types,
+                edge_radius=args.edge_radius,
+                estimate_bonds=args.estimate_bonds,
+                prune=args.prune, bp=1,
+                rot=False, mode='val', fname_suffix=args.input_suffix)
+            lig_test_dl = get_data_loader(
+                args.test_data_root,
+                compact=args.compact,
+                dataset_class=dataset_class,
+                use_atomic_numbers=args.use_atomic_numbers, radius=args.radius,
+                polar_hydrogens=args.hydrogens, batch_size=args.batch_size,
+                types_fname=args.test_types,
+                edge_radius=args.edge_radius,
+                estimate_bonds=args.estimate_bonds,
+                prune=args.prune, bp=0,
+                rot=False, mode='val', fname_suffix=args.input_suffix)
+            test_dl = (rec_test_dl, lig_test_dl)
+        else:
+            test_dl = get_data_loader(
+                args.test_data_root,
+                compact=args.compact,
+                dataset_class=dataset_class,
+                use_atomic_numbers=args.use_atomic_numbers, radius=args.radius,
+                polar_hydrogens=args.hydrogens, batch_size=args.batch_size,
+                types_fname=args.test_types,
+                edge_radius=args.edge_radius,
+                estimate_bonds=args.estimate_bonds,
+                prune=args.prune,
+                rot=False, mode='val', fname_suffix=args.input_suffix)
 
     args_to_record = vars(args)
 
@@ -153,7 +203,7 @@ if __name__ == '__main__':
         'num_layers': args.layers,
         'pool': True,
         'dropout': args.dropout,
-        'dim_input': train_dl.dataset.feature_dim,
+        'dim_input': dim_input,
         'dim_output': 1,
         'dim_hidden': args.channels,
         'num_heads': 8,
@@ -208,10 +258,16 @@ if __name__ == '__main__':
             args.model))
         exit(1)
 
-    model = model_class(
-        save_path, args.learning_rate, args.weight_decay,
-        wandb_project=args.wandb_project, use_1cycle=args.use_1cycle,
-        warm_restarts=args.warm_restarts, **model_kwargs)
+    if args.siamese:
+        model = SiameseNeuralNetwork(
+            model_class, save_path, args.learning_rate, args.weight_decay,
+            wandb_project=args.wandb_project, use_1cycle=args.use_1cycle,
+            warm_restarts=args.warm_restarts, **model_kwargs)
+    else:
+        model = model_class(
+            save_path, args.learning_rate, args.weight_decay,
+            wandb_project=args.wandb_project, use_1cycle=args.use_1cycle,
+            warm_restarts=args.warm_restarts, **model_kwargs)
 
     if args.load_weights is not None:
         model.load_weights(args.load_weights)

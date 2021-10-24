@@ -43,12 +43,6 @@ def parse_args():
                         help='Number of times to iterate through training set.')
     parser.add_argument('--channels', '-k', type=int, default=32,
                         help='Channels for feature vectors')
-    parser.add_argument('--train_receptors', '-r', type=str, nargs='*',
-                        help='Names of specific receptors for training. If '
-                             'specified, other structures will be ignored.')
-    parser.add_argument('--test_receptors', '-q', type=str, nargs='*',
-                        help='Names of specific receptors for testing. If '
-                             'specified, other structures will be ignored.')
     parser.add_argument('--learning_rate', '-lr', type=float, default=0.002,
                         help='Learning rate for gradient descent')
     parser.add_argument('--weight_decay', '-w', type=float, default=1e-4,
@@ -182,4 +176,7 @@ def parse_args():
                         help='A poorly kept secret ;)')
     parser.add_argument('--graphnorm', action='store_true',
                         help='(EGNN) add GraphNorm layers to each node MLP')
+    parser.add_argument('--siamese', action='store_true',
+                        help='(EGNN) Split networks for receptor and ligand '
+                             'inputs')
     return parser.parse_args()

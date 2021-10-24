@@ -28,7 +28,7 @@ class E_GCL(nn.Module):
     def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d=0,
                  act_fn=nn.SiLU(), residual=True, attention=False,
                  normalize=False, coords_agg='mean', tanh=False,
-                 graphnorm=False):
+                 graphnorm=False, update_coords=True):
         super(E_GCL, self).__init__()
         input_edge = input_nf * 2
         self.residual = residual
@@ -37,7 +37,8 @@ class E_GCL(nn.Module):
         self.coords_agg = coords_agg
         self.tanh = tanh
         self.epsilon = 1e-8
-        edge_coords_nf = 1
+        self.use_coords = update_coords
+        edge_coords_nf = 1 if update_coords else 0
 
         self.edge_mlp = nn.Sequential(
             nn.Linear(input_edge + edge_coords_nf + edges_in_d, hidden_nf),
@@ -68,10 +69,12 @@ class E_GCL(nn.Module):
                 nn.Sigmoid())
 
     def edge_model(self, source, target, radial, edge_attr):
-        if edge_attr is None:  # Unused.
-            out = torch.cat([source, target, radial], dim=1)
-        else:
-            out = torch.cat([source, target, radial, edge_attr], dim=1)
+        inp = [source, target]
+        if self.use_coords:
+            inp.append(radial)
+        if edge_attr is not None:
+            inp.append(edge_attr)
+        out = torch.cat(inp, dim=1)
         out = self.edge_mlp(out)
         if self.attention:
             att_val = self.att_mlp(out)
@@ -91,6 +94,8 @@ class E_GCL(nn.Module):
         return out, agg
 
     def coord_model(self, coord, edge_index, coord_diff, edge_feat):
+        if not self.use_coords:
+            return coord
         row, col = edge_index
         trans = coord_diff * self.coord_mlp(edge_feat)
         if self.coords_agg == 'sum':
@@ -115,7 +120,10 @@ class E_GCL(nn.Module):
 
     def forward(self, x, edge_index, coord, edge_attr=None):
         row, col = edge_index
-        radial, coord_diff = self.coord2radial(edge_index, coord)
+        if self.use_coords:
+            radial, coord_diff = self.coord2radial(edge_index, coord)
+        else:
+            radial, coord_diff = None, None
 
         edge_feat = self.edge_model(x[row], x[col], radial, edge_attr)
         coord = self.coord_model(coord, edge_index, coord_diff, edge_feat)
@@ -128,8 +136,7 @@ class SartorrasEGNN(PNNGeometricBase):
     def build_net(self, dim_input, k, dim_output,
                   act_fn=nn.SiLU(), num_layers=4, residual=True,
                   attention=False, normalize=True, tanh=True, dropout=0,
-                  graphnorm=True,
-                  **kwargs):
+                  graphnorm=True, **kwargs):
         """
         Arguments:
             dim_input: Number of features for 'h' at the input
