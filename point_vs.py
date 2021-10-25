@@ -18,16 +18,15 @@ import yaml
 from lie_conv.lieGroups import SE3
 
 from point_vs import utils
-from point_vs.utils import load_yaml, mkdir
-
+from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
 from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
 from point_vs.models.siamese import SiameseNeuralNetwork
-from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
 from point_vs.models.vanilla.lie_conv import LieResNet
 from point_vs.models.vanilla.lie_transformer import EquivariantTransformer
 from point_vs.parse_args import parse_args
 from point_vs.preprocessing.data_loaders import get_data_loader, \
     PointCloudDataset, PygPointCloudDataset
+from point_vs.utils import load_yaml, mkdir
 
 try:
     import wandb
@@ -89,57 +88,55 @@ if __name__ == '__main__':
     else:
         dataset_class = PointCloudDataset
 
+    dl_kwargs = {
+        'batch_size': args.batch_size,
+        'compact': args.compact,
+        'radius': args.radius,
+        'use_atomic_numbers': args.use_atomic_numbers,
+        'rot': False,
+        'polar_hydrogens': args.hydrogens,
+        'fname_suffix': args.input_suffix,
+        'edge_radius': args.edge_radius,
+        'estimate_bonds': args.estimate_bonds,
+        'prune': args.prune,
+    }
+    
     if args.siamese:
         rec_train_dl = get_data_loader(
             args.train_data_root,
-            dataset_class=dataset_class,
-            batch_size=args.batch_size, compact=args.compact,
-            radius=args.radius,
-            use_atomic_numbers=args.use_atomic_numbers, rot=False,
+            dataset_class,
             augmented_actives=args.augmented_actives,
             min_aug_angle=args.min_aug_angle,
             max_active_rms_distance=args.max_active_rmsd,
             min_inactive_rms_distance=args.min_inactive_rmsd,
-            polar_hydrogens=args.hydrogens,
-            mode='train',
-            types_fname=args.train_types, fname_suffix=args.input_suffix,
-            edge_radius=args.edge_radius, estimate_bonds=args.estimate_bonds,
-            prune=args.prune, bp=1
+            types_fname=args.train_types,
+            mode='train', bp=1,
+            **dl_kwargs
         )
         lig_train_dl = get_data_loader(
             args.train_data_root,
-            dataset_class=dataset_class,
-            batch_size=args.batch_size, compact=args.compact,
-            radius=args.radius,
-            use_atomic_numbers=args.use_atomic_numbers, rot=False,
+            dataset_class,
             augmented_actives=args.augmented_actives,
             min_aug_angle=args.min_aug_angle,
             max_active_rms_distance=args.max_active_rmsd,
             min_inactive_rms_distance=args.min_inactive_rmsd,
-            polar_hydrogens=args.hydrogens,
-            mode='train',
-            types_fname=args.train_types, fname_suffix=args.input_suffix,
-            edge_radius=args.edge_radius, estimate_bonds=args.estimate_bonds,
-            prune=args.prune, bp=0
+            types_fname=args.train_types,
+            mode='train', bp=0,
+            **dl_kwargs
         )
         dim_input = lig_train_dl.dataset.feature_dim
         train_dl = (rec_train_dl, lig_train_dl)
     else:
         train_dl = get_data_loader(
             args.train_data_root,
-            dataset_class=dataset_class,
-            batch_size=args.batch_size, compact=args.compact,
-            radius=args.radius,
-            use_atomic_numbers=args.use_atomic_numbers, rot=False,
+            dataset_class,
             augmented_actives=args.augmented_actives,
             min_aug_angle=args.min_aug_angle,
             max_active_rms_distance=args.max_active_rmsd,
             min_inactive_rms_distance=args.min_inactive_rmsd,
-            polar_hydrogens=args.hydrogens,
+            types_fname=args.train_types,
             mode='train',
-            types_fname=args.train_types, fname_suffix=args.input_suffix,
-            edge_radius=args.edge_radius, estimate_bonds=args.estimate_bonds,
-            prune=args.prune
+            **dl_kwargs
         )
         dim_input = train_dl.dataset.feature_dim
 
@@ -149,39 +146,26 @@ if __name__ == '__main__':
         if args.siamese:
             rec_test_dl = get_data_loader(
                 args.test_data_root,
-                compact=args.compact,
-                dataset_class=dataset_class,
-                use_atomic_numbers=args.use_atomic_numbers, radius=args.radius,
-                polar_hydrogens=args.hydrogens, batch_size=args.batch_size,
+                dataset_class,
                 types_fname=args.test_types,
-                edge_radius=args.edge_radius,
-                estimate_bonds=args.estimate_bonds,
-                prune=args.prune, bp=1,
-                rot=False, mode='val', fname_suffix=args.input_suffix)
+                bp=1, mode='val',
+                **dl_kwargs
+            )
             lig_test_dl = get_data_loader(
                 args.test_data_root,
-                compact=args.compact,
-                dataset_class=dataset_class,
-                use_atomic_numbers=args.use_atomic_numbers, radius=args.radius,
-                polar_hydrogens=args.hydrogens, batch_size=args.batch_size,
+                dataset_class,
                 types_fname=args.test_types,
-                edge_radius=args.edge_radius,
-                estimate_bonds=args.estimate_bonds,
-                prune=args.prune, bp=0,
-                rot=False, mode='val', fname_suffix=args.input_suffix)
+                bp=0, mode='val',
+                **dl_kwargs
+            )
             test_dl = (rec_test_dl, lig_test_dl)
         else:
             test_dl = get_data_loader(
                 args.test_data_root,
-                compact=args.compact,
-                dataset_class=dataset_class,
-                use_atomic_numbers=args.use_atomic_numbers, radius=args.radius,
-                polar_hydrogens=args.hydrogens, batch_size=args.batch_size,
+                dataset_class,
                 types_fname=args.test_types,
-                edge_radius=args.edge_radius,
-                estimate_bonds=args.estimate_bonds,
-                prune=args.prune,
-                rot=False, mode='val', fname_suffix=args.input_suffix)
+                mode='val',
+                **dl_kwargs)
 
     args_to_record = vars(args)
 
