@@ -35,7 +35,8 @@ class PygLinearPass(nn.Module):
         else:
             res = self.m(x)
         if self.return_coords_and_edges:
-            return res, kwargs['coord'], kwargs['edge_attr']
+            return res, kwargs['coord'], kwargs['edge_attr'], kwargs.get(
+                'edge_messages', None)
         return res
 
 
@@ -44,7 +45,7 @@ class PNNGeometricBase(PointNeuralNetworkBase):
 
     def forward(self, graph):
         feats, edges, coords, edge_attributes, batch = self.unpack_graph(graph)
-        feats = self.get_embeddings(
+        feats, messages = self.get_embeddings(
             feats, edges, coords, edge_attributes, batch)
         if self.linear_gap:
             feats = self.layers[-1](feats, edges, edge_attributes, batch)

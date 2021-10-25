@@ -50,4 +50,4 @@ class PygLucidEGNN(PNNGeometricBase):
         x = torch.cat([coords, feats], dim=-1).cuda()
         for i in self.layers[:-1]:
             x = i(x=x, edge_index=edges, edge_attr=edge_attributes, batch=batch)
-        return x[:, 3:]
+        return x[:, 3:], None

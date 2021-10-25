@@ -1,25 +1,11 @@
 import torch
 from torch import nn
+from torch_geometric.nn import global_mean_pool
 from torch_geometric.nn.norm import GraphNorm
 from torch_geometric.utils import dropout_adj
 
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase, \
     PygLinearPass
-
-
-class EGNNPass(nn.Module):
-    def __init__(self, egnn):
-        super().__init__()
-        self.egnn = egnn
-
-    def forward(self, x):
-        if len(x) == 2:
-            coors, feats = x
-            mask = None
-        else:
-            coors, feats, mask = x
-        feats, coors = self.egnn(h=feats, coors=coors, mask=mask)
-        return coors, feats, mask
 
 
 class E_GCL(nn.Module):
@@ -118,7 +104,7 @@ class E_GCL(nn.Module):
 
         return radial, coord_diff
 
-    def forward(self, x, edge_index, coord, edge_attr=None):
+    def forward(self, x, edge_index, coord, edge_attr=None, edge_messages=None):
         row, col = edge_index
         if self.use_coords:
             radial, coord_diff = self.coord2radial(edge_index, coord)
@@ -129,14 +115,14 @@ class E_GCL(nn.Module):
         coord = self.coord_model(coord, edge_index, coord_diff, edge_feat)
         x, agg = self.node_model(x, edge_index, edge_feat)
 
-        return x, coord, edge_attr
+        return x, coord, edge_attr, edge_feat
 
 
 class SartorrasEGNN(PNNGeometricBase):
     def build_net(self, dim_input, k, dim_output,
                   act_fn=nn.SiLU(), num_layers=4, residual=True,
                   attention=False, normalize=True, tanh=True, dropout=0,
-                  graphnorm=True, **kwargs):
+                  graphnorm=True, classify_on_edges=False, **kwargs):
         """
         Arguments:
             dim_input: Number of features for 'h' at the input
@@ -160,6 +146,7 @@ class SartorrasEGNN(PNNGeometricBase):
                                 return_coords_and_edges=True)]
         self.n_layers = num_layers
         self.dropout_p = dropout
+        self.classify_on_edges = classify_on_edges
         for i in range(0, num_layers):
             layers.append(E_GCL(k, k, k,
                                 edges_in_d=3,
@@ -171,18 +158,40 @@ class SartorrasEGNN(PNNGeometricBase):
                                 tanh=tanh))
         layers.append(PygLinearPass(nn.Linear(k, dim_output),
                                     return_coords_and_edges=False))
+        self.edge_linear_layer = nn.Linear(k, dim_output)
         return nn.Sequential(*layers)
+
+    def forward(self, graph):
+        feats, edges, coords, edge_attributes, batch = self.unpack_graph(graph)
+        feats, messages = self.get_embeddings(
+            feats, edges, coords, edge_attributes, batch)
+        if self.linear_gap:
+            feats = self.layers[-1](feats, edges, edge_attributes, batch)
+            feats = global_mean_pool(feats, graph.batch.cuda())
+            if self.classify_on_edges:
+                messages = self.edge_linear_layer(messages)
+                messages = torch.mean(messages, dim=0)
+        else:
+            feats = global_mean_pool(feats, graph.batch.cuda())
+            feats = self.layers[-1](feats, edges, edge_attributes, batch)
+            if self.classify_on_edges:
+                messages = torch.mean(messages, dim=0)
+                messages = self.edge_linear_layer(messages)
+        if self.classify_on_edges:
+            return torch.add(feats.squeeze(), messages)
+        return feats
 
     def get_embeddings(self, feats, edges, coords, edge_attributes, batch):
         if self.dropout_p > 0:
             edges, edge_attributes = dropout_adj(
                 edges, edge_attributes, self.dropout_p, force_undirected=True,
                 training=self.training)
+        edge_messages = None
         for i in self.layers[:-1]:
-            feats, coords, edge_attributes = i(
+            feats, coords, edge_attributes, edge_messages = i(
                 x=feats, edge_index=edges, coord=coords,
-                edge_attr=edge_attributes)
-        return feats
+                edge_attr=edge_attributes, edge_messages=edge_messages)
+        return feats, edge_messages
 
 
 def unsorted_segment_sum(data, segment_ids, num_segments):

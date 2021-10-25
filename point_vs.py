@@ -226,7 +226,8 @@ if __name__ == '__main__':
         'normalize': args.egnn_normalise,
         'residual': args.egnn_residual,
         'linear_gap': args.linear_gap,
-        'graphnorm': args.graphnorm
+        'graphnorm': args.graphnorm,
+        'classify_on_edges': args.egnn_classify_on_edges,
     }
 
     args_to_record.update(model_kwargs)

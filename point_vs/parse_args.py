@@ -179,4 +179,7 @@ def parse_args():
     parser.add_argument('--siamese', action='store_true',
                         help='(EGNN) Split networks for receptor and ligand '
                              'inputs')
+    parser.add_argument('--egnn_classify_on_edges', action='store_true',
+                        help='(EGNN) Classify on combination of edge and '
+                             'node embeddings rather than just nodes.')
     return parser.parse_args()
