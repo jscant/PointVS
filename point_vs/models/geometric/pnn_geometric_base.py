@@ -7,6 +7,24 @@ from torch_geometric.nn import global_mean_pool
 from point_vs.models.point_neural_network_base import PointNeuralNetworkBase
 
 
+def unsorted_segment_sum(data, segment_ids, num_segments):
+    result_shape = (num_segments, data.size(1))
+    result = data.new_full(result_shape, 0)  # Init empty result tensor.
+    segment_ids = segment_ids.unsqueeze(-1).expand(-1, data.size(1))
+    result.scatter_add_(0, segment_ids, data)
+    return result
+
+
+def unsorted_segment_mean(data, segment_ids, num_segments):
+    result_shape = (num_segments, data.size(1))
+    segment_ids = segment_ids.unsqueeze(-1).expand(-1, data.size(1))
+    result = data.new_full(result_shape, 0)  # Init empty result tensor.
+    count = data.new_full(result_shape, 0)
+    result.scatter_add_(0, segment_ids, data)
+    count.scatter_add_(0, segment_ids, torch.ones_like(data))
+    return result / count.clamp(min=1)
+
+
 class PygLinearPass(nn.Module):
     """Helper class for neater forward passes.
 
@@ -47,22 +65,28 @@ class PNNGeometricBase(PointNeuralNetworkBase):
         feats, edges, coords, edge_attributes, batch = self.unpack_graph(graph)
         feats, messages = self.get_embeddings(
             feats, edges, coords, edge_attributes, batch)
+        size = feats.size(0)
+        row, col = edges
         if self.linear_gap:
-            if self.classify_on_feats:
-                feats = self.layers[-1](feats, edges, edge_attributes, batch)
+            if self.feats_linear_layers is not None:
+                feats = self.feats_linear_layers(feats)
                 feats = global_mean_pool(feats, batch)
-            if self.classify_on_edges:
-                messages = self.edge_linear_layer(messages)
-                messages = torch.mean(messages, dim=0)
+            if self.edges_linear_layers is not None:
+                agg = unsorted_segment_sum(
+                    messages, row, num_segments=size)
+                messages = self.edges_linear_layers(agg)
+                messages = global_mean_pool(messages, batch)
         else:
-            if self.classify_on_feats:
+            if self.feats_linear_layers is not None:
                 feats = global_mean_pool(feats, batch)
-                feats = self.layers[-1](feats, edges, edge_attributes, batch)
-            if self.classify_on_edges:
-                messages = torch.mean(messages, dim=0)
-                messages = self.edge_linear_layer(messages)
+                feats = self.feats_linear_layers(feats)
+            if self.edges_linear_layers is not None:
+                agg = unsorted_segment_sum(
+                    messages, row, num_segments=size)
+                messages = global_mean_pool(agg, batch)
+                messages = self.edges_linear_layers(messages)
         if self.classify_on_feats and self.classify_on_edges:
-            return torch.add(feats.squeeze(), messages)
+            return torch.add(feats.squeeze(), messages.squeeze())
         elif self.classify_on_feats:
             return feats
         elif self.classify_on_edges:

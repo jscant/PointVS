@@ -14,6 +14,7 @@ class PygLucidEGNN(PNNGeometricBase):
                   norm_coords=True, norm_feats=True, fourier_features=0,
                   attention=False, tanh=True, update_coords=True,
                   linear_gap=False, **kwargs):
+        self.linear_gap = linear_gap
         layers = [PygLinearPass(
             nn.Linear(dim_input, k), feats_appended_to_coords=True)]
         for i in range(0, num_layers):
@@ -43,11 +44,11 @@ class PygLucidEGNN(PNNGeometricBase):
                     nn.Tanh()
                 )
             layers.append(layer)
-        layers.append(PygLinearPass(nn.Linear(k, dim_output)))
+        self.feats_linear_layers = nn.Sequential(nn.Linear(k, dim_output))
         return nn.Sequential(*layers)
 
     def get_embeddings(self, feats, edges, coords, edge_attributes, batch):
         x = torch.cat([coords, feats], dim=-1).cuda()
-        for i in self.layers[:-1]:
+        for i in self.layers:
             x = i(x=x, edge_index=edges, edge_attr=edge_attributes, batch=batch)
         return x[:, 3:], None

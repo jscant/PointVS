@@ -4,7 +4,7 @@ from torch_geometric.nn.norm import GraphNorm
 from torch_geometric.utils import dropout_adj
 
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase, \
-    PygLinearPass
+    PygLinearPass, unsorted_segment_sum, unsorted_segment_mean
 
 
 class E_GCL(nn.Module):
@@ -164,10 +164,13 @@ class SartorrasEGNN(PNNGeometricBase):
                                 graphnorm=graphnorm,
                                 tanh=tanh))
         layers[-1].record_atn_and_agg = True
-        layers.append(PygLinearPass(nn.Linear(k, dim_output),
-                                    return_coords_and_edges=False))
+        if classify_on_feats:
+            self.feats_linear_layers = nn.Sequential(
+                nn.Linear(k, dim_output)
+            )
         if classify_on_edges:
-            self.edge_linear_layer = nn.Linear(k, dim_output)
+            self.edges_linear_layers = nn.Sequential(
+                nn.Linear(k, dim_output))
         return nn.Sequential(*layers)
 
     def get_embeddings(self, feats, edges, coords, edge_attributes, batch):
@@ -176,28 +179,12 @@ class SartorrasEGNN(PNNGeometricBase):
                 edges, edge_attributes, self.dropout_p, force_undirected=True,
                 training=self.training)
         edge_messages = None
-        for i in self.layers[:-1]:
+        for i in self.layers:
             feats, coords, edge_attributes, edge_messages = i(
                 x=feats, edge_index=edges, coord=coords,
                 edge_attr=edge_attributes, edge_messages=edge_messages)
-        self.final_attention_weights = self.layers[-2].att_val
-        self.final_aggrigation = self.layers[-2].agg
+        self.final_attention_weights = self.layers[-1].att_val
+        self.final_aggrigation = self.layers[-1].agg
         return feats, edge_messages
 
 
-def unsorted_segment_sum(data, segment_ids, num_segments):
-    result_shape = (num_segments, data.size(1))
-    result = data.new_full(result_shape, 0)  # Init empty result tensor.
-    segment_ids = segment_ids.unsqueeze(-1).expand(-1, data.size(1))
-    result.scatter_add_(0, segment_ids, data)
-    return result
-
-
-def unsorted_segment_mean(data, segment_ids, num_segments):
-    result_shape = (num_segments, data.size(1))
-    segment_ids = segment_ids.unsqueeze(-1).expand(-1, data.size(1))
-    result = data.new_full(result_shape, 0)  # Init empty result tensor.
-    count = data.new_full(result_shape, 0)
-    result.scatter_add_(0, segment_ids, data)
-    count.scatter_add_(0, segment_ids, torch.ones_like(data))
-    return result / count.clamp(min=1)
