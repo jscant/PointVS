@@ -185,4 +185,8 @@ def parse_args():
     parser.add_argument('--egnn_classify_on_feats', action='store_true',
                         help='(EGNN) Classify on node embeddings (perhaps '
                              'in conjunction with message embeddings)')
+    parser.add_argument('--multi_fc', action='store_true',
+                        help='Three fully connected layers rather than just '
+                             'one to summarise the graph at the end of '
+                             'the EGNN')
     return parser.parse_args()

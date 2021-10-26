@@ -125,7 +125,7 @@ class SartorrasEGNN(PNNGeometricBase):
                   act_fn=nn.SiLU(), num_layers=4, residual=True,
                   attention=False, normalize=True, tanh=True, dropout=0,
                   graphnorm=True, classify_on_edges=False,
-                  classify_on_feats=True, **kwargs):
+                  classify_on_feats=True, multi_fc=False, **kwargs):
         """
         Arguments:
             dim_input: Number of features for 'h' at the input
@@ -162,13 +162,22 @@ class SartorrasEGNN(PNNGeometricBase):
                                 graphnorm=graphnorm,
                                 tanh=tanh))
         layers[-1].record_atn_and_agg = True
+        if multi_fc:
+            fc_layer_out_dims = [128, 64, dim_output]
+            fc_layer_in_dims = [k, 128, 64]
+        else:
+            fc_layer_out_dims = [dim_output]
+            fc_layer_in_dims = [k]
         if classify_on_feats:
             self.feats_linear_layers = nn.Sequential(
-                nn.Linear(k, dim_output)
+                *[nn.Linear(fc_i, fc_o) for fc_i, fc_o in zip(
+                    fc_layer_in_dims, fc_layer_out_dims)]
             )
         if classify_on_edges:
             self.edges_linear_layers = nn.Sequential(
-                nn.Linear(k, dim_output))
+                *[nn.Linear(fc_i, fc_o) for fc_i, fc_o in zip(
+                    fc_layer_in_dims, fc_layer_out_dims)]
+            )
         return nn.Sequential(*layers)
 
     def get_embeddings(self, feats, edges, coords, edge_attributes, batch):
@@ -184,5 +193,3 @@ class SartorrasEGNN(PNNGeometricBase):
         self.final_attention_weights = self.layers[-1].att_val
         self.final_aggrigation = self.layers[-1].agg
         return feats, edge_messages
-
-

@@ -213,7 +213,8 @@ if __name__ == '__main__':
         'graphnorm': args.graphnorm,
         'classify_on_edges': args.egnn_classify_on_edges,
         'classify_on_feats': args.egnn_classify_on_feats if hasattr(
-            args, 'egnn_classify_on_feats') else True
+            args, 'egnn_classify_on_feats') else True,
+        'multi_fc': args.multi_fc
     }
 
     args_to_record.update(model_kwargs)
