@@ -48,12 +48,26 @@ class PNNGeometricBase(PointNeuralNetworkBase):
         feats, messages = self.get_embeddings(
             feats, edges, coords, edge_attributes, batch)
         if self.linear_gap:
-            feats = self.layers[-1](feats, edges, edge_attributes, batch)
-            feats = global_mean_pool(feats, graph.batch.cuda())
+            if self.classify_on_feats:
+                feats = self.layers[-1](feats, edges, edge_attributes, batch)
+                feats = global_mean_pool(feats, batch)
+            if self.classify_on_edges:
+                messages = self.edge_linear_layer(messages)
+                messages = torch.mean(messages, dim=0)
         else:
-            feats = global_mean_pool(feats, graph.batch.cuda())
-            feats = self.layers[-1](feats, edges, edge_attributes, batch)
-        return feats
+            if self.classify_on_feats:
+                feats = global_mean_pool(feats, batch)
+                feats = self.layers[-1](feats, edges, edge_attributes, batch)
+            if self.classify_on_edges:
+                messages = torch.mean(messages, dim=0)
+                messages = self.edge_linear_layer(messages)
+        if self.classify_on_feats and self.classify_on_edges:
+            return torch.add(feats.squeeze(), messages)
+        elif self.classify_on_feats:
+            return feats
+        elif self.classify_on_edges:
+            return messages
+        raise RuntimeError('We must either classify on feats, edges or both.')
 
     def process_graph(self, graph):
         y_true = graph.y.float()

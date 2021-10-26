@@ -26,6 +26,8 @@ class PointNeuralNetworkBase(nn.Module):
         self.epoch = 0
         self.losses = []
         self.final_activation = nn.CrossEntropyLoss()
+        self.classify_on_edges = False
+        self.classify_on_feats = True
         self.save_path = Path(save_path).expanduser()
         self.linear_gap = model_kwargs.get('linear_gap', True)
         if not silent:

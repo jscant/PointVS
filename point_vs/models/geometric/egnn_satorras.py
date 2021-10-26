@@ -1,6 +1,5 @@
 import torch
 from torch import nn
-from torch_geometric.nn import global_mean_pool
 from torch_geometric.nn.norm import GraphNorm
 from torch_geometric.utils import dropout_adj
 
@@ -125,7 +124,8 @@ class SartorrasEGNN(PNNGeometricBase):
     def build_net(self, dim_input, k, dim_output,
                   act_fn=nn.SiLU(), num_layers=4, residual=True,
                   attention=False, normalize=True, tanh=True, dropout=0,
-                  graphnorm=True, classify_on_edges=False, **kwargs):
+                  graphnorm=True, classify_on_edges=False,
+                  classify_on_feats=True, **kwargs):
         """
         Arguments:
             dim_input: Number of features for 'h' at the input
@@ -149,7 +149,11 @@ class SartorrasEGNN(PNNGeometricBase):
                                 return_coords_and_edges=True)]
         self.n_layers = num_layers
         self.dropout_p = dropout
+        assert classify_on_feats or classify_on_edges, \
+            'We must use either or both of classify_on_feats and ' \
+            'classify_on_edges'
         self.classify_on_edges = classify_on_edges
+        self.classify_on_feats = classify_on_feats
         for i in range(0, num_layers):
             layers.append(E_GCL(k, k, k,
                                 edges_in_d=3,
@@ -165,26 +169,6 @@ class SartorrasEGNN(PNNGeometricBase):
         if classify_on_edges:
             self.edge_linear_layer = nn.Linear(k, dim_output)
         return nn.Sequential(*layers)
-
-    def forward(self, graph):
-        feats, edges, coords, edge_attributes, batch = self.unpack_graph(graph)
-        feats, messages = self.get_embeddings(
-            feats, edges, coords, edge_attributes, batch)
-        if self.linear_gap:
-            feats = self.layers[-1](feats, edges, edge_attributes, batch)
-            feats = global_mean_pool(feats, graph.batch.cuda())
-            if self.classify_on_edges:
-                messages = self.edge_linear_layer(messages)
-                messages = torch.mean(messages, dim=0)
-        else:
-            feats = global_mean_pool(feats, graph.batch.cuda())
-            feats = self.layers[-1](feats, edges, edge_attributes, batch)
-            if self.classify_on_edges:
-                messages = torch.mean(messages, dim=0)
-                messages = self.edge_linear_layer(messages)
-        if self.classify_on_edges:
-            return torch.add(feats.squeeze(), messages)
-        return feats
 
     def get_embeddings(self, feats, edges, coords, edge_attributes, batch):
         if self.dropout_p > 0:

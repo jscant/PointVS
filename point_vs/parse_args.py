@@ -180,6 +180,9 @@ def parse_args():
                         help='(EGNN) Split networks for receptor and ligand '
                              'inputs')
     parser.add_argument('--egnn_classify_on_edges', action='store_true',
-                        help='(EGNN) Classify on combination of edge and '
-                             'node embeddings rather than just nodes.')
+                        help='(EGNN) Classify on message embeddings (perhaps '
+                             'in conjunction with node embeddings)')
+    parser.add_argument('--egnn_classify_on_feats', action='store_true',
+                        help='(EGNN) Classify on node embeddings (perhaps '
+                             'in conjunction with message embeddings)')
     return parser.parse_args()
