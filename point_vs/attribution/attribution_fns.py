@@ -3,10 +3,69 @@ import numpy as np
 import torch
 from torch_geometric.data import Data
 
+from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase
 from point_vs.models.point_neural_network_base import to_numpy
 from point_vs.preprocessing.pyg_single_item_dataset import \
     get_pyg_single_graph_for_inference
+
+
+def find_max_scores(edge_attrs, edge_indices, num_nodes, edge_scores,
+                    include_intra_bonds=False):
+    edges = to_numpy(edge_indices)
+    if not include_intra_bonds:
+        lig_rec_indices = np.where(edge_attrs[:, 1])
+        edges = edges[:, lig_rec_indices].squeeze()
+    scores = []
+
+    for node in range(num_nodes):
+        indices_of_edges = np.where(edges == node)[1]
+        if len(indices_of_edges):
+            scores.append(float(np.mean(edge_scores[indices_of_edges])))
+        else:
+            scores.append(0)
+    return scores
+
+
+def attention_attribution(
+        model, p, v, m=None, edge_indices=None, edge_attrs=None, **kwargs):
+    assert isinstance(model, SartorrasEGNN), \
+        'Attention based attribution only compatable with SartorrasEGNN'
+    graph = get_pyg_single_graph_for_inference(Data(
+        x=v.squeeze(),
+        edge_index=edge_indices,
+        edge_attr=edge_attrs,
+        pos=p.squeeze(),
+    ))
+
+    num_nodes = graph.x.shape[0]
+    model(graph)
+    attention_weights = to_numpy(model.final_attention_weights)
+
+    return find_max_scores(
+        edge_attrs, edge_indices, num_nodes, attention_weights, True)
+
+
+def edge_embedding_attribution(
+        model, p, v, m=None, edge_indices=None, edge_attrs=None, **kwargs):
+    assert isinstance(model, SartorrasEGNN), \
+        'Attention based attribution only compatable with SartorrasEGNN'
+    graph = get_pyg_single_graph_for_inference(Data(
+        x=v.squeeze(),
+        edge_index=edge_indices,
+        edge_attr=edge_attrs,
+        pos=p.squeeze(),
+    ))
+
+    feats, edges, coords, edge_attributes, batch = model.unpack_graph(
+        graph)
+    _, edge_embeddings = model.get_embeddings(
+        feats, edges, coords, edge_attributes, batch)
+    edge_scores = to_numpy(model.edge_linear_layer(edge_embeddings))
+    num_nodes = graph.x.shape[0]
+
+    return find_max_scores(
+        edge_attrs, edge_indices, num_nodes, edge_scores, False)
 
 
 def cam(model, p, v, m, edge_indices=None, edge_attrs=None, **kwargs):
@@ -32,7 +91,7 @@ def cam(model, p, v, m, edge_indices=None, edge_attrs=None, **kwargs):
         feats, edges, coords, edge_attributes, batch = model.unpack_graph(
             graph)
 
-        feats = model.get_embeddings(
+        feats, _ = model.get_embeddings(
             feats, edges, coords, edge_attributes, batch)
         x = to_numpy(model.layers[-1](feats))
 

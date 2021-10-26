@@ -9,7 +9,8 @@ from plip.exchange.webservices import fetch_pdb
 from sklearn.metrics import average_precision_score, \
     precision_recall_curve
 
-from point_vs.attribution.attribution_fns import masking, cam
+from point_vs.attribution.attribution_fns import masking, cam, \
+    attention_attribution, edge_embedding_attribution
 from point_vs.attribution.process_pdb import score_and_colour_pdb
 from point_vs.models.load_model import load_model
 from point_vs.utils import mkdir, ensure_writable
@@ -93,7 +94,11 @@ def attribute(args):
 
     model, model_kwargs, cmd_line_args = load_model(args.model)
 
-    attribution_fn = {'masking': masking, 'cam': cam}[args.attribution_type]
+    attribution_fn = {'masking': masking,
+                      'cam': cam,
+                      'attention': attention_attribution,
+                      'edges': edge_embedding_attribution,
+                      }[args.attribution_type]
 
     dfs = score_and_colour_pdb(model, attribution_fn,
                                str(pdbpath), str(output_dir),

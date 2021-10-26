@@ -24,6 +24,8 @@ class E_GCL(nn.Module):
         self.tanh = tanh
         self.epsilon = 1e-8
         self.use_coords = update_coords
+        self.att_val = None
+        self.record_atn = False
         edge_coords_nf = 1 if update_coords else 0
 
         self.edge_mlp = nn.Sequential(
@@ -65,12 +67,15 @@ class E_GCL(nn.Module):
         if self.attention:
             att_val = self.att_mlp(out)
             out = out * att_val
+            if self.record_atn:
+                self.att_val = att_val
         return out
 
     def node_model(self, x, edge_index, m_ij):
         row, col = edge_index
 
         agg = unsorted_segment_sum(m_ij, row, num_segments=x.size(0))
+        self.agg = agg
         agg = torch.cat([x, agg], dim=1)
 
         # Eq. 6: h_i = phi_h(h_i, m_i)
@@ -156,9 +161,11 @@ class SartorrasEGNN(PNNGeometricBase):
                                 normalize=normalize,
                                 graphnorm=graphnorm,
                                 tanh=tanh))
+        layers[-1].record_atn = True
         layers.append(PygLinearPass(nn.Linear(k, dim_output),
                                     return_coords_and_edges=False))
-        self.edge_linear_layer = nn.Linear(k, dim_output)
+        if classify_on_edges:
+            self.edge_linear_layer = nn.Linear(k, dim_output)
         return nn.Sequential(*layers)
 
     def forward(self, graph):
@@ -191,6 +198,8 @@ class SartorrasEGNN(PNNGeometricBase):
             feats, coords, edge_attributes, edge_messages = i(
                 x=feats, edge_index=edges, coord=coords,
                 edge_attr=edge_attributes, edge_messages=edge_messages)
+        self.final_attention_weights = self.layers[-2].att_val
+        self.final_aggrigation = self.layers[-2].agg
         return feats, edge_messages
 
 
