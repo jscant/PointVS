@@ -168,16 +168,20 @@ class SartorrasEGNN(PNNGeometricBase):
         else:
             fc_layer_out_dims = [dim_output]
             fc_layer_in_dims = [k]
+
+        feats_linear_layers = []
+        edges_linear_layers = []
+        for idx, (in_dim, out_dim) in enumerate(
+                zip(fc_layer_in_dims, fc_layer_out_dims)):
+            feats_linear_layers.append(nn.Linear(in_dim, out_dim))
+            edges_linear_layers.append(nn.Linear(in_dim, out_dim))
+            if idx < len(fc_layer_in_dims) - 1:
+                feats_linear_layers.append(nn.SiLU())
+                edges_linear_layers.append(nn.SiLU())
         if classify_on_feats:
-            self.feats_linear_layers = nn.Sequential(
-                *[nn.Linear(fc_i, fc_o) for fc_i, fc_o in zip(
-                    fc_layer_in_dims, fc_layer_out_dims)]
-            )
+            self.feats_linear_layers = nn.Sequential(*feats_linear_layers)
         if classify_on_edges:
-            self.edges_linear_layers = nn.Sequential(
-                *[nn.Linear(fc_i, fc_o) for fc_i, fc_o in zip(
-                    fc_layer_in_dims, fc_layer_out_dims)]
-            )
+            self.edges_linear_layers = nn.Sequential(*edges_linear_layers)
         return nn.Sequential(*layers)
 
     def get_embeddings(self, feats, edges, coords, edge_attributes, batch):
