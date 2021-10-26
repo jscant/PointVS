@@ -85,11 +85,12 @@ class PNNGeometricBase(PointNeuralNetworkBase):
                     messages, row, num_segments=size)
                 messages = global_mean_pool(agg, batch)
                 messages = self.edges_linear_layers(messages)
-        if self.classify_on_feats and self.classify_on_edges:
+        if self.feats_linear_layers is not None and \
+                self.edges_linear_layers is not None:
             return torch.add(feats.squeeze(), messages.squeeze())
-        elif self.classify_on_feats:
+        elif self.feats_linear_layers is not None:
             return feats
-        elif self.classify_on_edges:
+        elif self.edges_linear_layers is not None:
             return messages
         raise RuntimeError('We must either classify on feats, edges or both.')
 

@@ -152,8 +152,6 @@ class SartorrasEGNN(PNNGeometricBase):
         assert classify_on_feats or classify_on_edges, \
             'We must use either or both of classify_on_feats and ' \
             'classify_on_edges'
-        self.classify_on_edges = classify_on_edges
-        self.classify_on_feats = classify_on_feats
         for i in range(0, num_layers):
             layers.append(E_GCL(k, k, k,
                                 edges_in_d=3,

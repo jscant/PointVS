@@ -26,8 +26,6 @@ class PointNeuralNetworkBase(nn.Module):
         self.epoch = 0
         self.losses = []
         self.final_activation = nn.CrossEntropyLoss()
-        self.classify_on_edges = False
-        self.classify_on_feats = True
         self.feats_linear_layers = None
         self.edges_linear_layers = None
         self.save_path = Path(save_path).expanduser()
