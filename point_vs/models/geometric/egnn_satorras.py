@@ -9,7 +9,7 @@ from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase, \
 
 
 class E_GCL(nn.Module):
-    """Directly copied from https://github.com/vgsatorras/egnn"""
+    """Modified from https://github.com/vgsatorras/egnn"""
 
     def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d=0,
                  act_fn=nn.SiLU(), residual=True, attention=False,
@@ -43,10 +43,7 @@ class E_GCL(nn.Module):
         layer = nn.Linear(hidden_nf, 1, bias=False)
         torch.nn.init.xavier_uniform_(layer.weight, gain=0.001)
 
-        coord_mlp = []
-        coord_mlp.append(nn.Linear(hidden_nf, hidden_nf))
-        coord_mlp.append(act_fn)
-        coord_mlp.append(layer)
+        coord_mlp = [nn.Linear(hidden_nf, hidden_nf), act_fn, layer]
         if self.tanh:
             coord_mlp.append(nn.Tanh())
         self.coord_mlp = nn.Sequential(*coord_mlp)
