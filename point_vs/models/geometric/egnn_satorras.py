@@ -175,6 +175,9 @@ class SartorrasEGNN(PNNGeometricBase):
                 zip(fc_layer_in_dims, fc_layer_out_dims)):
             feats_linear_layers.append(nn.Linear(in_dim, out_dim))
             edges_linear_layers.append(nn.Linear(in_dim, out_dim))
+            if dropout > 0:
+                feats_linear_layers.append(nn.Dropout(dropout))
+                edges_linear_layers.append(nn.Dropout(dropout))
             if idx < len(fc_layer_in_dims) - 1:
                 feats_linear_layers.append(nn.SiLU())
                 edges_linear_layers.append(nn.SiLU())
