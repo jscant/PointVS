@@ -39,7 +39,7 @@ and following the onscreen instructions.
 
 A small working example is:
 ```
-python3 point_vs.py egnn data/small_chembl_test test_output --train_types data/small_chembl_test.types
+python3 point_vs.py egnn data/small_chembl_test test_output --train_types data/small_chembl_test.types --egnn_classify_on_feats
 ```
 
 ## Usage
