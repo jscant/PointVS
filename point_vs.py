@@ -214,7 +214,9 @@ if __name__ == '__main__':
         'classify_on_edges': args.egnn_classify_on_edges,
         'classify_on_feats': args.egnn_classify_on_feats if hasattr(
             args, 'egnn_classify_on_feats') else True,
-        'multi_fc': args.multi_fc
+        'multi_fc': args.multi_fc,
+        'update_coords': True,
+        'thick_attention': args.thick_attention
     }
 
     args_to_record.update(model_kwargs)

@@ -13,7 +13,7 @@ class E_GCL(nn.Module):
     def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d=0,
                  act_fn=nn.SiLU(), residual=True, attention=False,
                  normalize=False, coords_agg='mean', tanh=False,
-                 graphnorm=False, update_coords=True):
+                 graphnorm=False, update_coords=True, thick_attention=False):
         super(E_GCL, self).__init__()
         input_edge = input_nf * 2
         self.residual = residual
@@ -49,6 +49,9 @@ class E_GCL(nn.Module):
 
         if self.attention:
             self.att_mlp = nn.Sequential(
+                nn.Linear(
+                    hidden_nf, hidden_nf) if thick_attention else nn.Identity(),
+                nn.SiLU() if thick_attention else nn.Identity(),
                 nn.Linear(hidden_nf, 1),
                 nn.Sigmoid())
 
@@ -125,7 +128,9 @@ class SartorrasEGNN(PNNGeometricBase):
                   act_fn=nn.SiLU(), num_layers=4, residual=True,
                   attention=False, normalize=True, tanh=True, dropout=0,
                   graphnorm=True, classify_on_edges=False,
-                  classify_on_feats=True, multi_fc=False, **kwargs):
+                  classify_on_feats=True, multi_fc=False, update_coords=True,
+                  thick_attention=False,
+                  **kwargs):
         """
         Arguments:
             dim_input: Number of features for 'h' at the input
@@ -160,7 +165,8 @@ class SartorrasEGNN(PNNGeometricBase):
                                 attention=attention,
                                 normalize=normalize,
                                 graphnorm=graphnorm,
-                                tanh=tanh))
+                                tanh=tanh, update_coords=update_coords,
+                                thick_attention=thick_attention))
         layers[-1].record_atn_and_agg = True
         if multi_fc:
             fc_layer_out_dims = [128, 64, dim_output]

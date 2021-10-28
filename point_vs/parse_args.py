@@ -189,4 +189,6 @@ def parse_args():
                         help='Three fully connected layers rather than just '
                              'one to summarise the graph at the end of '
                              'the EGNN')
+    parser.add_argument('--thick_attention', action='store_true',
+                        help='(EGNN) Thicker attention MLP')
     return parser.parse_args()
