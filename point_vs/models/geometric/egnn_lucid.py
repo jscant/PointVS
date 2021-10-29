@@ -13,7 +13,7 @@ class PygLucidEGNN(PNNGeometricBase):
     def build_net(self, dim_input, k, dim_output, num_layers=4, dropout=0.0,
                   norm_coords=True, norm_feats=True, fourier_features=0,
                   attention=False, tanh=True, update_coords=True,
-                  linear_gap=False, **kwargs):
+                  linear_gap=False, thick_attention=False, **kwargs):
         self.linear_gap = linear_gap
         layers = [PygLinearPass(
             nn.Linear(dim_input, k), feats_appended_to_coords=True)]
@@ -42,6 +42,13 @@ class PygLucidEGNN(PNNGeometricBase):
                     SiLU(),
                     nn.Linear(layer.m_dim * 4, 1),
                     nn.Tanh()
+                )
+            if thick_attention:
+                layer.edge_weight = nn.Sequential(
+                    nn.Linear(k, k),
+                    nn.SiLU(),
+                    nn.Linear(k, 1),
+                    nn.Sigmoid()
                 )
             layers.append(layer)
         self.feats_linear_layers = nn.Sequential(nn.Linear(k, dim_output))
