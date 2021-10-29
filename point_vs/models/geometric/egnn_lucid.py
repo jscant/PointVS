@@ -43,7 +43,7 @@ class PygLucidEGNN(PNNGeometricBase):
                     layer.dropout,
                     SiLU(),
                     nn.Linear(layer.m_dim * 4, 1),
-                    nn.Tanh()
+                    nn.Tanh() if tanh else nn.Identity()
                 )
             if thick_attention:
                 layer.edge_weight = nn.Sequential(
@@ -59,6 +59,11 @@ class PygLucidEGNN(PNNGeometricBase):
                     GraphNorm(k * 2) if graphnorm else nn.Identity(),
                     nn.SiLU() if node_final_act else nn.Identity()
                 )
+                layer.coors_mlp = nn.Sequential(
+                    nn.Linear(k, 1),
+                    layer.dropout,
+                    nn.Tanh() if tanh else nn.Identity()
+                )
             else:
                 layer.node_mlp = nn.Sequential(
                     nn.Linear(k + k, k * 2),
@@ -68,7 +73,20 @@ class PygLucidEGNN(PNNGeometricBase):
                     nn.Linear(k * 2, k),
                     nn.SiLU() if node_final_act else nn.Identity()
                 )
-
+                layer.coors_mlp = nn.Sequential(
+                    nn.Linear(k, k * 4),
+                    layer.dropout,
+                    SiLU(),
+                    nn.Linear(layer.m_dim * 4, 1),
+                    nn.Tanh() if tanh else nn.Identity()
+                )
+                layer.edge_mlp = nn.Sequential(
+                    nn.Linear(layer.edge_input_dim, layer.edge_input_dim * 2),
+                    layer.dropout,
+                    SiLU(),
+                    nn.Linear(layer.edge_input_dim * 2, k),
+                    SiLU()
+                )
             layers.append(layer)
         self.feats_linear_layers = nn.Sequential(nn.Linear(k, dim_output))
         return nn.Sequential(*layers)
