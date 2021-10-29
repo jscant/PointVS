@@ -54,18 +54,18 @@ class PygLucidEGNN(PNNGeometricBase):
                 )
             if thin_mlps:
                 layer.node_mlp = nn.Sequential(
+                    nn.Linear(k + k, k),
+                    layer.dropout,
+                    GraphNorm(k * 2) if graphnorm else nn.Identity(),
+                    nn.SiLU() if node_final_act else nn.Identity()
+                )
+            else:
+                layer.node_mlp = nn.Sequential(
                     nn.Linear(k + k, k * 2),
                     layer.dropout,
                     GraphNorm(k * 2) if graphnorm else nn.Identity(),
                     SiLU(),
                     nn.Linear(k * 2, k),
-                    nn.SiLU() if node_final_act else nn.Identity()
-                )
-            else:
-                layer.node_mlp = nn.Sequential(
-                    nn.Linear(k + k, k),
-                    layer.dropout,
-                    GraphNorm(k * 2) if graphnorm else nn.Identity(),
                     nn.SiLU() if node_final_act else nn.Identity()
                 )
 
