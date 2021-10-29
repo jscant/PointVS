@@ -95,19 +95,19 @@ def parse_args():
     parser.add_argument('--warm_restarts', action='store_true',
                         help='Use cosine annealing with warm restarts')
     parser.add_argument('--fourier_features', type=int, default=0,
-                        help='(EGNN) Number of fourier terms to use when '
+                        help='(Lucid) Number of fourier terms to use when '
                              'encoding distances (default is not to use '
                              'fourier distance encoding)')
     parser.add_argument('--norm_coords', action='store_true',
-                        help='(EGNN) Normalise coordinate vectors')
+                        help='(Lucid) Normalise coordinate vectors')
     parser.add_argument('--norm_feats', action='store_true',
-                        help='(EGNN) Normalise feature vectors')
+                        help='(Lucid) Normalise feature vectors')
     parser.add_argument('--use_atomic_numbers', action='store_true',
                         help='Use atomic numbers rather than smina types')
     parser.add_argument('--compact', action='store_true',
                         help='Use compact rather than true one-hot encodings')
     parser.add_argument('--thin_mlps', action='store_true',
-                        help='(EGNN) Use single layer MLPs for edge, node and '
+                        help='(Lucid) Use single layer MLPs for edge, node and '
                              'coord updates')
     parser.add_argument('--hydrogens', action='store_true',
                         help='Include polar hydrogens')
@@ -191,4 +191,6 @@ def parse_args():
                              'the EGNN')
     parser.add_argument('--thick_attention', action='store_true',
                         help='(EGNN) Thicker attention MLP')
+    parser.add_argument('--lucid_node_final_act', action='store_true',
+                        help='(Lucid) SiLU at the end of node MLPs')
     return parser.parse_args()

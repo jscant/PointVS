@@ -216,7 +216,8 @@ if __name__ == '__main__':
             args, 'egnn_classify_on_feats') else True,
         'multi_fc': args.multi_fc,
         'update_coords': True,
-        'thick_attention': args.thick_attention
+        'thick_attention': args.thick_attention,
+        'node_final_act': args.lucid_node_final_act
     }
 
     args_to_record.update(model_kwargs)

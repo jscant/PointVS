@@ -2,6 +2,7 @@ import torch
 from egnn_pytorch.egnn_pytorch_geometric import EGNN_Sparse
 from torch import nn
 from torch.nn import SiLU
+from torch_geometric.nn import GraphNorm
 
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase, \
     PygLinearPass
@@ -13,7 +14,8 @@ class PygLucidEGNN(PNNGeometricBase):
     def build_net(self, dim_input, k, dim_output, num_layers=4, dropout=0.0,
                   norm_coords=True, norm_feats=True, fourier_features=0,
                   attention=False, tanh=True, update_coords=True,
-                  linear_gap=False, thick_attention=False, **kwargs):
+                  linear_gap=False, thick_attention=False, graphnorm=False,
+                  thin_mlps=False, node_final_act=False, **kwargs):
         self.linear_gap = linear_gap
         layers = [PygLinearPass(
             nn.Linear(dim_input, k), feats_appended_to_coords=True)]
@@ -50,6 +52,23 @@ class PygLucidEGNN(PNNGeometricBase):
                     nn.Linear(k, 1),
                     nn.Sigmoid()
                 )
+            if thin_mlps:
+                layer.node_mlp = nn.Sequential(
+                    nn.Linear(k + k, k * 2),
+                    layer.dropout,
+                    GraphNorm(k * 2) if graphnorm else nn.Identity(),
+                    SiLU(),
+                    nn.Linear(k * 2, k),
+                    nn.SiLU() if node_final_act else nn.Identity()
+                )
+            else:
+                layer.node_mlp = nn.Sequential(
+                    nn.Linear(k + k, k),
+                    layer.dropout,
+                    GraphNorm(k * 2) if graphnorm else nn.Identity(),
+                    nn.SiLU() if node_final_act else nn.Identity()
+                )
+
             layers.append(layer)
         self.feats_linear_layers = nn.Sequential(nn.Linear(k, dim_output))
         return nn.Sequential(*layers)
