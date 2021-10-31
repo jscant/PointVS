@@ -28,6 +28,7 @@ if __name__ == '__main__':
 
     base_path = expand_path(parser.parse_args().base_path)
     ckpt = find_latest_checkpoint(base_path)
+    print('Found checkpoint:', ckpt)
 
     model, model_kwargs, cmd_line_args = load_model(ckpt, silent=False)
 
