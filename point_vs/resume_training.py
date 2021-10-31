@@ -96,8 +96,9 @@ if __name__ == '__main__':
     if int(cmd_line_args['epochs']):
         model.train_model(
             train_dl, epochs=cmd_line_args['epochs'],
+            top1_on_end=cmd_line_args['top1'],
             epoch_end_validation_set=test_dl)
 
     model = model.eval()
     if test_dl is not None:
-        model.val(test_dl)
+        model.val(test_dl, top1_on_end=cmd_line_args['top1'])
