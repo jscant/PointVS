@@ -11,7 +11,7 @@ from point_vs.utils import expand_path
 
 
 def find_latest_checkpoint(root):
-    res = ''
+    res = None
     max_epoch = -1
     for fname in expand_path(root, 'checkpoints').glob('*.pt'):
         idx = int(fname.with_suffix('').name.split('_')[-1])
@@ -36,13 +36,8 @@ if __name__ == '__main__':
     else:
         dataset_class = PointCloudDataset
 
-    train_receptors = None
-    if isinstance(cmd_line_args['train_receptors'], str):
-        train_receptors = tuple([cmd_line_args['train_receptors']])
-
     train_dl = get_data_loader(
         cmd_line_args['train_data_root'],
-        cmd_line_args['translated_actives'],
         dataset_class=dataset_class,
         batch_size=cmd_line_args['batch_size'],
         compact=cmd_line_args['compact'], radius=cmd_line_args['radius'],
@@ -52,7 +47,7 @@ if __name__ == '__main__':
         max_active_rms_distance=cmd_line_args['max_active_rmsd'],
         min_inactive_rms_distance=cmd_line_args['min_inactive_rmsd'],
         polar_hydrogens=cmd_line_args['hydrogens'],
-        receptors=train_receptors, mode='train',
+        mode='train',
         types_fname=cmd_line_args['train_types'],
         fname_suffix=cmd_line_args['input_suffix'],
         edge_radius=cmd_line_args['edge_radius'],
@@ -62,7 +57,7 @@ if __name__ == '__main__':
 
     if cmd_line_args['test_data_root'] is not None:
         test_dl = get_data_loader(
-            cmd_line_args['test_data_root'], receptors=None,
+            cmd_line_args['test_data_root'],
             compact=cmd_line_args['compact'],
             dataset_class=dataset_class,
             use_atomic_numbers=cmd_line_args['use_atomic_numbers'],
