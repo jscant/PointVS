@@ -61,6 +61,7 @@ class StructuralInteractionParser(StructuralFileParser):
 
     def mol_calculate_interactions(self, mol, pl_interaction):
         """Return dataframe with interactions from plip mol object"""
+
         interaction_info = {}
 
         # Process interactions
@@ -90,22 +91,17 @@ class StructuralInteractionParser(StructuralFileParser):
         # Book-keeping to track ligand atoms by coordinates
         ligand_mols = [ligand.mol for ligand in mol.ligands]
         ligand_atoms = [mol.atoms for mol in ligand_mols]
-        all_ligand_coords = PositionDict({
-            coords_to_string(atom.coords): 0 for atom in
-            list(itertools.chain(*ligand_atoms))}, eps=0.01)
 
         all_ligand_coords = PositionSet({
             coords_to_string(atom.coords) for atom in pl_interaction.ligand.all_atoms
         })
-
+        
         return self.featurise_interaction(
             mol, interaction_info, all_ligand_coords)
 
     def featurise_interaction(self, mol, interaction_dict, all_ligand_coords,
                               include_noncovalent_bonds=True):
         """Return dataframe with interactions from one particular plip site."""
-
-        xs, ys, zs, atomic_nums, types = [], [], [], [], []
 
         xs, ys, zs, types, atomic_nums, bp = self.get_coords_and_types_info(
             mol.atoms.values(), all_ligand_coords, add_polar_hydrogens=True)
