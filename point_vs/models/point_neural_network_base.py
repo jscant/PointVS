@@ -141,6 +141,7 @@ class PointNeuralNetworkBase(nn.Module):
         if predictions_file.is_file():
             predictions_file.unlink()
         predictions = ''
+        self.total_iters = len(data_loader)
         with torch.no_grad():
             for self.batch, graph in enumerate(
                     data_loader):
@@ -240,7 +241,8 @@ class PointNeuralNetworkBase(nn.Module):
         self.global_iter += 1
 
         eta = get_eta(start_time, self.global_iter,
-                      self.total_iters - (len(data_loader) * self.init_epoch))
+                      self.total_iters - (len(data_loader) * self.init_epoch)
+                      if record_type == 'train' else len(data_loader))
         time_elapsed = format_time(time.time() - start_time)
 
         if record_type == 'train':

@@ -68,8 +68,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
         self.base_path = Path(base_path).expanduser()
         self.prune = prune
         self.bp = bp
-        if edge_radius > 0:
-            self.edge_radius = edge_radius
+        self.edge_radius = edge_radius
 
         self.fname_suffix = fname_suffix
         if not self.base_path.exists():
@@ -309,21 +308,22 @@ class PygPointCloudDataset(PointCloudDataset):
         lig_fname, rec_fname, label = self.index_to_parquets(item)
         p, v, struct = self.parquets_to_inputs(lig_fname, rec_fname, item=item)
 
-        if hasattr(self, 'edge_radius'):
-            edge_radius = self.edge_radius
-        else:
-            edge_radius = 4
+        edge_radius = self.edge_radius if self.edge_radius > 0 else 4
         intra_radius = 2.0 if self.estimate_bonds else edge_radius
 
         if self.bp is not None:
             struct = struct[struct.bp == self.bp]
 
-        struct, edge_indices, edge_attrs = generate_edges(
-            struct, inter_radius=edge_radius, intra_radius=intra_radius,
-            prune=self.prune)
+        if self.edge_radius >= 0:
+            struct, edge_indices, edge_attrs = generate_edges(
+                struct, inter_radius=edge_radius, intra_radius=intra_radius,
+                prune=self.prune)
+            edge_indices = torch.from_numpy(np.vstack(edge_indices)).long()
+            edge_attrs = one_hot(torch.from_numpy(edge_attrs).long(), 3)
 
-        edge_indices = torch.from_numpy(np.vstack(edge_indices)).long()
-        edge_attrs = one_hot(torch.from_numpy(edge_attrs).long(), 3)
+        else:
+
+            edge_indices, edge_attrs = torch.ones(1), torch.ones(1)
 
         return Data(
             x=v,

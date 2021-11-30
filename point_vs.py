@@ -20,9 +20,9 @@ from lie_conv.lieGroups import SE3
 from point_vs import utils
 from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
 from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
+from point_vs.models.geometric.lie_transformer import EquivariantTransformer
 from point_vs.models.siamese import SiameseNeuralNetwork
 from point_vs.models.vanilla.lie_conv import LieResNet
-from point_vs.models.vanilla.lie_transformer import EquivariantTransformer
 from point_vs.parse_args import parse_args
 from point_vs.preprocessing.data_loaders import get_data_loader, \
     PointCloudDataset, PygPointCloudDataset
@@ -83,7 +83,7 @@ if __name__ == '__main__':
         raise NotImplementedError(
             'model must be one of ' + ', '.join(model_classes.keys()))
 
-    if args.model in ('lucid', 'egnn'):
+    if args.model in ('lucid', 'egnn', 'lietransformer'):
         dataset_class = PygPointCloudDataset
     else:
         dataset_class = PointCloudDataset
@@ -96,7 +96,7 @@ if __name__ == '__main__':
         'rot': False,
         'polar_hydrogens': args.hydrogens,
         'fname_suffix': args.input_suffix,
-        'edge_radius': args.edge_radius,
+        'edge_radius': args.edge_radius if args.model != 'lietransformer' else -1,
         'estimate_bonds': args.estimate_bonds,
         'prune': args.prune,
     }
