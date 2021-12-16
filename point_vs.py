@@ -99,6 +99,7 @@ if __name__ == '__main__':
         'edge_radius': args.edge_radius if args.model != 'lietransformer' else -1,
         'estimate_bonds': args.estimate_bonds,
         'prune': args.prune,
+        'p_remove_entity': args.p_remove_entity,
     }
 
     if args.siamese:

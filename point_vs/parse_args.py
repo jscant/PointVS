@@ -193,4 +193,8 @@ def parse_args():
                         help='(EGNN) Thicker attention MLP')
     parser.add_argument('--lucid_node_final_act', action='store_true',
                         help='(Lucid) SiLU at the end of node MLPs')
+    parser.add_argument('--p_remove_entity', type=float, default=0,
+                        help='Rate at which one of (randomly selected) ligand '
+                             'or receptor is removed and label is forced to '
+                             'zero')
     return parser.parse_args()

@@ -2,6 +2,7 @@
 DataLoaders to take parquet directories and create feature vectors suitable
 for use by models found in this project.
 """
+import random
 from collections import defaultdict
 from pathlib import Path
 
@@ -27,7 +28,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
             augmented_active_min_angle=90, max_active_rms_distance=None,
             min_inactive_rms_distance=None, fname_suffix='parquet',
             types_fname=None, edge_radius=None, estimate_bonds=False,
-            prune=False, bp=None, **kwargs):
+            prune=False, bp=None, p_remove_entity=0, **kwargs):
         """Initialise dataset.
 
         Arguments:
@@ -69,6 +70,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
         self.prune = prune
         self.bp = bp
         self.edge_radius = edge_radius
+        self.p_remove_entity=p_remove_entity
 
         self.fname_suffix = fname_suffix
         if not self.base_path.exists():
@@ -260,6 +262,13 @@ class PointCloudDataset(torch.utils.data.Dataset):
             struct.types = struct['atomic_number'].map(
                 self.atomic_number_to_index) + struct.bp * (
                                    self.max_feature_id + 1)
+        force_zero_label = False
+        if self.p_remove_entity > 0 and random.random() < self.p_remove_entity:
+            force_zero_label  = True
+            if random.random() < 0.5:
+                struct = struct[struct['bp'] == 0]
+            else:
+                struct = struct[struct['bp'] == 1]
 
         p = torch.from_numpy(
             self.transformation(
@@ -268,7 +277,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
         v = make_bit_vector(
             struct.types.to_numpy(), self.max_feature_id + 1, self.compact)
 
-        return p, v, struct
+        return p, v, struct, force_zero_label
 
     def __getitem__(self, item):
         """Given an index, locate and preprocess relevant parquet file.
@@ -284,7 +293,10 @@ class PointCloudDataset(torch.utils.data.Dataset):
             denoting whether the structure is an active or a decoy.
         """
         lig_fname, rec_fname, label = self.index_to_parquets(item)
-        p, v, struct = self.parquets_to_inputs(lig_fname, rec_fname, item=item)
+        p, v, struct, force_zero_label = self.parquets_to_inputs(
+            lig_fname, rec_fname, item=item)
+        if force_zero_label:
+            label = 0
 
         return (p, v, len(struct)), lig_fname, rec_fname, label
 
@@ -306,8 +318,10 @@ class PygPointCloudDataset(PointCloudDataset):
             denoting whether the structure is an active or a decoy.
         """
         lig_fname, rec_fname, label = self.index_to_parquets(item)
-        p, v, struct = self.parquets_to_inputs(lig_fname, rec_fname, item=item)
-
+        p, v, struct, force_zero_label = self.parquets_to_inputs(
+            lig_fname, rec_fname, item=item)
+        if force_zero_label:
+            label = 0
         edge_radius = self.edge_radius if self.edge_radius > 0 else 4
         intra_radius = 2.0 if self.estimate_bonds else edge_radius
 
