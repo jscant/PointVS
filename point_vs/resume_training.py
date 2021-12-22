@@ -54,7 +54,8 @@ if __name__ == '__main__':
         fname_suffix=cmd_line_args['input_suffix'],
         edge_radius=cmd_line_args['edge_radius'],
         estimate_bonds=cmd_line_args.get('estimate_bonds', False),
-        prune=cmd_line_args.get('prune', False)
+        prune=cmd_line_args.get('prune', False),
+        p_remove_entity=cmd_line_args.get('p_remove_entity', 0)
     )
 
     if cmd_line_args['test_data_root'] is not None:
