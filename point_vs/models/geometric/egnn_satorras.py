@@ -24,8 +24,7 @@ class E_GCL(nn.Module):
         self.epsilon = 1e-8
         self.use_coords = update_coords
         self.att_val = None
-        self.record_atn_and_agg = False
-        edge_coords_nf = 1 if update_coords else 0
+        edge_coords_nf = 1
 
         self.edge_mlp = nn.Sequential(
             nn.Linear(input_edge + edge_coords_nf + edges_in_d, hidden_nf),
@@ -42,10 +41,12 @@ class E_GCL(nn.Module):
         layer = nn.Linear(hidden_nf, 1, bias=False)
         torch.nn.init.xavier_uniform_(layer.weight, gain=0.001)
 
-        coord_mlp = [nn.Linear(hidden_nf, hidden_nf), act_fn, layer]
-        if self.tanh:
-            coord_mlp.append(nn.Tanh())
-        self.coord_mlp = nn.Sequential(*coord_mlp)
+        self.coord_mlp = nn.Sequential(
+            nn.Linear(hidden_nf, hidden_nf),
+            act_fn,
+            layer,
+            nn.Tanh() if tanh else nn.Identity()
+        )
 
         if self.attention:
             self.att_mlp = nn.Sequential(
@@ -57,8 +58,7 @@ class E_GCL(nn.Module):
 
     def edge_model(self, source, target, radial, edge_attr):
         inp = [source, target]
-        if self.use_coords:
-            inp.append(radial)
+        inp.append(radial)
         if edge_attr is not None:
             inp.append(edge_attr)
         out = torch.cat(inp, dim=1)
@@ -66,16 +66,13 @@ class E_GCL(nn.Module):
         if self.attention:
             att_val = self.att_mlp(out)
             out = out * att_val
-            if self.record_atn_and_agg:
-                self.att_val = att_val
+            self.att_val = att_val
         return out
 
     def node_model(self, x, edge_index, m_ij):
         row, col = edge_index
 
         agg = unsorted_segment_sum(m_ij, row, num_segments=x.size(0))
-        if self.record_atn_and_agg:
-            self.agg = agg
         agg = torch.cat([x, agg], dim=1)
 
         # Eq. 6: h_i = phi_h(h_i, m_i)
@@ -111,10 +108,7 @@ class E_GCL(nn.Module):
 
     def forward(self, x, edge_index, coord, edge_attr=None, edge_messages=None):
         row, col = edge_index
-        if self.use_coords:
-            radial, coord_diff = self.coord2radial(edge_index, coord)
-        else:
-            radial, coord_diff = None, None
+        radial, coord_diff = self.coord2radial(edge_index, coord)
 
         edge_feat = self.edge_model(x[row], x[col], radial, edge_attr)
         coord = self.coord_model(coord, edge_index, coord_diff, edge_feat)
@@ -167,7 +161,7 @@ class SartorrasEGNN(PNNGeometricBase):
                                 graphnorm=graphnorm,
                                 tanh=tanh, update_coords=update_coords,
                                 thick_attention=thick_attention))
-        layers[-1].record_atn_and_agg = True
+            layers[-1].record_atn_and_agg = True
         if multi_fc:
             fc_layer_out_dims = [128, 64, dim_output]
             fc_layer_in_dims = [k, 128, 64]
@@ -203,6 +197,4 @@ class SartorrasEGNN(PNNGeometricBase):
             feats, coords, edge_attributes, edge_messages = i(
                 x=feats, edge_index=edges, coord=coords,
                 edge_attr=edge_attributes, edge_messages=edge_messages)
-        self.final_attention_weights = self.layers[-1].att_val
-        self.final_aggrigation = self.layers[-1].agg
         return feats, edge_messages

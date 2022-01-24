@@ -108,7 +108,8 @@ MODEL_KWARGS = {
     'lie_algebra_nonlinearity': None,
     'pooling_only': True,
     'linear_gap': True,
-    'graphnorm': True
+    'graphnorm': True,
+    'update_coords': True
 }
 
 N_SAMPLES = 10

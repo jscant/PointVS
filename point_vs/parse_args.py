@@ -197,4 +197,6 @@ def parse_args():
                         help='Rate at which one of (randomly selected) ligand '
                              'or receptor is removed and label is forced to '
                              'zero')
+    parser.add_argument('--static_coords', action='store_true',
+                        help='Do not update coords (eq. 4, EGNN)')
     return parser.parse_args()

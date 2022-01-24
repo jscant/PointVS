@@ -96,7 +96,8 @@ if __name__ == '__main__':
         'rot': False,
         'polar_hydrogens': args.hydrogens,
         'fname_suffix': args.input_suffix,
-        'edge_radius': args.edge_radius if args.model != 'lietransformer' else -1,
+        'edge_radius': args.edge_radius if args.model != 'lietransformer'
+        else -1,
         'estimate_bonds': args.estimate_bonds,
         'prune': args.prune,
         'p_remove_entity': args.p_remove_entity,
@@ -216,7 +217,7 @@ if __name__ == '__main__':
         'classify_on_feats': args.egnn_classify_on_feats if hasattr(
             args, 'egnn_classify_on_feats') else True,
         'multi_fc': args.multi_fc,
-        'update_coords': True,
+        'update_coords': not args.static_coords,
         'thick_attention': args.thick_attention,
         'node_final_act': args.lucid_node_final_act
     }
