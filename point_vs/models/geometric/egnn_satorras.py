@@ -13,9 +13,10 @@ class E_GCL(nn.Module):
     def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d=0,
                  act_fn=nn.SiLU(), residual=True, attention=False,
                  normalize=False, coords_agg='mean', tanh=False,
-                 graphnorm=False, update_coords=True, thick_attention=False):
+                 graphnorm=False, update_coords=True, thick_attention=False,
+                 permutation_invariance=False):
         super(E_GCL, self).__init__()
-        input_edge = input_nf * 2
+        input_edge = input_nf if permutation_invariance else input_nf * 2
         self.residual = residual
         self.attention = attention
         self.normalize = normalize
@@ -23,6 +24,7 @@ class E_GCL(nn.Module):
         self.tanh = tanh
         self.epsilon = 1e-8
         self.use_coords = update_coords
+        self.permutation_invariance = permutation_invariance
         self.att_val = None
         edge_coords_nf = 1
 
@@ -57,7 +59,10 @@ class E_GCL(nn.Module):
                 nn.Sigmoid())
 
     def edge_model(self, source, target, radial, edge_attr):
-        inp = [source, target]
+        if self.permutation_invariance:
+            inp = [torch.add(source, target)]
+        else:
+            inp = [source, target]
         inp.append(radial)
         if edge_attr is not None:
             inp.append(edge_attr)

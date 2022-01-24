@@ -219,7 +219,8 @@ if __name__ == '__main__':
         'multi_fc': args.multi_fc,
         'update_coords': not args.static_coords,
         'thick_attention': args.thick_attention,
-        'node_final_act': args.lucid_node_final_act
+        'node_final_act': args.lucid_node_final_act,
+        'permutation_invariance': args.permutation_invariance
     }
 
     args_to_record.update(model_kwargs)

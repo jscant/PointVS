@@ -199,4 +199,7 @@ def parse_args():
                              'zero')
     parser.add_argument('--static_coords', action='store_true',
                         help='Do not update coords (eq. 4, EGNN)')
+    parser.add_argument('--permutation_invariance', action='store_true',
+                        help='Edge features are invariant to order of input '
+                             'node (EGNN, experimental)')
     return parser.parse_args()
