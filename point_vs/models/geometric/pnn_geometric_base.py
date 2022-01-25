@@ -46,12 +46,12 @@ class PygLinearPass(nn.Module):
         self.feats_appended_to_coords = feats_appended_to_coords
         self.return_coords_and_edges = return_coords_and_edges
 
-    def forward(self, x, *args, **kwargs):
+    def forward(self, h, *args, **kwargs):
         if self.feats_appended_to_coords:
-            feats = x[:, 3:]
-            res = torch.hstack([x[:, :3], self.m(feats)])
+            feats = h[:, 3:]
+            res = torch.hstack([h[:, :3], self.m(feats)])
         else:
-            res = self.m(x)
+            res = self.m(h)
         if self.return_coords_and_edges:
             return res, kwargs['coord'], kwargs['edge_attr'], kwargs.get(
                 'edge_messages', None)

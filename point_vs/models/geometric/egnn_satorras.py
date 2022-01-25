@@ -111,15 +111,15 @@ class E_GCL(nn.Module):
 
         return radial, coord_diff
 
-    def forward(self, x, edge_index, coord, edge_attr=None, edge_messages=None):
+    def forward(self, h, edge_index, coord, edge_attr=None, edge_messages=None):
         row, col = edge_index
         radial, coord_diff = self.coord2radial(edge_index, coord)
 
-        edge_feat = self.edge_model(x[row], x[col], radial, edge_attr)
+        edge_feat = self.edge_model(h[row], h[col], radial, edge_attr)
         coord = self.coord_model(coord, edge_index, coord_diff, edge_feat)
-        x, agg = self.node_model(x, edge_index, edge_feat)
+        h, agg = self.node_model(h, edge_index, edge_feat)
 
-        return x, coord, edge_attr, edge_feat
+        return h, coord, edge_attr, edge_feat
 
 
 class SartorrasEGNN(PNNGeometricBase):
@@ -128,7 +128,7 @@ class SartorrasEGNN(PNNGeometricBase):
                   attention=False, normalize=True, tanh=True, dropout=0,
                   graphnorm=True, classify_on_edges=False,
                   classify_on_feats=True, multi_fc=False, update_coords=True,
-                  thick_attention=False,
+                  thick_attention=False, permutation_invariance=False,
                   **kwargs):
         """
         Arguments:
@@ -165,7 +165,8 @@ class SartorrasEGNN(PNNGeometricBase):
                                 normalize=normalize,
                                 graphnorm=graphnorm,
                                 tanh=tanh, update_coords=update_coords,
-                                thick_attention=thick_attention))
+                                thick_attention=thick_attention,
+                                permutation_invariance=permutation_invariance))
             layers[-1].record_atn_and_agg = True
         if multi_fc:
             fc_layer_out_dims = [128, 64, dim_output]
@@ -200,6 +201,6 @@ class SartorrasEGNN(PNNGeometricBase):
         edge_messages = None
         for i in self.layers:
             feats, coords, edge_attributes, edge_messages = i(
-                x=feats, edge_index=edges, coord=coords,
+                h=feats, edge_index=edges, coord=coords,
                 edge_attr=edge_attributes, edge_messages=edge_messages)
         return feats, edge_messages
