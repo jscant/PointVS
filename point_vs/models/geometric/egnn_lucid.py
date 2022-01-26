@@ -134,7 +134,7 @@ class EGNN_Sparse(MessagePassing):
         else:
             edge_attr_feats = rel_dist
 
-        hidden_out, coors_out = self.propagate(edge_index, h=feats,
+        hidden_out, coors_out = self.propagate(edge_index, x=feats,
                                                edge_attr=edge_attr_feats,
                                                coors=coors, rel_coors=rel_coors,
                                                batch=batch)
