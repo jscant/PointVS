@@ -142,6 +142,7 @@ class PointNeuralNetworkBase(nn.Module):
             predictions_file.unlink()
         predictions = ''
         self.total_iters = len(data_loader)
+        self.eval()
         with torch.no_grad():
             for self.batch, graph in enumerate(
                     data_loader):
