@@ -220,7 +220,8 @@ if __name__ == '__main__':
         'update_coords': not args.static_coords,
         'thick_attention': args.thick_attention,
         'node_final_act': args.lucid_node_final_act,
-        'permutation_invariance': args.permutation_invariance
+        'permutation_invariance': args.permutation_invariance,
+        'silu_attention': args.silu_attention,
     }
 
     args_to_record.update(model_kwargs)

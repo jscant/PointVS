@@ -14,7 +14,7 @@ class E_GCL(nn.Module):
                  act_fn=nn.SiLU(), residual=True, attention=False,
                  normalize=False, coords_agg='mean', tanh=False,
                  graphnorm=False, update_coords=True, thick_attention=False,
-                 permutation_invariance=False):
+                 permutation_invariance=False, silu_attention=False):
         super(E_GCL, self).__init__()
         input_edge = input_nf if permutation_invariance else input_nf * 2
         self.residual = residual
@@ -56,7 +56,7 @@ class E_GCL(nn.Module):
                     hidden_nf, hidden_nf) if thick_attention else nn.Identity(),
                 nn.SiLU() if thick_attention else nn.Identity(),
                 nn.Linear(hidden_nf, 1),
-                nn.Sigmoid())
+                nn.SiLU() if silu_attention else nn.Sigmoid())
 
     def edge_model(self, source, target, radial, edge_attr):
         if self.permutation_invariance:
@@ -129,7 +129,7 @@ class SartorrasEGNN(PNNGeometricBase):
                   graphnorm=True, classify_on_edges=False,
                   classify_on_feats=True, multi_fc=False, update_coords=True,
                   thick_attention=False, permutation_invariance=False,
-                  **kwargs):
+                  silu_attention=False, **kwargs):
         """
         Arguments:
             dim_input: Number of features for 'h' at the input
@@ -166,7 +166,8 @@ class SartorrasEGNN(PNNGeometricBase):
                                 graphnorm=graphnorm,
                                 tanh=tanh, update_coords=update_coords,
                                 thick_attention=thick_attention,
-                                permutation_invariance=permutation_invariance))
+                                permutation_invariance=permutation_invariance,
+                                silu_attention=silu_attention))
             layers[-1].record_atn_and_agg = True
         if multi_fc:
             fc_layer_out_dims = [128, 64, dim_output]

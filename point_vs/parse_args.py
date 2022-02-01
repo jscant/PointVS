@@ -202,4 +202,6 @@ def parse_args():
     parser.add_argument('--permutation_invariance', action='store_true',
                         help='Edge features are invariant to order of input '
                              'node (EGNN, experimental)')
+    parser.add_argument('--silu_attention', action='store_true',
+                        help='Attention uses SiLU layer rather than Sigmoid')
     return parser.parse_args()
