@@ -1,6 +1,5 @@
 import torch
-from eqv_transformer.eqv_attention import GlobalPool, \
-    EquivariantTransformerBlock
+from eqv_transformer.eqv_attention import GlobalPool, EquivariantTransformerBlock
 from lie_conv.lieGroups import SE3
 from lie_conv.utils import Pass
 from torch import nn
