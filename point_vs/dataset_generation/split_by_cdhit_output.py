@@ -36,7 +36,6 @@ def bfs(g, s):
 
 def cdhit_output_to_graph(fname):
     """Generate sequence similarity graph from CD-HIT output."""
-    pdbids = set()
     g = defaultdict(deque)
     with open(Path(fname).expanduser(), 'r') as f:
         cluster = set()
@@ -48,7 +47,8 @@ def cdhit_output_to_graph(fname):
             else:
                 pdbid = line.split('>')[-1].split('_')[0]
                 cluster.add(pdbid)
-                pdbids.add(pdbid)
+    for key in g.keys():
+        g[key] = deque(set(g[key]))
     return g
 
 
