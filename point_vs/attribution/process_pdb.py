@@ -3,25 +3,36 @@ from pathlib import Path
 from pandas import DataFrame
 from plip.basic import config
 from plip.basic.supplemental import create_folder_if_not_exists, start_pymol
-from plip.structure.preparation import PDBComplex
 from plip.plipcmd import logger
+from plip.structure.preparation import PDBComplex
 from pymol import cmd
 
-from point_vs.attribution.interaction_parser import StructuralInteractionParser
+from point_vs.attribution.attribution_fns import masking, cam, node_attention, \
+    edge_attention, edge_embedding_attribution
+from point_vs.attribution.interaction_parser import \
+    StructuralInteractionParser, \
+    StructuralInteractionParserFast
 from point_vs.attribution.plip_subclasses import \
     PyMOLVisualizerWithBFactorColouring, VisualizerDataWithMolecularInfo
 from point_vs.utils import mkdir
-
+import numpy as np
 
 def visualize_in_pymol(
         model, attribution_fn, plcomplex, output_dir, model_args,
-        only_process=None):
+        gnn_layer=None, only_process=None, bonding_strs=[], write_pse=True,
+        override_attribution_name=None, atom_blind=False, inverse_colour=False,
+        pdb_file=None, coords_to_identifier=None):
     """Visualizes the given Protein-Ligand complex at one site in PyMOL.
 
     This function is based on the origina plip.visualization.vizualise_in_pymol
     function, with the added functinoality which uses a machine learning model
     to colour the receptor atoms by
     """
+
+    triplet_code = plcomplex.uid.split(':')[0]
+    if len(only_process) and triplet_code not in only_process:
+        cmd.reinitialize()
+        return None, None, None, None
 
     vis = PyMOLVisualizerWithBFactorColouring(plcomplex)
 
@@ -92,29 +103,51 @@ def visualize_in_pymol(
 
     vis.make_initial_selections()
 
-    vis.show_hydrophobic()  # Hydrophobic Contacts
-    vis.show_hbonds()  # Hydrogen Bonds
-    vis.show_halogen()  # Halogen Bonds
-    vis.show_stacking()  # pi-Stacking Interactions
-    vis.show_cationpi()  # pi-Cation Interactions
-    vis.show_sbridges()  # Salt Bridges
-    vis.show_wbridges()  # Water Bridges
-    vis.show_metal()  # Metal Coordination
-
     results_fname = Path(output_dir, '{0}_{1}_results.txt'.format(
         pdbid.upper(), '_'.join(
             [hetid, plcomplex.chain, plcomplex.position]))).expanduser()
 
-    parser = StructuralInteractionParser()
-    score, df = vis.colour_b_factors_pdb(
-        model, attribution_fn=attribution_fn, parser=parser,
-        results_fname=results_fname, model_args=model_args,
-        only_process=only_process)
+    if pdb_file is not None:
+        parser = StructuralInteractionParserFast(pdb_file)
+    else:
+        parser = StructuralInteractionParser()
 
-    if not isinstance(df, DataFrame):
-        return None, None
+    score, df, edge_indices, edge_scores = vis.colour_b_factors_pdb(
+        model, attribution_fn=attribution_fn, parser=parser,
+        gnn_layer=gnn_layer, results_fname=results_fname,
+        model_args=model_args,
+        only_process=only_process, pdb_file=pdb_file,
+        coords_to_identifier=coords_to_identifier)
+
+    if attribution_fn == edge_attention:
+        if bonding_strs is None or not len(bonding_strs):
+            keep_df = df.copy()
+            keep_df.sort_values(by='bond_score', inplace=True, ascending=False)
+            keep_df.reset_index(inplace=True)
+            keep_df.drop(index=keep_df[keep_df.index > 8].index, inplace=True)
+            max_bond_score = np.amax(keep_df['bond_score'].to_numpy())
+            keep_df.drop(index=keep_df[keep_df['bond_score']
+                                       < 0.25 * max_bond_score].index)
+            bonding_strs = {b_id: dist for b_id, dist in zip(
+                keep_df.bond_identifier, keep_df.bond_score)}
+
+    # vis.show_hydrophobic()  # Hydrophobic Contacts
+    resis = vis.show_hbonds(
+        bonding_strs, atom_blind=atom_blind,
+        inverse_colour=inverse_colour)  # Hydrogen Bonds
+    # vis.show_halogen()  # Halogen Bonds
+    # vis.show_stacking()  # pi-Stacking Interactions
+    # vis.show_cationpi()  # pi-Cation Interactions
+    # vis.show_sbridges()  # Salt Bridges
+    # vis.show_wbridges()  # Water Bridges
+    # vis.show_metal()  # Metal Coordination
 
     vis.refinements()
+    if resis is not None and len(resis):
+        cmd.select(
+            'AdditionalInteractingResidues', 'resi ' + ' resi '.join(resis))
+        cmd.show('sticks', 'AdditionalInteractingResidues')
+
     vis.zoom_to_ligand()
     vis.selections_cleanup()
     vis.selections_group()
@@ -134,15 +167,28 @@ def visualize_in_pymol(
         filename = "%s_IntraChain%s" % (pdbid.upper(), plcomplex.chain)
         if config.PYMOL:
             vis.save_session(config.OUTPATH, override=filename)
-    else:
-        filename = '%s_%s' % (
-            pdbid.upper(),
-            "_".join([hetid, plcomplex.chain, plcomplex.position]))
+    elif write_pse:
+        if override_attribution_name is None:
+            attribution_fn_name = {
+                masking: 'masking',
+                cam: 'cam',
+                node_attention: 'node_attention',
+                edge_attention: 'edge_attention',
+                edge_embedding_attribution: 'edges',
+            }.get(attribution_fn, 'MD_distances')
+        else:
+            attribution_fn_name = override_attribution_name
+        filename = "_".join(
+            [attribution_fn_name, hetid, plcomplex.chain, plcomplex.position])
         vis.save_session(plcomplex.mol.output_path, override=filename)
     if config.PICS:
         vis.save_picture(config.OUTPATH, filename)
 
-    return score, df
+    cmd.reinitialize()
+    if not isinstance(df, DataFrame):
+        return None, None, None, None
+
+    return score, df, edge_indices, edge_scores
 
 
 def score_pdb(
@@ -195,7 +241,10 @@ def score_pdb(
 
 
 def score_and_colour_pdb(
-        model, attribution_fn, pdbfile, outpath, model_args, only_process=None):
+        model, attribution_fn, pdbfile, outpath, model_args, only_process=None,
+        gnn_layer=None, bonding_strs=None, write_pse=True, atom_blind=False,
+        override_attribution_name=None, inverse_colour=False, pdb_file=None,
+        coords_to_identifier=None):
     mol = PDBComplex()
     outpath = str(Path(outpath).expanduser())
     pdbfile = str(Path(pdbfile).expanduser())
@@ -218,9 +267,17 @@ def score_and_colour_pdb(
             output_dir=outpath,
             plcomplex=plcomplex,
             model_args=model_args,
-            only_process=only_process)
+            gnn_layer=gnn_layer,
+            only_process=only_process,
+            bonding_strs=bonding_strs,
+            write_pse=write_pse,
+            override_attribution_name=override_attribution_name,
+            atom_blind=atom_blind,
+            inverse_colour=inverse_colour,
+            pdb_file=pdb_file,
+            coords_to_identifier=coords_to_identifier
+        )
         for plcomplex in complexes
     }
-    dfs = {lig_id: (score, df) for lig_id, (score, df)
-           in dfs.items() if df is not None}
-    return dfs
+
+    return {lig_id: info for lig_id, info in dfs.items() if info[0] is not None}

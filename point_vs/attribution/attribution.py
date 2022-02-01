@@ -4,16 +4,18 @@ import urllib
 from pathlib import Path
 
 import matplotlib
+import pandas as pd
 from plip.basic.supplemental import extract_pdbid
 from plip.exchange.webservices import fetch_pdb
 from sklearn.metrics import average_precision_score, \
     precision_recall_curve
 
 from point_vs.attribution.attribution_fns import masking, cam, \
-    attention_attribution, edge_embedding_attribution
+    node_attention, edge_embedding_attribution, edge_attention
 from point_vs.attribution.process_pdb import score_and_colour_pdb
 from point_vs.models.load_model import load_model
-from point_vs.utils import mkdir, ensure_writable
+from point_vs.utils import ensure_writable, expand_path
+from point_vs.utils import mkdir
 
 matplotlib.use('agg')
 
@@ -81,40 +83,106 @@ def precision_recall(df, save_path=None):
     return random_average_precision, average_precision
 
 
-def attribute(args):
-    if args.pdbid is not None:
+def pdb_coords_to_identifier(pdb_file):
+    """Read .pdb file and return map from x,y,z -> chain:resi:resn:name"""
+
+    res = {}
+    with open(expand_path(pdb_file), 'r') as f:
+        for line in f.readlines():
+            if not line.startswith('HETATM') and not line.startswith(
+                    'ATOM'):
+                continue
+            x = line[30:38].strip()
+            y = line[38:46].strip()
+            z = line[46:54].strip()
+            chain = line[21].strip()
+            resn = line[17:20].strip()
+            resi = line[22:26].strip()
+            name = line[12:16].strip()
+            if resn.lower() != 'hoh':
+                res[':'.join([x, y, z])] = ':'.join([chain, resi, resn, name])
+    return res
+
+
+def has_multiple_conformations(pdb_file):
+    conf_lines = []
+    with open(expand_path(pdb_file), 'r') as f:
+        for idx, line in enumerate(f.readlines()):
+            if not line.startswith('HETATM') and not line.startswith('ATOM'):
+                continue
+            if len(line) < 60:
+                continue
+            if line[56:60].strip() != '1.00':
+                conf_lines.append(idx + 1)
+    return conf_lines
+
+
+
+def attribute(attribution_type, model_file, output_dir, pdbid=None,
+              input_file=None, only_process=None, write_stats=True,
+              gnn_layer=None, bonding_strs=None, write_pse=True,
+              override_attribution_name=None, atom_blind=False,
+              inverse_colour=False, pdb_file=None):
+    if pdbid is None:
+        leaf_dir = Path(Path(input_file).name).stem
         output_dir = mkdir(
-            Path(args.output_dir, args.attribution_type, args.pdbid))
-        pdbpath = download_pdb_file(args.pdbid, output_dir)
+            Path(output_dir, leaf_dir))
+        pdbpath = Path(input_file).expanduser()
     else:
-        leaf_dir = Path(Path(args.input_file).name).stem
-        output_dir = mkdir(
-            Path(args.output_dir, args.attribution_type, leaf_dir))
-        pdbpath = Path(args.input_file).expanduser()
+        output_dir = mkdir(Path(output_dir, attribution_type, pdbid))
+        pdbpath = download_pdb_file(pdbid, output_dir)
 
-    model, model_kwargs, cmd_line_args = load_model(args.model)
-
+    conf_lines = has_multiple_conformations(pdbpath)
+    if len(conf_lines):
+        print()
+        print('WARNING:', pdbpath, 'contains multiple conformations!',
+              'Multiconf line indices:')
+        print(*conf_lines)
+        print()
+    coords_to_identifier = pdb_coords_to_identifier(pdbpath)
     attribution_fn = {'masking': masking,
                       'cam': cam,
-                      'attention': attention_attribution,
-                      'edges': edge_embedding_attribution,
-                      }[args.attribution_type]
+                      'node_attention': node_attention,
+                      'edge_attention': edge_attention,
+                      'edges': edge_embedding_attribution
+                      }.get(attribution_type, None)
+    model, model_kwargs, cmd_line_args = load_model(
+        model_file, fetch_args_only=attribution_fn is None)
 
-    dfs = score_and_colour_pdb(model, attribution_fn,
-                               str(pdbpath), str(output_dir),
-                               model_args=cmd_line_args,
-                               only_process=args.only_process)
+    dfs = score_and_colour_pdb(
+        model=model, attribution_fn=attribution_fn,
+        pdbfile=str(pdbpath), outpath=str(output_dir),
+        model_args=cmd_line_args, gnn_layer=gnn_layer,
+        only_process=only_process if only_process is not None else [],
+        bonding_strs=bonding_strs, write_pse=write_pse,
+        override_attribution_name=override_attribution_name,
+        atom_blind=atom_blind, inverse_colour=inverse_colour,
+        pdb_file=pdb_file, coords_to_identifier=coords_to_identifier)
     precision_str = 'pdbid,lig:chain:res,rnd_avg_precision,' \
                     'model_avg_precision,score\n'
-    for lig_id, (score, df) in dfs.items():
-        r_ap, ap = precision_recall(
-            df, save_path=Path(output_dir, 'precision_recall_{}.png'.format(
-                lig_id.replace(':', '_'))))
-        precision_str += '{0},{1},{2:.4f},{3:.4f},{4:.4f}\n'.format(
-            args.pdbid, lig_id, r_ap, ap, score)
-        print()
-    with open(output_dir / 'average_precisions.txt', 'w') as f:
-        f.write(precision_str)
+    if write_stats:
+        if attribution_type != 'edge_attention':
+            try:
+                for lig_id, (
+                        score, df, edge_indices, edge_scores) in dfs.items():
+                    r_ap, ap = precision_recall(
+                        df,
+                        save_path=Path(output_dir,
+                                       'precision_recall_{}.png'.format(
+                                           lig_id.replace(':', '_'))))
+                    precision_str += '{0},{1},{2:.4f},{3:.4f},{4:.4f}\n'.format(
+                        pdbid, lig_id, r_ap, ap, score)
+                    print()
+                with open(output_dir / 'average_precisions.txt', 'w') as f:
+                    f.write(precision_str)
+            except KeyError:
+                pass
+        else:
+            for lig_id, (score, df, edge_indices, edge_scores) in dfs.items():
+                df.to_csv(output_dir / '{}_edge_attributions.csv'.format(
+                    lig_id.replace(':', '-')
+                ))
+    return dfs
 
 
 if __name__ == '__main__':
@@ -132,8 +200,13 @@ if __name__ == '__main__':
     parser.add_argument('--only_process', '-o', type=str, nargs='?', default=[],
                         help='Only process ligands with the given 3 letter '
                              'residue codes (UNK, for example)')
+    parser.add_argument('--gnn_layer', '-l', type=int, default=1)
     args = parser.parse_args()
     if isinstance(args.pdbid, str) + isinstance(args.input_file, str) != 1:
         raise RuntimeError(
             'Specify exactly one of either --pdbid or --input_file.')
-    attribute(args)
+    pd.set_option('display.float_format', lambda x: '%.3f' % x)
+    print(*[item[1] for item in attribute(
+        args.attribution_type, args.model, args.output_dir, pdbid=args.pdbid,
+        input_file=args.input_file, only_process=args.only_process,
+        atom_blind=True, gnn_layer=args.gnn_layer).values()], sep='\n')

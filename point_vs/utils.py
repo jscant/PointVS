@@ -5,6 +5,7 @@ together.
 import math
 import multiprocessing as mp
 import shutil
+import subprocess
 import time
 import types
 from pathlib import Path
@@ -15,6 +16,99 @@ import torch
 import torch.nn as nn
 import yaml
 from matplotlib import pyplot as plt
+
+
+def wipe_new_pdbs(directory, exempt=None):
+    """Delete all .pdb files with exceptions, and prune empty directories.
+
+    Arguments:
+        directory: folder in which recurse and remove pdb files
+        exempt: files and folders exempt from removal, usually the output of
+            an earlier call to get_directory_state
+    """
+
+    def _rm_tree(pth):
+        pth = Path(pth)
+        for child in pth.glob('*'):
+            if child.is_file() and child.suffix == '.pdb' and child not in \
+                    exempt and not child.is_symlink():
+                child.unlink()
+            _rm_tree(child)
+        if pth.is_dir() and not len(list(pth.glob('*'))) and \
+                pth not in exempt and not pth.is_symlink():
+            pth.rmdir()
+
+    exempt = [] if exempt is None else [Path(p) for p in exempt]
+    _rm_tree(directory)
+
+
+def get_directory_state(directory):
+    """Recursively return a list of all files and folders in a directory."""
+    if not Path(directory).exists():
+        return []
+    if Path(directory).is_file():
+        return [directory]
+    directory_contents = list(Path(directory).glob('*'))
+    if not len(directory_contents):
+        return [directory]
+    children = [directory]
+    for item in directory_contents:
+        children += get_directory_state(item)
+    return children
+
+
+def get_colour_interpolation_fn(c1, c2, min_val, max_val):
+    """Generate a function which interpolates between RGB values.
+
+    Arguments:
+        c1: Bottom of the colour range for interpolation
+        c2: Top of the colour range for interpolation
+        min_val: Bottom of the range of values to interpolate between
+        max_val: Top of the range of values to interpolate between
+
+    Returns:
+        Function which takes a value \in [min_value, max_value] and returns an
+        numpy array with dimension (3,), the RGB value corresponding to a
+        linear interpolation of the colours between c1 and c2 at the value
+        given.
+
+    Raises:
+        AssertionError: all numbers in c2 must be greater or equal to those in
+        c1
+        AssertionError: max_val must be greater than or equal to min_val
+    """
+    c1, c2 = np.array(c1), np.array(c2)
+    assert np.alltrue(c2 >= c1), 'All values in c2 must be <= those in c1'
+    assert max_val >= min_val, 'max_val must be >= min_val'
+    rgb_rng = c2 - c1
+    val_rng = max_val - min_val
+
+    def _interpolation_fn(val):
+        # If there is only one value, give it c1
+        if math.isclose(min_val, max_val):
+            return list(c1)
+
+        return list(np.array(c1) + ((val - min_val) / val_rng) * rgb_rng)
+
+    return _interpolation_fn
+
+
+def execute_cmd(cmd, raise_exceptions=True, silent=True):
+    """Helper for executing obrms commands an capturing the output."""
+
+    proc_result = subprocess.run(
+        cmd,
+        shell=True,
+        capture_output=True)
+    if proc_result.stderr and raise_exceptions:
+        raise subprocess.CalledProcessError(
+            returncode=proc_result.returncode,
+            cmd=proc_result.args,
+            stderr=proc_result.stderr)
+    res = proc_result.stdout.decode('utf-8')
+    if proc_result.stdout and not silent:
+        print(res)
+    return res
 
 
 def are_points_on_plane(p1, p2, p3, p4, eps=1e-6):
@@ -129,7 +223,10 @@ class PositionDict(dict):
         def extract_coords(s):
             return np.array([float(i) for i in s.replace(',', ' ').split()])
 
-        coords = extract_coords(coord_str)
+        if isinstance(coord_str, (tuple, list)):
+            coords = coord_str
+        else:
+            coords = extract_coords(coord_str)
         for candidate in self.keys():
             candidate_coords = extract_coords(candidate)
             dist = np.linalg.norm(coords - candidate_coords)
