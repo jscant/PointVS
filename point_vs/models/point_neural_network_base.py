@@ -104,6 +104,7 @@ class PointNeuralNetworkBase(nn.Module):
         """
         start_time = self.training_setup(data_loader=data_loader, epochs=epochs)
         for self.epoch in range(self.init_epoch, epochs):
+            self.train()
             for self.batch, graph in enumerate(data_loader):
                 y_pred, y_true, ligands, receptors = self.process_graph(graph)
                 self.get_mean_preds(y_true, y_pred)
@@ -117,6 +118,7 @@ class PointNeuralNetworkBase(nn.Module):
                     loss=loss_,
                     record_type='train'
                 )
+            self.eval()
             self.on_epoch_end(
                 epoch_end_validation_set=epoch_end_validation_set,
                 epochs=epochs,
@@ -185,7 +187,6 @@ class PointNeuralNetworkBase(nn.Module):
 
     def training_setup(self, data_loader, epochs):
         start_time = time.time()
-        self.train()
         if self.use_1cycle:
             print('Using 1cycle')
             self.scheduler = OneCycleLR(
@@ -303,7 +304,6 @@ class PointNeuralNetworkBase(nn.Module):
     def on_epoch_end(self, epoch_end_validation_set, epochs, top1_on_end):
         # save after each epoch
         self.save()
-
         # end of epoch validation if requested
         if epoch_end_validation_set is not None and self.epoch < epochs - 1:
             epoch_end_predictions_fname = Path(
@@ -313,7 +313,6 @@ class PointNeuralNetworkBase(nn.Module):
                 epoch_end_validation_set,
                 predictions_file=epoch_end_predictions_fname,
                 top1_on_end=top1_on_end)
-        self.train()
 
     def write_predictions(self, predictions_str, predictions_file, data_loader):
         # Periodically write predictions to disk
