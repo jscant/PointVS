@@ -32,6 +32,7 @@ if __name__ == '__main__':
     print('Found checkpoint:', ckpt)
 
     model, model_kwargs, cmd_line_args = load_model(ckpt, silent=False)
+    model.train()
 
     if cmd_line_args['model'] in ('lucid', 'egnn'):
         dataset_class = PygPointCloudDataset
