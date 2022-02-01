@@ -151,54 +151,82 @@ def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
             re.match(pdb_exp, str(f.name))]
     if len(pdbs) == 0:
         return -1
-    if len(pdbs) > 1:
-        print(*[str(pdb) for pdb in pdbs])
-        raise RuntimeError('Multiple receptor matches per directory is not '
-                           'yet supported.')
-    receptor_pdb = pdbs[0]
-    if crystal_exp is not None and docked_exp is not None:
-        xtal_matches = re_glob(crystal_exp)
-        docked_matches = re_glob(docked_exp)
-        if len(xtal_matches) * len(docked_matches):
-            crystal_sdf = xtal_matches[0]
-            docked_sdf = docked_matches[0]
+    s = ''
+    for receptor_pdb in pdbs:
+        print(receptor_pdb)
+        if crystal_exp is not None and docked_exp is not None:
+            xtal_matches = re_glob(crystal_exp)
+            docked_matches = re_glob(docked_exp)
+            if len(xtal_matches) * len(docked_matches):
+                if len(xtal_matches) * len(docked_matches) == 1:
+                    crystal_sdf = xtal_matches[0]
+                    docked_sdf = docked_matches[0]
+                else:
+                    longest_match = 0
+                    receptor_name = receptor_pdb.with_suffix('').name
+                    for xtal_match_path in xtal_matches:
+                        xtal_match = xtal_match_path.with_suffix('').name
+                        match = SequenceMatcher(
+                            None, xtal_match, receptor_name
+                        ).find_longest_match(
+                            0, len(xtal_match), 0, len(receptor_name))
+                        if match.size > longest_match:
+                            crystal_sdf = xtal_match_path
+                            longest_match = match.size
+                    longest_match = 0
+                    for docked_match_path in docked_matches:
+                        docked_match = docked_match_path.with_suffix('').name
 
-            types_str = types_line(receptor_pdb, crystal_sdf, docked_sdf, None)
-        else:
-            xtal_to_docked_map = {}
+                        docked_match = docked_match_path.with_suffix('').name
+                        match = SequenceMatcher(
+                            None, docked_match, receptor_name
+                        ).find_longest_match(
+                            0, len(docked_match), 0, len(receptor_name))
+                        if match.size > longest_match:
+                            docked_sdf = docked_match_path
+                            longest_match = match.size
+
+                types_str = types_line(receptor_pdb, crystal_sdf, docked_sdf,
+                                       None)
+            else:
+                xtal_to_docked_map = {}
+                types_str = ''
+                for xtal_match_path in xtal_matches:
+                    xtal_match = xtal_match_path.with_suffix('').name
+                    longest_match = 0
+                    for docked_match_path in docked_matches:
+                        docked_match = docked_match_path.with_suffix('').name
+                        match = SequenceMatcher(None, xtal_match,
+                                                docked_match) \
+                            .find_longest_match(0, len(xtal_match), 0,
+                                                len(docked_match))
+                        if match.size > longest_match:
+                            longest_match = match.size
+                            xtal_to_docked_map[
+                                xtal_match_path] = docked_match_path
+                if len(set(xtal_to_docked_map.values())) != len(xtal_matches):
+                    print(pretify_dict(xtal_to_docked_map))
+                    raise RuntimeError('Could not determine matching pattern '
+                                       'for {}'.format(directory))
+                for crystal_sdf, docked_sdf in xtal_to_docked_map.items():
+                    types_str += types_line(receptor_pdb, crystal_sdf,
+                                            docked_sdf)
+        elif active_exp is not None and inactive_exp is not None:
             types_str = ''
-            for xtal_match_path in xtal_matches:
-                xtal_match = xtal_match_path.with_suffix('').name
-                longest_match = 0
-                for docked_match_path in docked_matches:
-                    docked_match = docked_match_path.with_suffix('').name
-                    match = SequenceMatcher(None, xtal_match, docked_match) \
-                        .find_longest_match(0, len(xtal_match), 0,
-                                            len(docked_match))
-                    if match.size > longest_match:
-                        longest_match = match.size
-                        xtal_to_docked_map[xtal_match_path] = docked_match_path
-            if len(set(xtal_to_docked_map.values())) != len(xtal_matches):
-                print(pretify_dict(xtal_to_docked_map))
-                raise RuntimeError('Could not determine matching pattern '
-                                   'for {}'.format(directory))
-            for crystal_sdf, docked_sdf in xtal_to_docked_map.items():
-                types_str += types_line(receptor_pdb, crystal_sdf, docked_sdf)
-    elif active_exp is not None and inactive_exp is not None:
-        types_str = ''
-        active_matches = re_glob(active_exp)
-        inactive_matches = re_glob(inactive_exp)
-        for active_match in active_matches:
-            types_str += types_line(
-                receptor_pdb, query_sdf=active_match, label=1)
-        for inactive_match in inactive_matches:
-            types_str += types_line(
-                receptor_pdb, query_sdf=inactive_match, label=0)
+            active_matches = re_glob(active_exp)
+            inactive_matches = re_glob(inactive_exp)
+            for active_match in active_matches:
+                types_str += types_line(
+                    receptor_pdb, query_sdf=active_match, label=1)
+            for inactive_match in inactive_matches:
+                types_str += types_line(
+                    receptor_pdb, query_sdf=inactive_match, label=0)
 
-    else:
-        raise RuntimeError('Either specify both crystal_exp and docked_exp '
-                           'or active_exp and inactive_exp')
-    return types_str
+        else:
+            raise RuntimeError('Either specify both crystal_exp and docked_exp '
+                               'or active_exp and inactive_exp')
+        s += types_str + '\n'
+    return s[:-1]
 
 
 def get_intra_rmsd(docked_fname):
@@ -249,7 +277,8 @@ if __name__ == '__main__':
             s_ = generate_types_str(
                 path, pdb_exp, xtal_exp, docked_exp, active_exp, inactive_exp)
             if s_ != -1:
-                s += s_
+                s += s_.strip()
+    s = '\n'.join([line for line in s.split('\n') if len(line.split()) > 1])
 
     with open(expand_path(
             output_path / (output_path.parent.name + '.types')), 'w') as f:
