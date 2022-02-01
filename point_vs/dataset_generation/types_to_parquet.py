@@ -708,6 +708,8 @@ class StructuralFileParser:
         xs, ys, zs, atomic_nums, types, bp = [], [], [], [], [], []
         max_types_value = max(self.type_map.values()) + 2
         for atom in mol:
+            if atom.OBAtom.GetResidue().GetName().lower() == 'hoh':
+                continue
             atomic_num = atom.atomicnum
             if atomic_num == 1:
                 if atom.OBAtom.IsNonPolarHydrogen() or not add_polar_hydrogens:
