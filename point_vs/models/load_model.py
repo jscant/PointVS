@@ -9,11 +9,14 @@ from point_vs.models.vanilla.lie_transformer import EquivariantTransformer
 from point_vs.utils import load_yaml
 
 
-def load_model(weights_file, silent=True):
+def load_model(weights_file, silent=True, fetch_args_only=False):
     model_path = Path(weights_file).expanduser()
     model_kwargs = load_yaml(model_path.parents[1] / 'model_kwargs.yaml')
     model_kwargs['group'] = SE3(0.2)
     cmd_line_args = load_yaml(model_path.parents[1] / 'cmd_args.yaml')
+    if fetch_args_only:
+        return None, model_kwargs, cmd_line_args
+
     model_type = cmd_line_args['model']
 
     model_class = {
