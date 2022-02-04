@@ -21,7 +21,7 @@ from point_vs.preprocessing.preprocessing import make_bit_vector, make_box, \
 from point_vs.preprocessing.pyg_single_item_dataset import \
     get_pyg_single_graph_for_inference
 from point_vs.utils import coords_to_string, PositionDict, \
-    get_colour_interpolation_fn, expand_path, print_df
+    get_colour_interpolation_fn
 
 
 class VisualizerDataWithMolecularInfo(VisualizerData):
@@ -99,9 +99,9 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                     resis += [resi_1, resi_2]
 
                     atom_1_sele = 'resi {0} & resn {1} & name {2}'.format(
-                            resi_1, resn_1, name_1)
+                        resi_1, resn_1, name_1)
                     atom_2_sele = 'resi {0} & resn {1} & name {2}'.format(
-                            resi_2, resn_2, name_2)
+                        resi_2, resn_2, name_2)
                     if chain_1 is not None and chain_2 is not None:
                         atom_1_sele += ' & chain ' + chain_1
                         atom_2_sele += ' & chain ' + chain_2
@@ -359,6 +359,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
             max_feature_id = 10
 
         coords = np.vstack([df.x, df.y, df.z]).T
+
         p = torch.from_numpy(coords).float()
         p = repeat(p, 'n d -> b n d', b=1)
 
@@ -424,15 +425,11 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                 df['bond_identifier'] = df['both_coords'].apply(
                     find_bond)
                 df['bond_score'] = edge_scores
-                #mean_bond_scores = defaultdict(list)
                 mean_bond_scores = defaultdict(int)
                 for bond_id, bond_score in zip(
                         df['bond_identifier'], df['bond_score']):
                     mean_bond_scores[bond_id] = max(
                         mean_bond_scores[bond_id], bond_score)
-                    #mean_bond_scores[bond_id].append(bond_score)
-                #for key, value in mean_bond_scores.items():
-                #    mean_bond_scores[key] = np.mean(value)
                 df['bond_score'] = df['bond_identifier'].map(mean_bond_scores)
                 df.drop_duplicates(
                     subset='bond_identifier', keep='first', inplace=True)
@@ -456,7 +453,8 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                     by='bond_score', ascending=False, inplace=True)
                 df['gnn_rank'] = np.arange(len(df))
             else:
-                df['coords'] = df['x'].apply(str) + ':' + df['y'].apply(str) + ':' + df['z'].apply(str)
+                df['coords'] = df['x'].apply(str) + ':' + df['y'].apply(
+                    str) + ':' + df['z'].apply(str)
                 df['atom_id'] = df['coords'].apply(find_identifier)
                 del df['coords']
                 df.sort_values(by='attribution', ascending=False, inplace=True)

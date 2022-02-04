@@ -62,6 +62,9 @@ class StructuralInteractionParser(StructuralFileParser):
     def mol_calculate_interactions(self, mol, pl_interaction):
         """Return dataframe with interactions from plip mol object"""
 
+        mol.protcomplex.OBMol.AddHydrogens()
+        for ligand in mol.ligands:
+            ligand.mol.OBMol.AddHydrogens()
         interaction_info = {}
 
         # Process interactions
@@ -103,7 +106,6 @@ class StructuralInteractionParser(StructuralFileParser):
     def featurise_interaction(self, mol, interaction_dict, all_ligand_coords,
                               include_noncovalent_bonds=True):
         """Return dataframe with interactions from one particular plip site."""
-
         xs, ys, zs, types, atomic_nums, bp = self.get_coords_and_types_info(
             mol.atoms.values(), all_ligand_coords, add_polar_hydrogens=True)
 
@@ -220,10 +222,12 @@ class StructuralInteractionParserFast(StructuralFileParser):
 
     def get_coords_and_types_info(
             self, mol, all_ligand_coords=None, add_polar_hydrogens=True):
-        xs, ys, zs, atomic_nums, types, bp, atom_ids = [], [], [], [], [], [], []
+        xs, ys, zs, atomic_nums, types, bp, atom_ids = [], [], [], [], [], \
+                                                       [], []
         max_types_value = max(self.type_map.values()) + 2
         for atom in mol:
-            if atom.OBAtom.GetResidue().GetName().lower() == 'hoh':
+            if atom.OBAtom.GetResidue() is None or \
+                    atom.OBAtom.GetResidue().GetName().lower() == 'hoh':
                 continue
             atomic_num = atom.atomicnum
             if atomic_num == 1:
@@ -259,7 +263,8 @@ class StructuralInteractionParserFast(StructuralFileParser):
                               include_noncovalent_bonds=True):
         """Return dataframe with interactions from one particular plip site."""
 
-        xs, ys, zs, types, atomic_nums, bp, atom_ids = self.get_coords_and_types_info(
+        xs, ys, zs, types, atomic_nums, bp, atom_ids = \
+            self.get_coords_and_types_info(
             mol.atoms.values(), all_ligand_coords, add_polar_hydrogens=True)
 
         xs = np.array(xs, dtype=float)

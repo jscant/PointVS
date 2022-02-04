@@ -5,6 +5,7 @@ from pathlib import Path
 
 import matplotlib
 import pandas as pd
+from plip.basic import config
 from plip.basic.supplemental import extract_pdbid
 from plip.exchange.webservices import fetch_pdb
 from sklearn.metrics import average_precision_score, \
@@ -202,11 +203,12 @@ if __name__ == '__main__':
                              'residue codes (UNK, for example)')
     parser.add_argument('--gnn_layer', '-l', type=int, default=1)
     args = parser.parse_args()
+    config.NOFIX = True
     if isinstance(args.pdbid, str) + isinstance(args.input_file, str) != 1:
         raise RuntimeError(
             'Specify exactly one of either --pdbid or --input_file.')
     pd.set_option('display.float_format', lambda x: '%.3f' % x)
-    print(*[item[1] for item in attribute(
+    print(*[item[1][:10] for item in attribute(
         args.attribution_type, args.model, args.output_dir, pdbid=args.pdbid,
         input_file=args.input_file, only_process=args.only_process,
-        atom_blind=True, gnn_layer=args.gnn_layer).values()], sep='\n')
+        atom_blind=True, gnn_layer=args.gnn_layer).values()], sep='\n\n')
