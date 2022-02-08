@@ -353,7 +353,7 @@ class PointNeuralNetworkBase(nn.Module):
                 pth = checkpoint_file.relative_to(expand_path(Path('.')))
             except ValueError:
                 pth = checkpoint_file
-            print('Sucesfully loaded weights from', checkpoint_file)
+            print('Sucesfully loaded weights from', pth)
 
 
     def save_loss(self, save_interval):
