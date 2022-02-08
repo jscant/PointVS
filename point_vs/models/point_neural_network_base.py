@@ -12,7 +12,7 @@ from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingWarmRestarts
 
 from point_vs.analysis.top_n import top_n
 from point_vs.utils import get_eta, format_time, print_with_overwrite, mkdir, \
-    to_numpy
+    to_numpy, expand_path
 
 
 class PointNeuralNetworkBase(nn.Module):
@@ -340,7 +340,7 @@ class PointNeuralNetworkBase(nn.Module):
             'optimiser_state_dict': self.optimiser.state_dict()
         }, save_path)
 
-    def load_weights(self, checkpoint_file):
+    def load_weights(self, checkpoint_file, silent=False):
         checkpoint = torch.load(str(Path(checkpoint_file).expanduser()))
         self.load_state_dict(checkpoint['model_state_dict'])
         self.optimiser.load_state_dict(checkpoint['optimiser_state_dict'])
@@ -348,7 +348,13 @@ class PointNeuralNetworkBase(nn.Module):
         if not self.epoch:
             self.epoch += 1
         self.losses = checkpoint['losses']
-        print('Sucesfully loaded weights from', checkpoint_file)
+        if not silent:
+            try:
+                pth = checkpoint_file.relative_to(expand_path(Path('.')))
+            except ValueError:
+                pth = checkpoint_file
+            print('Sucesfully loaded weights from', checkpoint_file)
+
 
     def save_loss(self, save_interval):
         """Save the loss information to disk.
