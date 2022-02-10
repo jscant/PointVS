@@ -124,8 +124,8 @@ dependencies:
   - yaml=0.2.5=h7b6447c_0
   - zlib=1.2.11=h7b6447c_3
   - zstd=1.4.9=haebb681_0
-  - matplotlib=3.5.1
   - pip:
+      - matplotlib==3.5.1
       - rdkit-pypi==2021.9.4
       - egnn-pytorch==0.2.6
       - "--editable=git+ssh://git@github.com/oxcsml/lie-transformer.git#egg=Equivariant_Attention"
