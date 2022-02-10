@@ -14,9 +14,12 @@ and LieTransformer with SE(3) equivariance to perform
 pose selection.
 
 ## Installation and Initialisation
+You are required to have SSH keys set up between your machine and GitHub
+for setup of some external pip dependencies.
 ```
 git clone https://github.com/jscant/PointVS
 cd PointVS
+git remote set-url origin git@github.com:jscant/PointVS.git
 conda env create -f environment.yml python=3.8
 conda activate pointvs
 pip install -e .
