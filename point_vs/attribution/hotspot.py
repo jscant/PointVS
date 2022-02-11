@@ -265,7 +265,7 @@ def pharmacophore_df_to_mols(df, cutoff=0, include_donor_acceptors=False):
         vdw_str = []
         for idx, row in filtered_df.iterrows():
             conf.SetAtomPosition(idx, list(row[['x', 'y', 'z']]))
-            vdw_str.append(str(row['vdw_radius'] / 100))
+            vdw_str.append(str(row['vdw_radius']))
 
         conf.SetId(0)
         mol.AddConformer(conf)
