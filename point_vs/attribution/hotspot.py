@@ -1,5 +1,7 @@
 import argparse
+from collections import defaultdict
 
+import numpy as np
 import pandas as pd
 from rdkit import Chem
 
@@ -27,6 +29,28 @@ VDW_RADII = {1: 1.1, 2: 1.4, 3: 1.82, 4: 1.53, 5: 1.92, 6: 1.7, 7: 1.55,
              77: 2.13, 78: 2.13, 79: 2.14, 80: 2.23, 81: 1.96, 82: 2.02,
              83: 2.07, 84: 1.97, 85: 2.02, 86: 2.2, 87: 3.48, 88: 2.83,
              89: 2.47, 90: 2.45, 91: 2.43, 92: 2.41, 93: 2.39, 94: 2.4}
+
+
+def get_ligand_to_hbond_map(pdb, lig_name='LIG'):
+    coords_to_atom_id = pdb_coords_to_identifier(pdb)
+    pdb_parser = StructuralFileParser('receptor')
+    mol = pdb_parser.read_file(pdb)[0]
+    res = {}
+    for atom in mol:
+        if atom.OBAtom.GetResidue() is None or \
+                atom.OBAtom.GetResidue().GetName() != lig_name or \
+                atom.atomicnum == 1:
+            continue
+
+        # (x, y, z) -> A:XXXX:YYY:NAME
+        identifier = find_identifier(coords_to_atom_id, atom.coords)
+        if atom.OBAtom.IsHbondAcceptor():
+            res[identifier] = 'hba'
+        elif atom.OBAtom.IsHbondDonor():
+            res[identifier] = 'hbd'
+        else:
+            res[identifier] = 'none'
+    return res
 
 
 def find_identifier(coords_to_identifier, coords):
@@ -69,7 +93,7 @@ def find_identifier(coords_to_identifier, coords):
 
 
 def binding_events_to_ranked_protein_atoms(
-        input_fnames, model_path, output_dir, only_process):
+        input_fnames, model_path, output_dir, ligand_name, layer=1):
     """Use multiple protein-ligand structures to score protein atoms.
 
     The importance of each protein atom is assumed to be related to its median
@@ -86,7 +110,9 @@ def binding_events_to_ranked_protein_atoms(
             identical within the binding site across sturctures where possible.
         model_path: location of pytorch saved GNN weights file
         output_dir: directory in which results should be stored
-        only_process: residue name of the ligand (same across all inputs)
+        ligand_name: residue name of the ligand (same across all inputs)
+        layer: which layer from the GNN to take attention weights from for
+            scoring
 
     Returns:
         pd.DataFrame with columns:
@@ -98,12 +124,27 @@ def binding_events_to_ranked_protein_atoms(
                 GNN attention score.
     """
 
+    def find_lig_pharm(x):
+        if x < 0:
+            return 'hbd'
+        elif x > 0:
+            return 'hba'
+        return 'none'
+
     def find_protein_atom(bond_identifier):
         id_1, id_2 = bond_identifier.split('-')
-        if id_1.split(':')[-2] == only_process:
+        if id_1.split(':')[-2] == ligand_name:
             return id_2
-        elif id_2.split(':')[-2] == only_process:
+        elif id_2.split(':')[-2] == ligand_name:
             return id_1
+        raise RuntimeError('Ligand triplet code not found in either atom.')
+
+    def find_ligand_atom(bond_identifier):
+        id_1, id_2 = bond_identifier.split('-')
+        if id_1.split(':')[-2] == ligand_name:
+            return id_1
+        elif id_2.split(':')[-2] == ligand_name:
+            return id_2
         raise RuntimeError('Ligand triplet code not found in either atom.')
 
     with open(expand_path(input_fnames), 'r') as f:
@@ -112,19 +153,41 @@ def binding_events_to_ranked_protein_atoms(
     model, _, _ = load_model(expand_path(model_path))
 
     processed_dfs = []
+    prot_atom_to_max_lig_atom = defaultdict(list)
     for fname in fnames:
+        lig_to_hbond_map = get_ligand_to_hbond_map(fname, lig_name=ligand_name)
         dfs = attribute(
             'edge_attention', model_path, expand_path(output_dir),
-            input_file=fname, only_process=only_process, write_stats=False,
-            gnn_layer=1, write_pse=False, atom_blind=True, loaded_model=model,
+            input_file=fname, only_process=ligand_name, write_stats=False,
+            gnn_layer=layer, write_pse=False, atom_blind=True,
+            loaded_model=model,
             quiet=True
         )
-
         scores = []
         for site_code, (score, df, _, _) in dfs.items():
             scores.append(score)
             df['protein_atom'] = df['bond_identifier'].apply(find_protein_atom)
-            df = df.groupby('protein_atom', as_index=False).max()
+            protein_atom_dfs = []
+            for protein_atom in list(set(df['protein_atom'])):
+                sub_df = df[df['protein_atom'] == protein_atom].reset_index(
+                    drop=True)
+                max_idx = np.argmax(sub_df['protein_atom'].to_numpy())
+                max_row = sub_df.iloc[[max_idx]]
+                max_score = max_row['bond_score'].to_numpy()[0]
+                lig_pharm = lig_to_hbond_map[find_ligand_atom(
+                    list(max_row['bond_identifier'])[0])]
+                if lig_pharm == 'hba':
+                    lig_pharm = max_score
+                elif lig_pharm == 'hbd':
+                    lig_pharm = -max_score
+                else:
+                    lig_pharm = 0
+                sub_df = sub_df.groupby('protein_atom', as_index=False).max()
+                sub_df['bond_score'] = max_score
+                prot_atom_to_max_lig_atom[protein_atom].append(lig_pharm)
+                protein_atom_dfs.append(sub_df)
+
+            df = pd.concat(protein_atom_dfs)
             df.sort_values(by='bond_score', inplace=True, ascending=False)
             df.rename(
                 columns={'bond_score': 'bond_score_' + str(fname)},
@@ -140,10 +203,17 @@ def binding_events_to_ranked_protein_atoms(
 
     processed_dfs = [df.set_index('protein_atom') for df in processed_dfs]
     concat_df = processed_dfs[0].join(processed_dfs[1:])
+    concat_df['lig_pharm'] = concat_df.index.map(prot_atom_to_max_lig_atom)
+    lig_pharm_scores = []
+    for scores in concat_df.lig_pharm:
+        lig_pharm_scores.append(np.sum(np.array(scores)))
+    concat_df['lig_pharm'] = lig_pharm_scores
+    concat_df['lig_pharm'] = concat_df['lig_pharm'].apply(find_lig_pharm)
     concat_df['median'] = concat_df.median(axis=1, numeric_only=True)
     result_df = pd.DataFrame({
         'protein_atom': concat_df.index,
-        'median_score': concat_df['median']
+        'median_score': concat_df['median'],
+        'lig_pharm': concat_df['lig_pharm']
     })
     result_df.sort_values(
         by='median_score', ascending=False, inplace=True)
@@ -179,24 +249,27 @@ def scores_to_pharmacophore_df(reference_pdb, atom_scores):
             pharmacophore is one of 'hydrophobic', 'hbda', 'hba', 'hbd', 'none'
     """
 
-    def get_pharmacophore(atom):
+    def get_pharmacophore(atom, lig_pharm='none'):
         smina_type = pdb_parser.obatom_to_smina_type(atom)
-        if smina_type.endswith('XSHydrophobe'):
-            return smina_type, 'hydrophobic'
-        if smina_type.endswith('DonorAcceptor'):
-            return smina_type, 'hbda'
+        if smina_type in ('Oxygen', 'Nitrogen', 'Sulfur') or \
+                smina_type.endswith('DonorAcceptor'):
+            if lig_pharm == 'hba':
+                return smina_type, 'hbd'
+            elif lig_pharm == 'hbd':
+                return smina_type, 'hba'
+            return smina_type, 'none'
         if smina_type.endswith('Donor'):
             return smina_type, 'hbd'
         if smina_type.endswith('Acceptor'):
             return smina_type, 'hba'
-        if smina_type in ('Oxygen', 'Nitrogen', 'Sulfur'):
-            if atom.OBAtom.IsAromatic():
-                return smina_type, 'hydrophobic'
-            return smina_type, 'hbda'
         return smina_type, 'none'
 
     id_to_score_map = {atom: score for atom, score in zip(
         atom_scores['protein_atom'], atom_scores['median_score'])}
+    id_to_lig_pharm_map = {atom: lig_pharm for atom, lig_pharm in zip(
+        atom_scores['protein_atom'], atom_scores['lig_pharm']
+    )}
+
     reference_pdb = str(expand_path(reference_pdb))
     coords_to_atom_id = pdb_coords_to_identifier(reference_pdb)
     pdb_parser = StructuralFileParser('receptor')
@@ -209,10 +282,16 @@ def scores_to_pharmacophore_df(reference_pdb, atom_scores):
                 atom.atomicnum == 1:
             continue
 
-        vdw.append(VDW_RADII[atom.atomicnum])
+        # (x, y, z) -> A:XXXX:YYY:NAME
         identifier = find_identifier(coords_to_atom_id, atom.coords)
+
+        # A:XXXX:YYY:NAME -> score
         score = id_to_score_map.get(identifier, 0)
-        smina_type, pharmacophore = get_pharmacophore(atom)
+
+        # A:XXXX:YYY:NAME -> lig pharm
+        lig_pharm = id_to_lig_pharm_map.get(identifier, 'none')
+
+        smina_type, pharmacophore = get_pharmacophore(atom, lig_pharm)
         x, y, z = atom.coords
         xs.append(x)
         ys.append(y)
@@ -220,6 +299,7 @@ def scores_to_pharmacophore_df(reference_pdb, atom_scores):
         pharmacophores.append(pharmacophore)
         smina_types.append(smina_type)
         scores.append(score)
+        vdw.append(VDW_RADII[atom.atomicnum])
 
     df = pd.DataFrame({
         'x': xs,
@@ -295,11 +375,14 @@ if __name__ == '__main__':
     parser.add_argument('--include_donor_acceptors', '-i', action='store_true',
                         help='Include donor-acceptors as both donors and '
                              'acceptors')
+    parser.add_argument('--layer', '-l', type=int, default=1,
+                        help='Which GNN layer to take attention weights from')
 
     args = parser.parse_args()
     rank_df = binding_events_to_ranked_protein_atoms(
         args.filenames, args.model, args.output_dir,
-        args.ligand_residue_code.upper())
+        args.ligand_residue_code.upper(), layer=args.layer)
+    print(rank_df[:10])
     df = scores_to_pharmacophore_df(args.apo_protein, rank_df)
     print(df[:10])
     hba_mol, hbd_mol = pharmacophore_df_to_mols(df)
