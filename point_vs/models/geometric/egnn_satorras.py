@@ -14,7 +14,8 @@ class E_GCL(nn.Module):
                  act_fn=nn.SiLU(), residual=True, attention=False,
                  normalize=False, coords_agg='mean', tanh=False,
                  graphnorm=False, update_coords=True, thick_attention=False,
-                 permutation_invariance=False, silu_attention=False):
+                 permutation_invariance=False, silu_attention=False,
+                 node_attention=False):
         super(E_GCL, self).__init__()
         input_edge = input_nf if permutation_invariance else input_nf * 2
         self.residual = residual
@@ -26,6 +27,7 @@ class E_GCL(nn.Module):
         self.use_coords = update_coords
         self.permutation_invariance = permutation_invariance
         self.att_val = None
+        self.node_attention = node_attention
         edge_coords_nf = 1
 
         self.edge_mlp = nn.Sequential(
@@ -58,6 +60,12 @@ class E_GCL(nn.Module):
                 nn.Linear(hidden_nf, 1),
                 nn.SiLU() if silu_attention else nn.Sigmoid())
 
+        if self.node_attention:
+            self.node_att_mlp = nn.Sequential(
+                nn.Linear(hidden_nf, 1),
+                nn.Sigmoid()
+            )
+
     def edge_model(self, source, target, radial, edge_attr):
         if self.permutation_invariance:
             inp = [torch.add(source, target)]
@@ -82,6 +90,10 @@ class E_GCL(nn.Module):
 
         # Eq. 6: h_i = phi_h(h_i, m_i)
         out = self.node_mlp(agg)
+        if self.node_attention:
+            att_val = self.node_att_mlp(out)
+            out = out * att_val
+            self.node_att_val = att_val
         if self.residual:
             out = x + out
         return out, agg
@@ -129,7 +141,7 @@ class SartorrasEGNN(PNNGeometricBase):
                   graphnorm=True, classify_on_edges=False,
                   classify_on_feats=True, multi_fc=False, update_coords=True,
                   thick_attention=False, permutation_invariance=False,
-                  silu_attention=False, **kwargs):
+                  silu_attention=False, node_attention=False, **kwargs):
         """
         Arguments:
             dim_input: Number of features for 'h' at the input
@@ -167,25 +179,20 @@ class SartorrasEGNN(PNNGeometricBase):
                                 tanh=tanh, update_coords=update_coords,
                                 thick_attention=thick_attention,
                                 permutation_invariance=permutation_invariance,
-                                silu_attention=silu_attention))
-            layers[-1].record_atn_and_agg = True
+                                silu_attention=silu_attention,
+                                node_attention=node_attention))
         if multi_fc:
-            fc_layer_out_dims = [128, 64, dim_output]
-            fc_layer_in_dims = [k, 128, 64]
+            fc_layer_dims = ((k, 128), (64, 128), (dim_output, 64))
         else:
-            fc_layer_out_dims = [dim_output]
-            fc_layer_in_dims = [k]
+            fc_layer_dims = ((k, dim_output),)
+
 
         feats_linear_layers = []
         edges_linear_layers = []
-        for idx, (in_dim, out_dim) in enumerate(
-                zip(fc_layer_in_dims, fc_layer_out_dims)):
+        for idx, (in_dim, out_dim) in enumerate(fc_layer_dims):
             feats_linear_layers.append(nn.Linear(in_dim, out_dim))
             edges_linear_layers.append(nn.Linear(in_dim, out_dim))
-            if dropout > 0:
-                feats_linear_layers.append(nn.Dropout(dropout))
-                edges_linear_layers.append(nn.Dropout(dropout))
-            if idx < len(fc_layer_in_dims) - 1:
+            if idx < len(fc_layer_dims) - 1:
                 feats_linear_layers.append(nn.SiLU())
                 edges_linear_layers.append(nn.SiLU())
         if classify_on_feats:

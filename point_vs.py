@@ -222,6 +222,7 @@ if __name__ == '__main__':
         'node_final_act': args.lucid_node_final_act,
         'permutation_invariance': args.permutation_invariance,
         'silu_attention': args.silu_attention,
+        'node_attention': args.node_attention
     }
 
     args_to_record.update(model_kwargs)

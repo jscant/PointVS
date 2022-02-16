@@ -204,4 +204,6 @@ def parse_args():
                              'node (EGNN, experimental)')
     parser.add_argument('--silu_attention', action='store_true',
                         help='Attention uses SiLU layer rather than Sigmoid')
+    parser.add_argument('--node_attention', action='store_true',
+                        help='Use attention mechanism for nodes')
     return parser.parse_args()
