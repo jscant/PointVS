@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import numpy as np
 from pandas import DataFrame
 from plip.basic import config
 from plip.basic.supplemental import create_folder_if_not_exists, start_pymol
@@ -7,27 +8,30 @@ from plip.plipcmd import logger
 from plip.structure.preparation import PDBComplex
 from pymol import cmd
 
-from point_vs.attribution.attribution_fns import masking, cam, node_attention, \
-    edge_attention, edge_embedding_attribution
+from point_vs.attribution.attribution_fns import masking, cam, \
+    edge_attention, edge_embedding_attribution, node_attention
 from point_vs.attribution.interaction_parser import \
     StructuralInteractionParser, \
     StructuralInteractionParserFast
 from point_vs.attribution.plip_subclasses import \
     PyMOLVisualizerWithBFactorColouring, VisualizerDataWithMolecularInfo
 from point_vs.utils import mkdir
-import numpy as np
+
 
 def visualize_in_pymol(
         model, attribution_fn, plcomplex, output_dir, model_args,
-        gnn_layer=None, only_process=None, bonding_strs=[], write_pse=True,
+        gnn_layer=None, only_process=None, bonding_strs=None, write_pse=True,
         override_attribution_name=None, atom_blind=False, inverse_colour=False,
-        pdb_file=None, coords_to_identifier=None):
+        pdb_file=None, coords_to_identifier=None, quiet=False):
     """Visualizes the given Protein-Ligand complex at one site in PyMOL.
 
     This function is based on the origina plip.visualization.vizualise_in_pymol
     function, with the added functinoality which uses a machine learning model
     to colour the receptor atoms by
     """
+
+    if bonding_strs is None:
+        bonding_strs = []
 
     triplet_code = plcomplex.uid.split(':')[0]
     if len(only_process) and triplet_code not in only_process:
@@ -117,10 +121,15 @@ def visualize_in_pymol(
         gnn_layer=gnn_layer, results_fname=results_fname,
         model_args=model_args,
         only_process=only_process, pdb_file=pdb_file,
-        coords_to_identifier=coords_to_identifier)
+        coords_to_identifier=coords_to_identifier, quiet=quiet)
+    if not write_pse:
+        if not isinstance(df, DataFrame):
+            return None, None, None, None
+
+        return score, df, edge_indices, edge_scores
 
     if attribution_fn == edge_attention:
-        if bonding_strs is None or not len(bonding_strs):
+        if not len(bonding_strs):
             keep_df = df.copy()
             keep_df.sort_values(by='bond_score', inplace=True, ascending=False)
             keep_df.reset_index(inplace=True)
@@ -128,7 +137,7 @@ def visualize_in_pymol(
             max_bond_score = np.amax(keep_df['bond_score'].to_numpy())
             keep_df.drop(index=keep_df[keep_df['bond_score']
                                        < 0.25 * max_bond_score].index)
-            bonding_strs = {b_id: dist for b_id, dist in zip(
+            bonding_strs = {b_id: score for b_id, score in zip(
                 keep_df.bond_identifier, keep_df.bond_score)}
 
     # vis.show_hydrophobic()  # Hydrophobic Contacts
@@ -244,7 +253,7 @@ def score_and_colour_pdb(
         model, attribution_fn, pdbfile, outpath, model_args, only_process=None,
         gnn_layer=None, bonding_strs=None, write_pse=True, atom_blind=False,
         override_attribution_name=None, inverse_colour=False, pdb_file=None,
-        coords_to_identifier=None):
+        coords_to_identifier=None, quiet=False):
     mol = PDBComplex()
     outpath = str(Path(outpath).expanduser())
     pdbfile = str(Path(pdbfile).expanduser())
@@ -275,7 +284,8 @@ def score_and_colour_pdb(
             atom_blind=atom_blind,
             inverse_colour=inverse_colour,
             pdb_file=pdb_file,
-            coords_to_identifier=coords_to_identifier
+            coords_to_identifier=coords_to_identifier,
+            quiet=quiet
         )
         for plcomplex in complexes
     }
