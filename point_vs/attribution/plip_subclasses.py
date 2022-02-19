@@ -93,24 +93,43 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                         chain_1, resi_1, resn_1, name_1 = atom_1_chunks
                         chain_2, resi_2, resn_2, name_2 = atom_2_chunks
 
-                    atom_1_id = atom_1_id.replace(':', 'Z')
-                    atom_2_id = atom_2_id.replace(':', 'Z')
+                    atom_1_id = atom_1_id.replace(':', '_')
+                    atom_2_id = atom_2_id.replace(':', '_')
 
                     resis += [resi_1, resi_2]
 
-                    atom_1_sele = 'resi {0} & resn {1} & name {2}'.format(
-                        resi_1, resn_1, name_1)
-                    atom_2_sele = 'resi {0} & resn {1} & name {2}'.format(
-                        resi_2, resn_2, name_2)
-                    if chain_1 is not None and chain_2 is not None:
-                        atom_1_sele += ' & chain ' + chain_1
-                        atom_2_sele += ' & chain ' + chain_2
+                    alphabet = [''] + [
+                        char for char in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ']
 
-                    cmd.select(atom_1_id, atom_1_sele)
-                    cmd.select(atom_2_id, atom_2_sele)
+                    for char in alphabet:
+                        atom_1_sele = 'resi {0} & resn {1} & name {2}'.format(
+                            resi_1 + char, resn_1, name_1)
+                        if chain_1 is not None:
+                            atom_1_sele += ' & chain ' + chain_1
 
-                    x1, y1, z1 = cmd.get_model(atom_1_id).get_coord_list()[0]
-                    x2, y2, z2 = cmd.get_model(atom_2_id).get_coord_list()[0]
+                        cmd.select(atom_1_id, atom_1_sele)
+                        try:
+                            x1, y1, z1 = cmd.get_model(
+                                atom_1_id).get_coord_list()[0]
+                        except IndexError:
+                            pass
+                        else:
+                            break
+
+                    for char in alphabet:
+                        atom_2_sele = 'resi {0} & resn {1} & name {2}'.format(
+                            resi_2 + char, resn_2, name_2)
+                        if chain_2 is not None:
+                            atom_2_sele += ' & chain ' + chain_2
+
+                        cmd.select(atom_2_id, atom_2_sele)
+                        try:
+                            x2, y2, z2 = cmd.get_model(
+                                atom_2_id).get_coord_list()[0]
+                        except IndexError:
+                            pass
+                        else:
+                            break
 
                     if inverse_colour:
                         interp_score = bond_score
@@ -389,11 +408,11 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
 
         score = float(to_numpy(torch.sigmoid(pre_activation)))
 
-        if not quiet or 1:
+        if not quiet:
             print('Original score: {:.4}'.format(score))
 
         model_labels = attribution_fn(
-            model, p.cuda(), v.cuda(), m.cuda(), edge_attrs=edge_attrs,
+            model, p.cuda(), v.cuda(), edge_attrs=edge_attrs,
             edge_indices=edge_indices, bs=bs, gnn_layer=gnn_layer)
 
         df['any_interaction'] = df['hba'] | df['hbd'] | df['pistacking']
@@ -425,11 +444,12 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                 df['bond_identifier'] = df['both_coords'].apply(
                     find_bond)
                 df['bond_score'] = edge_scores
-                mean_bond_scores = defaultdict(int)
+                mean_bond_scores = defaultdict(list)
                 for bond_id, bond_score in zip(
                         df['bond_identifier'], df['bond_score']):
-                    mean_bond_scores[bond_id] = max(
-                        mean_bond_scores[bond_id], bond_score)
+                    mean_bond_scores[bond_id].append(bond_score)
+                for key, value in mean_bond_scores.items():
+                    mean_bond_scores[key] = np.mean(value)
                 df['bond_score'] = df['bond_identifier'].map(mean_bond_scores)
                 df.drop_duplicates(
                     subset='bond_identifier', keep='first', inplace=True)
@@ -465,7 +485,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
     def colour_b_factors_pdb(
             self, model, parser, attribution_fn, results_fname, model_args,
             gnn_layer=None, only_process=None, pdb_file=None,
-            coords_to_identifier=None):
+            coords_to_identifier=None, quiet=False):
 
         def change_bfactors(bfactors):
             """Modify bfactors based on spatial location.
@@ -497,7 +517,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
         score, df, edge_indices, edge_scores = self.score_atoms(
             parser, only_process, model, attribution_fn, model_args,
             gnn_layer=gnn_layer, pdb_file=pdb_file,
-            coords_to_identifier=coords_to_identifier)
+            coords_to_identifier=coords_to_identifier, quiet=quiet)
 
         if edge_scores is not None:
             return score, df, edge_indices, edge_scores
