@@ -12,7 +12,7 @@ from sklearn.metrics import average_precision_score, \
     precision_recall_curve
 
 from point_vs.attribution.attribution_fns import masking, cam, \
-    node_attention, edge_embedding_attribution, edge_attention
+    edge_embedding_attribution, edge_attention, node_attention
 from point_vs.attribution.process_pdb import score_and_colour_pdb
 from point_vs.models.load_model import load_model
 from point_vs.utils import ensure_writable, expand_path
@@ -84,7 +84,7 @@ def precision_recall(df, save_path=None):
     return random_average_precision, average_precision
 
 
-def pdb_coords_to_identifier(pdb_file):
+def pdb_coords_to_identifier(pdb_file, include_chain=True):
     """Read .pdb file and return map from x,y,z -> chain:resi:resn:name"""
 
     res = {}
@@ -100,8 +100,12 @@ def pdb_coords_to_identifier(pdb_file):
             resn = line[17:20].strip()
             resi = line[22:26].strip()
             name = line[12:16].strip()
+            if include_chain:
+                identifiers = [chain, resi, resn, name]
+            else:
+                identifiers = [resi, resn, name]
             if resn.lower() != 'hoh':
-                res[':'.join([x, y, z])] = ':'.join([chain, resi, resn, name])
+                res[':'.join([x, y, z])] = ':'.join(identifiers)
     return res
 
 
@@ -118,12 +122,12 @@ def has_multiple_conformations(pdb_file):
     return conf_lines
 
 
-
 def attribute(attribution_type, model_file, output_dir, pdbid=None,
               input_file=None, only_process=None, write_stats=True,
               gnn_layer=None, bonding_strs=None, write_pse=True,
               override_attribution_name=None, atom_blind=False,
-              inverse_colour=False, pdb_file=None):
+              inverse_colour=False, pdb_file=None, loaded_model=None,
+              quiet=False):
     if pdbid is None:
         leaf_dir = Path(Path(input_file).name).stem
         output_dir = mkdir(
@@ -147,8 +151,12 @@ def attribute(attribution_type, model_file, output_dir, pdbid=None,
                       'edge_attention': edge_attention,
                       'edges': edge_embedding_attribution
                       }.get(attribution_type, None)
+
     model, model_kwargs, cmd_line_args = load_model(
-        model_file, fetch_args_only=attribution_fn is None)
+        model_file,
+        fetch_args_only=attribution_fn is None or loaded_model is not None)
+    if loaded_model is not None:
+        model = loaded_model
 
     dfs = score_and_colour_pdb(
         model=model, attribution_fn=attribution_fn,
@@ -158,7 +166,8 @@ def attribute(attribution_type, model_file, output_dir, pdbid=None,
         bonding_strs=bonding_strs, write_pse=write_pse,
         override_attribution_name=override_attribution_name,
         atom_blind=atom_blind, inverse_colour=inverse_colour,
-        pdb_file=pdb_file, coords_to_identifier=coords_to_identifier)
+        pdb_file=pdb_file, coords_to_identifier=coords_to_identifier,
+        quiet=quiet)
     precision_str = 'pdbid,lig:chain:res,rnd_avg_precision,' \
                     'model_avg_precision,score\n'
     if write_stats:
