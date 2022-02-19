@@ -26,8 +26,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('base_path', type=str,
                         help='Base path from which to resume training.')
+    parser.add_argument('--epochs', '-e', type=int, default=-1,
+                        help='Modify the number of training epochs (leave '
+                             'unspecified to use number stipulated in original '
+                             'run)')
 
-    base_path = expand_path(parser.parse_args().base_path)
+    args = parser.parse_args()
+    base_path = expand_path(args.base_path)
     ckpt = find_latest_checkpoint(base_path)
     print('Found checkpoint:', ckpt)
 
@@ -95,10 +100,10 @@ if __name__ == '__main__':
         if wandb_run is not None:
             wandb.run.name = wandb_run
 
-    if int(cmd_line_args['epochs']):
+    epochs = cmd_line_args['epochs'] if args.epochs == -1 else args.epochs
+    if epochs:
         model.train_model(
-            train_dl, epochs=cmd_line_args['epochs'],
-            top1_on_end=cmd_line_args['top1'],
+            train_dl, epochs=epochs, top1_on_end=cmd_line_args['top1'],
             epoch_end_validation_set=test_dl)
 
     model = model.eval()
