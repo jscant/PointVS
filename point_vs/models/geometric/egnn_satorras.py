@@ -88,9 +88,10 @@ class E_GCL(nn.Module):
 
         if self.edge_attention:
             att_val = self.edge_attention_mlp(m_ij)
-            m_ij *= att_val
             self.att_val = to_numpy(att_val)
-        agg = unsorted_segment_sum(m_ij, row, num_segments=x.size(0))
+        else:
+            att_val = 1
+        agg = unsorted_segment_sum(att_val * m_ij, row, num_segments=x.size(0))
         agg = torch.cat([x, agg], dim=1)
 
         # Eq. 6: h_i = phi_h(h_i, m_i)
