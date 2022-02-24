@@ -149,7 +149,8 @@ class SartorrasEGNN(PNNGeometricBase):
                   graphnorm=True, classify_on_edges=False,
                   classify_on_feats=True, multi_fc=False, update_coords=True,
                   thick_attention=False, permutation_invariance=False,
-                  silu_attention=False, node_attention=False, **kwargs):
+                  attention_activation_fn='sigmoid',
+                  node_attention=False, **kwargs):
         """
         Arguments:
             dim_input: Number of features for 'h' at the input
@@ -168,6 +169,16 @@ class SartorrasEGNN(PNNGeometricBase):
             tanh: Sets a tanh activation function at the output of phi_x(
                 m_ij). I.e. it bounds the output of phi_x(m_ij) which definitely
                 improves in stability but it may decrease in accuracy.
+            dropout:
+            graphnorm:
+            classify_on_edges:
+            classify_on_feats:
+            multi_fc:
+            update_coords:
+            thick_attention:
+            permutation_invariance:
+            attention_activation_fn:
+            node_attention:
         """
         layers = [PygLinearPass(nn.Linear(dim_input, k),
                                 return_coords_and_edges=True)]
@@ -187,7 +198,7 @@ class SartorrasEGNN(PNNGeometricBase):
                                 tanh=tanh, update_coords=update_coords,
                                 thick_attention=thick_attention,
                                 permutation_invariance=permutation_invariance,
-                                silu_attention=silu_attention,
+                                attention_activation_fn=attention_activation_fn,
                                 node_attention=node_attention))
         if multi_fc:
             fc_layer_dims = ((k, 128), (64, 128), (dim_output, 64))
