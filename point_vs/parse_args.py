@@ -189,8 +189,6 @@ def parse_args():
                         help='Three fully connected layers rather than just '
                              'one to summarise the graph at the end of '
                              'the EGNN')
-    parser.add_argument('--thick_attention', action='store_true',
-                        help='(EGNN) Thicker attention MLP')
     parser.add_argument('--lucid_node_final_act', action='store_true',
                         help='(Lucid) SiLU at the end of node MLPs')
     parser.add_argument('--p_remove_entity', type=float, default=0,

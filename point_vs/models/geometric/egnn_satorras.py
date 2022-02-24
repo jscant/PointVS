@@ -12,7 +12,7 @@ class E_GCL(nn.Module):
     """Modified from https://github.com/vgsatorras/egnn"""
 
     def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d=0,
-                 act_fn=nn.SiLU(), residual=True, attention=False,
+                 act_fn=nn.SiLU(), residual=True, edge_attention=False,
                  normalize=False, coords_agg='mean', tanh=False,
                  graphnorm=False, update_coords=True, thick_attention=False,
                  permutation_invariance=False, node_attention=False,
@@ -20,7 +20,7 @@ class E_GCL(nn.Module):
         super(E_GCL, self).__init__()
         input_edge = input_nf if permutation_invariance else input_nf * 2
         self.residual = residual
-        self.attention = attention
+        self.edge_attention = edge_attention
         self.normalize = normalize
         self.coords_agg = coords_agg
         self.tanh = tanh
@@ -29,6 +29,8 @@ class E_GCL(nn.Module):
         self.permutation_invariance = permutation_invariance
         self.att_val = None
         self.node_attention = node_attention
+        self.node_att_val = None
+        self.intermediate_coords = None
         attention_activation = {
             'sigmoid': nn.Sigmoid,
             'tanh': nn.Tanh,
@@ -59,19 +61,15 @@ class E_GCL(nn.Module):
             nn.Tanh() if tanh else nn.Identity()
         )
 
-        if self.attention:
-            self.att_mlp = nn.Sequential(
-                nn.Linear(
-                    hidden_nf, hidden_nf) if thick_attention else nn.Identity(),
-                attention_activation() if thick_attention else nn.Identity(),
+        if self.edge_attention:
+            self.edge_attention_mlp = nn.Sequential(
                 nn.Linear(hidden_nf, 1),
                 attention_activation())
 
         if self.node_attention:
-            self.node_att_mlp = nn.Sequential(
+            self.node_attention_mlp = nn.Sequential(
                 nn.Linear(hidden_nf, 1),
-                attention_activation()
-            )
+                attention_activation())
 
     def edge_model(self, source, target, radial, edge_attr):
         if self.permutation_invariance:
@@ -83,22 +81,22 @@ class E_GCL(nn.Module):
             inp.append(edge_attr)
         out = torch.cat(inp, dim=1)
         out = self.edge_mlp(out)
-        if self.attention:
-            att_val = self.att_mlp(out)
-            out = out * att_val
-            self.att_val = to_numpy(att_val)
         return out
 
     def node_model(self, x, edge_index, m_ij):
         row, col = edge_index
 
+        if self.edge_attention:
+            att_val = self.edge_attention_mlp(m_ij)
+            m_ij *= att_val
+            self.att_val = to_numpy(att_val)
         agg = unsorted_segment_sum(m_ij, row, num_segments=x.size(0))
         agg = torch.cat([x, agg], dim=1)
 
         # Eq. 6: h_i = phi_h(h_i, m_i)
         out = self.node_mlp(agg)
         if self.node_attention:
-            att_val = self.node_att_mlp(out)
+            att_val = self.node_attention_mlp(out)
             out = out * att_val
             self.node_att_val = to_numpy(att_val)
         if self.residual:
@@ -192,7 +190,7 @@ class SartorrasEGNN(PNNGeometricBase):
                                 edges_in_d=3,
                                 act_fn=act_fn,
                                 residual=residual,
-                                attention=attention,
+                                edge_attention=attention,
                                 normalize=normalize,
                                 graphnorm=graphnorm,
                                 tanh=tanh, update_coords=update_coords,
@@ -204,7 +202,6 @@ class SartorrasEGNN(PNNGeometricBase):
             fc_layer_dims = ((k, 128), (64, 128), (dim_output, 64))
         else:
             fc_layer_dims = ((k, dim_output),)
-
 
         feats_linear_layers = []
         edges_linear_layers = []
