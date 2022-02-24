@@ -5,6 +5,7 @@ from torch_geometric.utils import dropout_adj
 
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase, \
     PygLinearPass, unsorted_segment_sum, unsorted_segment_mean
+from point_vs.utils import to_numpy
 
 
 class E_GCL(nn.Module):
@@ -14,8 +15,8 @@ class E_GCL(nn.Module):
                  act_fn=nn.SiLU(), residual=True, attention=False,
                  normalize=False, coords_agg='mean', tanh=False,
                  graphnorm=False, update_coords=True, thick_attention=False,
-                 permutation_invariance=False, silu_attention=False,
-                 node_attention=False):
+                 permutation_invariance=False, node_attention=False,
+                 attention_activation_fn='sigmoid'):
         super(E_GCL, self).__init__()
         input_edge = input_nf if permutation_invariance else input_nf * 2
         self.residual = residual
@@ -28,6 +29,12 @@ class E_GCL(nn.Module):
         self.permutation_invariance = permutation_invariance
         self.att_val = None
         self.node_attention = node_attention
+        attention_activation = {
+            'sigmoid': nn.Sigmoid,
+            'tanh': nn.Tanh,
+            'relu': nn.ReLU,
+            'silu': nn.SiLU
+        }[attention_activation_fn]
         edge_coords_nf = 1
 
         self.edge_mlp = nn.Sequential(
@@ -56,14 +63,14 @@ class E_GCL(nn.Module):
             self.att_mlp = nn.Sequential(
                 nn.Linear(
                     hidden_nf, hidden_nf) if thick_attention else nn.Identity(),
-                nn.SiLU() if thick_attention else nn.Identity(),
+                attention_activation() if thick_attention else nn.Identity(),
                 nn.Linear(hidden_nf, 1),
-                nn.SiLU() if silu_attention else nn.Sigmoid())
+                attention_activation())
 
         if self.node_attention:
             self.node_att_mlp = nn.Sequential(
                 nn.Linear(hidden_nf, 1),
-                nn.Sigmoid()
+                attention_activation()
             )
 
     def edge_model(self, source, target, radial, edge_attr):
@@ -79,7 +86,7 @@ class E_GCL(nn.Module):
         if self.attention:
             att_val = self.att_mlp(out)
             out = out * att_val
-            self.att_val = att_val
+            self.att_val = to_numpy(att_val)
         return out
 
     def node_model(self, x, edge_index, m_ij):
@@ -93,7 +100,7 @@ class E_GCL(nn.Module):
         if self.node_attention:
             att_val = self.node_att_mlp(out)
             out = out * att_val
-            self.node_att_val = att_val
+            self.node_att_val = to_numpy(att_val)
         if self.residual:
             out = x + out
         return out, agg
@@ -110,6 +117,7 @@ class E_GCL(nn.Module):
         else:
             raise Exception('Wrong coords_agg parameter' % self.coords_agg)
         coord += agg
+        self.intermediate_coords = to_numpy(coord)
         return coord
 
     def coord2radial(self, edge_index, coord):

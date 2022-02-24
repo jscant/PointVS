@@ -221,7 +221,7 @@ if __name__ == '__main__':
         'thick_attention': args.thick_attention,
         'node_final_act': args.lucid_node_final_act,
         'permutation_invariance': args.permutation_invariance,
-        'silu_attention': args.silu_attention,
+        'attention_activation_fn': args.attention_activation_function,
         'node_attention': args.node_attention
     }
 
