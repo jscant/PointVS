@@ -144,12 +144,13 @@ class E_GCL(nn.Module):
 class SartorrasEGNN(PNNGeometricBase):
     def build_net(self, dim_input, k, dim_output,
                   act_fn=nn.SiLU(), num_layers=4, residual=True,
-                  attention=False, normalize=True, tanh=True, dropout=0,
+                  edge_attention=False, normalize=True, tanh=True, dropout=0,
                   graphnorm=True, classify_on_edges=False,
                   classify_on_feats=True, multi_fc=False, update_coords=True,
                   thick_attention=False, permutation_invariance=False,
                   attention_activation_fn='sigmoid',
-                  node_attention=False, **kwargs):
+                  node_attention=False, node_attention_final_only=False,
+                  edge_attention_final_only=False, **kwargs):
         """
         Arguments:
             dim_input: Number of features for 'h' at the input
@@ -159,7 +160,7 @@ class SartorrasEGNN(PNNGeometricBase):
             num_layers: Number of layer for the EGNN
             residual: Use residual connections, we recommend not changing
                 this one
-            attention: Whether using attention or not
+            edge_attention: Whether using attention or not
             normalize: Normalizes the coordinates messages such that:
                 instead of: x^{l+1}_i = x^{l}_i + Σ(x_i - x_j)phi_x(m_ij)
                 we get:     x^{l+1}_i = x^{l}_i + Σ(x_i - x_j)phi_x(
@@ -178,6 +179,8 @@ class SartorrasEGNN(PNNGeometricBase):
             permutation_invariance:
             attention_activation_fn:
             node_attention:
+            node_attention_final_only:
+            edge_attention_final_only:
         """
         layers = [PygLinearPass(nn.Linear(dim_input, k),
                                 return_coords_and_edges=True)]
@@ -187,18 +190,22 @@ class SartorrasEGNN(PNNGeometricBase):
             'We must use either or both of classify_on_feats and ' \
             'classify_on_edges'
         for i in range(0, num_layers):
+            # apply node/edge attention or not?
+            ana = (not node_attention_final_only) or (i == num_layers - 1)
+            aea = (not edge_attention_final_only) or (i == num_layers - 1)
+
             layers.append(E_GCL(k, k, k,
                                 edges_in_d=3,
                                 act_fn=act_fn,
                                 residual=residual,
-                                edge_attention=attention,
+                                edge_attention=edge_attention and aea,
                                 normalize=normalize,
                                 graphnorm=graphnorm,
                                 tanh=tanh, update_coords=update_coords,
                                 thick_attention=thick_attention,
                                 permutation_invariance=permutation_invariance,
                                 attention_activation_fn=attention_activation_fn,
-                                node_attention=node_attention))
+                                node_attention=node_attention and ana))
         if multi_fc:
             fc_layer_dims = ((k, 128), (64, 128), (dim_output, 64))
         else:

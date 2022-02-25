@@ -222,7 +222,9 @@ if __name__ == '__main__':
         'node_final_act': args.lucid_node_final_act,
         'permutation_invariance': args.permutation_invariance,
         'attention_activation_fn': args.attention_activation_function,
-        'node_attention': args.node_attention
+        'node_attention': args.node_attention,
+        'node_attention_final_only': args.node_attention_final_only,
+        'edge_attention_final_only': args.edge_attention_final_only
     }
 
     args_to_record.update(model_kwargs)
