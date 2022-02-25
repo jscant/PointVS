@@ -5,6 +5,7 @@ from torch import nn
 from torch_geometric.nn import global_mean_pool
 
 from point_vs.models.point_neural_network_base import PointNeuralNetworkBase
+from point_vs.utils import to_numpy
 
 
 def unsorted_segment_sum(data, segment_ids, num_segments):
@@ -48,9 +49,11 @@ class PygLinearPass(nn.Module):
 
     def forward(self, h, *args, **kwargs):
         if self.feats_appended_to_coords:
+            self.intermediate_coords = to_numpy(h[:, :3])
             feats = h[:, 3:]
             res = torch.hstack([h[:, :3], self.m(feats)])
         else:
+            self.intermediate_coords = to_numpy(kwargs['coord'])
             res = self.m(h)
         if self.return_coords_and_edges:
             return res, kwargs['coord'], kwargs['edge_attr'], kwargs.get(
