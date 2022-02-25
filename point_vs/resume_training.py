@@ -36,7 +36,8 @@ if __name__ == '__main__':
     ckpt = find_latest_checkpoint(base_path)
     print('Found checkpoint:', ckpt)
 
-    model, model_kwargs, cmd_line_args = load_model(ckpt, silent=False)
+    model, model_kwargs, cmd_line_args = load_model(
+        ckpt, silent=False, init_path=True)
     model.train()
 
     if cmd_line_args['model'] in ('lucid', 'egnn'):

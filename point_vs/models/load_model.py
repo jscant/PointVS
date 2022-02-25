@@ -9,7 +9,8 @@ from point_vs.models.vanilla.lie_transformer import EquivariantTransformer
 from point_vs.utils import load_yaml
 
 
-def load_model(weights_file, silent=True, fetch_args_only=False):
+def load_model(
+        weights_file, silent=True, fetch_args_only=False, init_path=False):
     model_path = Path(weights_file).expanduser()
     model_kwargs = load_yaml(model_path.parents[1] / 'model_kwargs.yaml')
     model_kwargs['group'] = SE3(0.2)
@@ -26,8 +27,9 @@ def load_model(weights_file, silent=True, fetch_args_only=False):
         'lietransformer': EquivariantTransformer
     }
 
+    save_path = Path(cmd_line_args['save_path']) if init_path else Path()
     model_class = model_class[model_type]
-    model = model_class(Path(), learning_rate=cmd_line_args['learning_rate'],
+    model = model_class(save_path, learning_rate=cmd_line_args['learning_rate'],
                         weight_decay=cmd_line_args['weight_decay'],
                         use_1cycle=cmd_line_args['use_1cycle'],
                         warm_restarts=cmd_line_args['warm_restarts'],
