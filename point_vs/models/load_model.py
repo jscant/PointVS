@@ -27,7 +27,15 @@ def load_model(
         'lietransformer': EquivariantTransformer
     }
 
-    save_path = Path(cmd_line_args['save_path']) if init_path else Path()
+    if init_path:
+        wandb_project = cmd_line_args['wandb_project']
+        wandb_run = cmd_line_args['wandb_run']
+        save_path = Path(cmd_line_args['save_path'])
+        if wandb_project is not None and wandb_run is not None:
+            save_path = Path(save_path, wandb_project, wandb_run)
+    else:
+        save_path = Path()
+        
     model_class = model_class[model_type]
     model = model_class(save_path, learning_rate=cmd_line_args['learning_rate'],
                         weight_decay=cmd_line_args['weight_decay'],
