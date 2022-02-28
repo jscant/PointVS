@@ -211,4 +211,10 @@ def parse_args():
     parser.add_argument('--edge_attention_final_only', action='store_true',
                         help='Only apply attention mechanism to edges in the '
                              'final layer')
+    parser.add_argument('--node_attention_first_only', action='store_true',
+                        help='Only apply attention mechanism to nodes in the '
+                             'first layer')
+    parser.add_argument('--edge_attention_first_only', action='store_true',
+                        help='Only apply attention mechanism to edges in the '
+                             'first layer')
     return parser.parse_args()

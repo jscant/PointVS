@@ -14,7 +14,7 @@ class E_GCL(nn.Module):
     def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d=0,
                  act_fn=nn.SiLU(), residual=True, edge_attention=False,
                  normalize=False, coords_agg='mean', tanh=False,
-                 graphnorm=False, update_coords=True, thick_attention=False,
+                 graphnorm=False, update_coords=True,
                  permutation_invariance=False, node_attention=False,
                  attention_activation_fn='sigmoid'):
         super(E_GCL, self).__init__()
@@ -147,10 +147,13 @@ class SartorrasEGNN(PNNGeometricBase):
                   edge_attention=False, normalize=True, tanh=True, dropout=0,
                   graphnorm=True, classify_on_edges=False,
                   classify_on_feats=True, multi_fc=False, update_coords=True,
-                  thick_attention=False, permutation_invariance=False,
+                  permutation_invariance=False,
                   attention_activation_fn='sigmoid',
                   node_attention=False, node_attention_final_only=False,
-                  edge_attention_final_only=False, **kwargs):
+                  edge_attention_final_only=False,
+                  node_attention_first_only=False,
+                  edge_attention_first_only=False,
+                  **kwargs):
         """
         Arguments:
             dim_input: Number of features for 'h' at the input
@@ -175,12 +178,13 @@ class SartorrasEGNN(PNNGeometricBase):
             classify_on_feats:
             multi_fc:
             update_coords:
-            thick_attention:
             permutation_invariance:
             attention_activation_fn:
             node_attention:
             node_attention_final_only:
             edge_attention_final_only:
+            node_attention_first_only:
+            edge_attention_first_only:
         """
         layers = [PygLinearPass(nn.Linear(dim_input, k),
                                 return_coords_and_edges=True)]
@@ -194,18 +198,23 @@ class SartorrasEGNN(PNNGeometricBase):
             ana = (not node_attention_final_only) or (i == num_layers - 1)
             aea = (not edge_attention_final_only) or (i == num_layers - 1)
 
+            ana = ana or ((not node_attention_first_only) or (i == 0))
+            aea = aea or ((not edge_attention_first_only) or (i == 0))
+
+            ana = ana and node_attention
+            aea = aea and edge_attention
+
             layers.append(E_GCL(k, k, k,
                                 edges_in_d=3,
                                 act_fn=act_fn,
                                 residual=residual,
-                                edge_attention=edge_attention and aea,
+                                edge_attention=aea,
                                 normalize=normalize,
                                 graphnorm=graphnorm,
                                 tanh=tanh, update_coords=update_coords,
-                                thick_attention=thick_attention,
                                 permutation_invariance=permutation_invariance,
                                 attention_activation_fn=attention_activation_fn,
-                                node_attention=node_attention and ana))
+                                node_attention=ana))
         if multi_fc:
             fc_layer_dims = ((k, 128), (64, 128), (dim_output, 64))
         else:
