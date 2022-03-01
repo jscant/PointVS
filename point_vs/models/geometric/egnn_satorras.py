@@ -195,26 +195,43 @@ class SartorrasEGNN(PNNGeometricBase):
             'classify_on_edges'
         for i in range(0, num_layers):
             # apply node/edge attention or not?
-            ana = (not node_attention_final_only) or (i == num_layers - 1)
-            aea = (not edge_attention_final_only) or (i == num_layers - 1)
+            if node_attention:
+                if not node_attention_first_only and not \
+                        node_attention_final_only:
+                    apply_node_attention = True
+                elif node_attention_first_only and i == 0:
+                    apply_node_attention = True
+                elif node_attention_final_only and i == num_layers - 1:
+                    apply_node_attention = True
+                else:
+                    apply_node_attention = False
+            else:
+                apply_node_attention = False
 
-            ana = ana or ((not node_attention_first_only) or (i == 0))
-            aea = aea or ((not edge_attention_first_only) or (i == 0))
-
-            ana = ana and node_attention
-            aea = aea and edge_attention
+            if edge_attention:
+                if not edge_attention_first_only and not \
+                        edge_attention_final_only:
+                    apply_edge_attention = True
+                elif edge_attention_first_only and i == 0:
+                    apply_edge_attention = True
+                elif edge_attention_final_only and i == num_layers - 1:
+                    apply_edge_attention = True
+                else:
+                    apply_edge_attention = False
+            else:
+                apply_edge_attention = False
 
             layers.append(E_GCL(k, k, k,
                                 edges_in_d=3,
                                 act_fn=act_fn,
                                 residual=residual,
-                                edge_attention=aea,
+                                edge_attention=apply_edge_attention,
                                 normalize=normalize,
                                 graphnorm=graphnorm,
                                 tanh=tanh, update_coords=update_coords,
                                 permutation_invariance=permutation_invariance,
                                 attention_activation_fn=attention_activation_fn,
-                                node_attention=ana))
+                                node_attention=apply_node_attention))
         if multi_fc:
             fc_layer_dims = ((k, 128), (64, 128), (dim_output, 64))
         else:
