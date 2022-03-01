@@ -62,12 +62,12 @@ class E_GCL(nn.Module):
         )
 
         if self.edge_attention:
-            self.edge_attention_mlp = nn.Sequential(
+            self.att_mlp = nn.Sequential(
                 nn.Linear(hidden_nf, 1),
                 attention_activation())
 
         if self.node_attention:
-            self.node_attention_mlp = nn.Sequential(
+            self.node_att_mlp = nn.Sequential(
                 nn.Linear(hidden_nf, 1),
                 attention_activation())
 
@@ -87,7 +87,7 @@ class E_GCL(nn.Module):
         row, col = edge_index
 
         if self.edge_attention:
-            att_val = self.edge_attention_mlp(m_ij)
+            att_val = self.att_mlp(m_ij)
             self.att_val = to_numpy(att_val)
         else:
             att_val = 1
@@ -97,7 +97,7 @@ class E_GCL(nn.Module):
         # Eq. 6: h_i = phi_h(h_i, m_i)
         out = self.node_mlp(agg)
         if self.node_attention:
-            att_val = self.node_attention_mlp(out)
+            att_val = self.node_att_mlp(out)
             out = out * att_val
             self.node_att_val = to_numpy(att_val)
         if self.residual:
