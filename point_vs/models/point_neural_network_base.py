@@ -1,6 +1,7 @@
 import math
 import time
 from abc import abstractmethod
+from collections import OrderedDict
 from pathlib import Path
 
 import numpy as np
@@ -64,6 +65,7 @@ class PointNeuralNetworkBase(nn.Module):
         self.decoy_mean_pred, self.active_mean_pred = 0.5, 0.5
         self.log_interval = 10
         self.scheduler = None  # will change this in training preamble
+        self.best_top1 = 0
 
         if not silent:
             with open(save_path / 'model_kwargs.yaml', 'w') as f:
@@ -172,11 +174,10 @@ class PointNeuralNetworkBase(nn.Module):
         if top1_on_end:
             try:
                 top_1 = top_n(predictions_file)
+                self.best_top1 = max(top_1, self.best_top1)
                 wandb.log({
-                    'Validation Top1 at end of epoch {}'.format(self.epoch + 1):
-                        top_1,
-                    'Validation Top1'.format(self.epoch + 1):
-                        top_1,
+                    'Validation Top1': top_1,
+                    'Best validation Top1': self.best_top1,
                     'Epoch': self.epoch + 1
                 })
             except Exception:
@@ -340,21 +341,50 @@ class PointNeuralNetworkBase(nn.Module):
             'optimiser_state_dict': self.optimiser.state_dict()
         }, save_path)
 
+    @staticmethod
+    def _transform_names(d):
+        """For backwards compatability with some older trained models."""
+        new_d = OrderedDict()
+        for key, value in d.items():
+            new_d[key.replace('edge_attention_mlp', 'att_mlp').replace(
+                'node_attention_mlp', 'node_att_mlp')] = value
+        return new_d
+
     def load_weights(self, checkpoint_file, silent=False):
+        """All this crap is required because I renamed some things ages ago."""
         checkpoint = torch.load(str(Path(checkpoint_file).expanduser()))
-        self.load_state_dict(checkpoint['model_state_dict'])
+        rename = False
+        try:
+            self.load_state_dict(checkpoint['model_state_dict'])
+        except RuntimeError:
+            for layer in self.layers:
+                if hasattr(layer, 'att_mlp'):
+                    layer.att_mlp = nn.Sequential(
+                        nn.Identity(),  # Compatability
+                        nn.Identity(),  # Compatability
+                        nn.Linear(layer.hidden_nf, 1),
+                        layer.attention_activation())
+            try:
+                self.load_state_dict(checkpoint['model_state_dict'])
+            except RuntimeError:
+                rename = True
+                self.load_state_dict(self._transform_names(
+                    checkpoint['model_state_dict']))
         self.optimiser.load_state_dict(checkpoint['optimiser_state_dict'])
         self.epoch = checkpoint['epoch']
         if not self.epoch:
             self.epoch += 1
         self.losses = checkpoint['losses']
+        if rename:
+            for layer in self.layers:
+                if hasattr(layer, 'att_mlp'):
+                    layer.att_mlp = layer.att_mlp
         if not silent:
             try:
                 pth = checkpoint_file.relative_to(expand_path(Path('.')))
             except ValueError:
                 pth = checkpoint_file
             print('Sucesfully loaded weights from', pth)
-
 
     def save_loss(self, save_interval):
         """Save the loss information to disk.
