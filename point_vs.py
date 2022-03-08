@@ -259,12 +259,14 @@ if __name__ == '__main__':
         model = SiameseNeuralNetwork(
             model_class, save_path, args.learning_rate, args.weight_decay,
             wandb_project=args.wandb_project, use_1cycle=args.use_1cycle,
-            warm_restarts=args.warm_restarts, **model_kwargs)
+            warm_restarts=args.warm_restarts,
+            only_save_best_models=args.only_save_best_models **model_kwargs)
     else:
         model = model_class(
             save_path, args.learning_rate, args.weight_decay,
             wandb_project=args.wandb_project, use_1cycle=args.use_1cycle,
-            warm_restarts=args.warm_restarts, **model_kwargs)
+            warm_restarts=args.warm_restarts,
+            only_save_best_models=args.only_save_best_models **model_kwargs)
 
     if args.load_weights is not None:
         model.load_weights(args.load_weights)

@@ -217,4 +217,7 @@ def parse_args():
     parser.add_argument('--edge_attention_first_only', action='store_true',
                         help='Only apply attention mechanism to edges in the '
                              'first layer')
+    parser.add_argument('--only_save_best_models', action='store_true',
+                        help='Only save models which improve upon previous '
+                             'models')
     return parser.parse_args()

@@ -21,7 +21,8 @@ class PointNeuralNetworkBase(nn.Module):
 
     def __init__(self, save_path, learning_rate, weight_decay=None,
                  wandb_project=None, wandb_run=None, silent=False,
-                 use_1cycle=False, warm_restarts=False, **model_kwargs):
+                 use_1cycle=False, warm_restarts=False,
+                 only_save_best_models=False, **model_kwargs):
         super().__init__()
         self.batch = 0
         self.epoch = 0
@@ -31,6 +32,7 @@ class PointNeuralNetworkBase(nn.Module):
         self.edges_linear_layers = None
         self.save_path = Path(save_path).expanduser()
         self.linear_gap = model_kwargs.get('linear_gap', True)
+        self.only_save_best_models = only_save_best_models
         if not silent:
             mkdir(self.save_path)
         self.predictions_file = self.save_path / 'predictions.txt'
@@ -174,7 +176,11 @@ class PointNeuralNetworkBase(nn.Module):
         if top1_on_end:
             try:
                 top_1 = top_n(predictions_file)
-                self.best_top1 = max(top_1, self.best_top1)
+                if top_1 > self.best_top1:
+                    self.best_top1 = top_1
+                    best = True
+                else:
+                    best = False
                 wandb.log({
                     'Validation Top1': top_1,
                     'Best validation Top1': self.best_top1,
@@ -182,6 +188,9 @@ class PointNeuralNetworkBase(nn.Module):
                 })
             except Exception:
                 pass  # wandb has not been initialised so ignore
+            if self.only_save_best_models and not best:
+                return False
+        return True
 
     def get_loss(self, y_true, y_pred):
         return self.cross_entropy(y_pred, y_true.cuda())
@@ -304,16 +313,19 @@ class PointNeuralNetworkBase(nn.Module):
 
     def on_epoch_end(self, epoch_end_validation_set, epochs, top1_on_end):
         # save after each epoch
-        self.save()
+        if not self.only_save_best_models:
+            self.save()
         # end of epoch validation if requested
         if epoch_end_validation_set is not None and self.epoch < epochs - 1:
             epoch_end_predictions_fname = Path(
                 self.predictions_file.parent,
                 'predictions_epoch_{}.txt'.format(self.epoch + 1))
-            self.val(
-                epoch_end_validation_set,
-                predictions_file=epoch_end_predictions_fname,
-                top1_on_end=top1_on_end)
+            best = self.val(
+                    epoch_end_validation_set,
+                    predictions_file=epoch_end_predictions_fname,
+                    top1_on_end=top1_on_end)
+            if self.only_save_best_models and best:
+                self.save()
 
     def write_predictions(self, predictions_str, predictions_file, data_loader):
         # Periodically write predictions to disk

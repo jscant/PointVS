@@ -105,7 +105,9 @@ if __name__ == '__main__':
     if epochs:
         model.train_model(
             train_dl, epochs=epochs, top1_on_end=cmd_line_args['top1'],
-            epoch_end_validation_set=test_dl)
+            epoch_end_validation_set=test_dl,
+            only_save_best_models=cmd_line_args.get(
+                'only_save_best_models', False))
 
     model = model.eval()
     if test_dl is not None:
