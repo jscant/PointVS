@@ -74,7 +74,8 @@ class PointNeuralNetworkBase(nn.Module):
                 yaml.dump(model_kwargs, f)
 
         pc = self.param_count
-        print('Model parameters:', pc)
+        if not silent:
+            print('Model parameters:', pc)
         if self.wandb_project is not None:
             wandb.log({'Parameters': pc})
 
