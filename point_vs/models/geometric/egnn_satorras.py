@@ -138,6 +138,8 @@ class E_GCL(nn.Module):
         radial, coord_diff = self.coord2radial(edge_index, coord)
 
         edge_feat = self.edge_model(h[row], h[col], radial, edge_attr)
+        if self.residual and edge_messages is not None:
+            edge_feat = edge_feat + edge_messages
         coord = self.coord_model(coord, edge_index, coord_diff, edge_feat)
         h, agg = self.node_model(h, edge_index, edge_feat)
 
@@ -263,11 +265,7 @@ class SartorrasEGNN(PNNGeometricBase):
                 training=self.training)
         edge_messages = None
         for i in self.layers:
-            feats, coords, edge_attributes, edge_messages_ = i(
+            feats, coords, edge_attributes, edge_messages = i(
                 h=feats, edge_index=edges, coord=coords,
                 edge_attr=edge_attributes, edge_messages=edge_messages)
-            if edge_messages is not None and self.residual:
-                edge_messages += edge_messages_
-            else:
-                edge_messages = edge_messages_
         return feats, edge_messages
