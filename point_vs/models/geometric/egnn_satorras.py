@@ -31,12 +31,14 @@ class E_GCL(nn.Module):
         self.node_attention = node_attention
         self.node_att_val = None
         self.intermediate_coords = None
+        self.hidden_nf = hidden_nf
         attention_activation = {
             'sigmoid': nn.Sigmoid,
             'tanh': nn.Tanh,
             'relu': nn.ReLU,
             'silu': nn.SiLU
         }[attention_activation_fn]
+        self.attention_activation = attention_activation
         edge_coords_nf = 1
 
         self.edge_mlp = nn.Sequential(
