@@ -75,10 +75,9 @@ class E_GCL(nn.Module):
 
     def edge_model(self, source, target, radial, edge_attr):
         if self.permutation_invariance:
-            inp = [torch.add(source, target)]
+            inp = [torch.add(source, target), radial]
         else:
-            inp = [source, target]
-        inp.append(radial)
+            inp = [source, target, radial]
         if edge_attr is not None:
             inp.append(edge_attr)
         out = torch.cat(inp, dim=1)
@@ -91,9 +90,11 @@ class E_GCL(nn.Module):
         if self.edge_attention:
             att_val = self.att_mlp(m_ij)
             self.att_val = to_numpy(att_val)
+            agg = unsorted_segment_sum(
+                att_val * m_ij, row, num_segments=x.size(0))
         else:
-            att_val = 1
-        agg = unsorted_segment_sum(att_val * m_ij, row, num_segments=x.size(0))
+            agg = unsorted_segment_sum(m_ij, row, num_segments=x.size(0))
+
         agg = torch.cat([x, agg], dim=1)
 
         # Eq. 6: h_i = phi_h(h_i, m_i)
@@ -192,6 +193,8 @@ class SartorrasEGNN(PNNGeometricBase):
                                 return_coords_and_edges=True)]
         self.n_layers = num_layers
         self.dropout_p = dropout
+        self.residual = residual
+
         assert classify_on_feats or classify_on_edges, \
             'We must use either or both of classify_on_feats and ' \
             'classify_on_edges'
@@ -260,7 +263,11 @@ class SartorrasEGNN(PNNGeometricBase):
                 training=self.training)
         edge_messages = None
         for i in self.layers:
-            feats, coords, edge_attributes, edge_messages = i(
+            feats, coords, edge_attributes, edge_messages_ = i(
                 h=feats, edge_index=edges, coord=coords,
                 edge_attr=edge_attributes, edge_messages=edge_messages)
+            if edge_messages is not None and self.residual:
+                edge_messages += edge_messages_
+            else:
+                edge_messages = edge_messages_
         return feats, edge_messages
