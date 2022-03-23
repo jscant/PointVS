@@ -212,6 +212,7 @@ if __name__ == '__main__':
         'tanh': args.egnn_tanh,
         'normalize': args.egnn_normalise,
         'residual': args.egnn_residual,
+        'edge_residual': args.egnn_edge_residual,
         'linear_gap': args.linear_gap,
         'graphnorm': args.graphnorm,
         'classify_on_edges': args.egnn_classify_on_edges,

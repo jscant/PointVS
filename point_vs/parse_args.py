@@ -220,4 +220,7 @@ def parse_args():
     parser.add_argument('--only_save_best_models', action='store_true',
                         help='Only save models which improve upon previous '
                              'models')
+    parser.add_argument('--egnn_edge_residual', action='store_true',
+                        help='Residual connections for individual messages '
+                             '(EGNN)')
     return parser.parse_args()

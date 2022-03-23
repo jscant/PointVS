@@ -12,14 +12,15 @@ class E_GCL(nn.Module):
     """Modified from https://github.com/vgsatorras/egnn"""
 
     def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d=0,
-                 act_fn=nn.SiLU(), residual=True, edge_attention=False,
-                 normalize=False, coords_agg='mean', tanh=False,
-                 graphnorm=False, update_coords=True,
+                 act_fn=nn.SiLU(), residual=True, edge_residual=False,
+                 edge_attention=False, normalize=False, coords_agg='mean',
+                 tanh=False, graphnorm=False, update_coords=True,
                  permutation_invariance=False, node_attention=False,
                  attention_activation_fn='sigmoid'):
         super(E_GCL, self).__init__()
         input_edge = input_nf if permutation_invariance else input_nf * 2
         self.residual = residual
+        self.edge_residual = edge_residual
         self.edge_attention = edge_attention
         self.normalize = normalize
         self.coords_agg = coords_agg
@@ -138,7 +139,7 @@ class E_GCL(nn.Module):
         radial, coord_diff = self.coord2radial(edge_index, coord)
 
         edge_feat = self.edge_model(h[row], h[col], radial, edge_attr)
-        if self.residual and edge_messages is not None:
+        if self.edge_residual and edge_messages is not None:
             edge_feat = edge_feat + edge_messages
         coord = self.coord_model(coord, edge_index, coord_diff, edge_feat)
         h, agg = self.node_model(h, edge_index, edge_feat)
