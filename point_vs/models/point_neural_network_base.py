@@ -288,7 +288,10 @@ class PointNeuralNetworkBase(nn.Module):
         else:
             wandb_update_dict = {
                 'Time remaining (validation)': eta,
-                'Batch': self.batch + 1,
+                'Examples seen (validation)':
+                    self.epoch * len(
+                        data_loader) * data_loader.batch_size +
+                    data_loader.batch_size * self.batch,
                 'Mean active prediction (validation)':
                     self.active_mean_pred,
                 'Mean decoy prediction (validation)':
