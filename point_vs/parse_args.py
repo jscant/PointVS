@@ -223,4 +223,9 @@ def parse_args():
     parser.add_argument('--egnn_edge_residual', action='store_true',
                         help='Residual connections for individual messages '
                              '(EGNN)')
+    parser.add_argument('--gated_residual', action='store_true',
+                        help='Residual connections are gated by a single '
+                             'learnable parameter (EGNN)')
+    parser.add_argument('--rezero', action='store_true',
+                        help='ReZero residual connections (EGNN)')
     return parser.parse_args()

@@ -227,7 +227,9 @@ if __name__ == '__main__':
         'node_attention_final_only': args.node_attention_final_only,
         'edge_attention_final_only': args.edge_attention_final_only,
         'node_attention_first_only': args.node_attention_first_only,
-        'edge_attention_first_only': args.edge_attention_first_only
+        'edge_attention_first_only': args.edge_attention_first_only,
+        'gated_residual': args.gated_residual,
+        'rezero': args.rezero
     }
 
     args_to_record.update(model_kwargs)

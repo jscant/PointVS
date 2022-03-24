@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from torch_geometric.nn.norm import GraphNorm
 from torch_geometric.utils import dropout_adj
+from torch.nn import functional as F
 
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase, \
     PygLinearPass, unsorted_segment_sum, unsorted_segment_mean
@@ -16,9 +17,14 @@ class E_GCL(nn.Module):
                  edge_attention=False, normalize=False, coords_agg='mean',
                  tanh=False, graphnorm=False, update_coords=True,
                  permutation_invariance=False, node_attention=False,
-                 attention_activation_fn='sigmoid'):
+                 attention_activation_fn='sigmoid',
+                 gated_residual=False, rezero=False):
+        assert not (gated_residual and rezero), 'gated_residual and rezero ' \
+                                                'are incompatible'
         super(E_GCL, self).__init__()
         input_edge = input_nf if permutation_invariance else input_nf * 2
+        self.gated_residual = gated_residual
+        self.rezero = rezero
         self.residual = residual
         self.edge_residual = edge_residual
         self.edge_attention = edge_attention
@@ -74,6 +80,21 @@ class E_GCL(nn.Module):
                 nn.Linear(hidden_nf, 1),
                 attention_activation())
 
+        if self.rezero:
+            if self.edge_residual:
+                self.edge_gate_parameter = nn.parameter.Parameter(
+                    torch.zeros(1, ), requires_grad=True)
+            if self.residual:
+                self.node_gate_parameter = nn.parameter.Parameter(
+                    torch.zeros(1, ), requires_grad=True)
+        elif self.gated_residual:
+            if self.edge_residual:
+                self.edge_gate_parameter = nn.parameter.Parameter(
+                    0.5 * torch.ones(1, ), requires_grad=True)
+            if self.residual:
+                self.node_gate_parameter = nn.parameter.Parameter(
+                    0.5 * torch.ones(1, ), requires_grad=True)
+
     def edge_model(self, source, target, radial, edge_attr):
         if self.permutation_invariance:
             inp = [torch.add(source, target), radial]
@@ -105,7 +126,13 @@ class E_GCL(nn.Module):
             out = out * att_val
             self.node_att_val = to_numpy(att_val)
         if self.residual:
-            out = x + out
+            if self.rezero:
+                out = x + self.node_gate_parameter * out
+            elif self.gated_residual:
+                gate_val = F.relu(self.node_gate_parameter)
+                out = gate_val * out + (1 - gate_val) * x
+            else:
+                out = x + out
         return out, agg
 
     def coord_model(self, coord, edge_index, coord_diff, edge_feat):
@@ -140,7 +167,14 @@ class E_GCL(nn.Module):
 
         edge_feat = self.edge_model(h[row], h[col], radial, edge_attr)
         if self.edge_residual and edge_messages is not None:
-            edge_feat = edge_feat + edge_messages
+            if self.rezero:
+                edge_feat = edge_messages + self.edge_gate_parameter * edge_feat
+            elif self.gated_residual:
+                gate_val = F.relu(self.edge_gate_parameter)
+                edge_feat = gate_val * edge_feat + (
+                        1 - gate_val) * edge_messages
+            else:
+                edge_feat = edge_feat + edge_messages
         coord = self.coord_model(coord, edge_index, coord_diff, edge_feat)
         h, agg = self.node_model(h, edge_index, edge_feat)
 
@@ -159,7 +193,7 @@ class SartorrasEGNN(PNNGeometricBase):
                   edge_attention_final_only=False,
                   node_attention_first_only=False,
                   edge_attention_first_only=False,
-                  **kwargs):
+                  gated_residual=False, rezero=False, **kwargs):
         """
         Arguments:
             dim_input: Number of features for 'h' at the input
@@ -199,10 +233,14 @@ class SartorrasEGNN(PNNGeometricBase):
         self.dropout_p = dropout
         self.residual = residual
         self.edge_residual = edge_residual
+        self.gated_residual = gated_residual
+        self.rezero = rezero
 
         assert classify_on_feats or classify_on_edges, \
             'We must use either or both of classify_on_feats and ' \
             'classify_on_edges'
+        assert not (gated_residual and rezero), \
+            'gated_residual and rezero are incompatible'
         for i in range(0, num_layers):
             # apply node/edge attention or not?
             if node_attention:
@@ -242,7 +280,9 @@ class SartorrasEGNN(PNNGeometricBase):
                                 permutation_invariance=permutation_invariance,
                                 attention_activation_fn=attention_activation_fn,
                                 node_attention=apply_node_attention,
-                                edge_residual=edge_residual))
+                                edge_residual=edge_residual,
+                                gated_residual=gated_residual,
+                                rezero=rezero))
         if multi_fc:
             fc_layer_dims = ((k, 128), (64, 128), (dim_output, 64))
         else:
