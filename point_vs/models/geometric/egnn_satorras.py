@@ -150,8 +150,8 @@ class E_GCL(nn.Module):
 class SartorrasEGNN(PNNGeometricBase):
     def build_net(self, dim_input, k, dim_output,
                   act_fn=nn.SiLU(), num_layers=4, residual=True,
-                  edge_attention=False, normalize=True, tanh=True, dropout=0,
-                  graphnorm=True, classify_on_edges=False,
+                  edge_residual=False, edge_attention=False, normalize=True,
+                  tanh=True, dropout=0, graphnorm=True, classify_on_edges=False,
                   classify_on_feats=True, multi_fc=False, update_coords=True,
                   permutation_invariance=False,
                   attention_activation_fn='sigmoid',
@@ -169,6 +169,7 @@ class SartorrasEGNN(PNNGeometricBase):
             num_layers: Number of layer for the EGNN
             residual: Use residual connections, we recommend not changing
                 this one
+            edge_residual: Use residual connections for individual messages
             edge_attention: Whether using attention or not
             normalize: Normalizes the coordinates messages such that:
                 instead of: x^{l+1}_i = x^{l}_i + Σ(x_i - x_j)phi_x(m_ij)
@@ -197,6 +198,7 @@ class SartorrasEGNN(PNNGeometricBase):
         self.n_layers = num_layers
         self.dropout_p = dropout
         self.residual = residual
+        self.edge_residual = edge_residual
 
         assert classify_on_feats or classify_on_edges, \
             'We must use either or both of classify_on_feats and ' \
@@ -239,7 +241,8 @@ class SartorrasEGNN(PNNGeometricBase):
                                 tanh=tanh, update_coords=update_coords,
                                 permutation_invariance=permutation_invariance,
                                 attention_activation_fn=attention_activation_fn,
-                                node_attention=apply_node_attention))
+                                node_attention=apply_node_attention,
+                                edge_residual=edge_residual))
         if multi_fc:
             fc_layer_dims = ((k, 128), (64, 128), (dim_output, 64))
         else:
