@@ -225,7 +225,11 @@ def parse_args():
                              '(EGNN)')
     parser.add_argument('--gated_residual', action='store_true',
                         help='Residual connections are gated by a single '
-                             'learnable parameter (EGNN)')
+                             'learnable parameter (EGNN), see '
+                             'home.ttic.edu/~savarese/savarese_files/Residual_Gates.pdf')
     parser.add_argument('--rezero', action='store_true',
-                        help='ReZero residual connections (EGNN)')
+                        help='ReZero residual connections (EGNN), see '
+                             'arxiv.org/pdf/2003.04887.pdf')
+    parser.add_argument('--extended_atom_types', action='store_true',
+                        help='18 atom types rather than 10')
     return parser.parse_args()

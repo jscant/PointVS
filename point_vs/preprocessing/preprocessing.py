@@ -248,7 +248,7 @@ def centre_on_ligand(struct):
     return struct
 
 
-def concat_structs(rec, lig, min_lig_rotation=0, parsers=None):
+def concat_structs(rec, lig, min_lig_rotation=0, parsers=None, extended=False):
     """Concatenate the receptor and ligand parquet structures."""
     min_lig_rotation = np.pi * min_lig_rotation / 180
 
@@ -256,8 +256,10 @@ def concat_structs(rec, lig, min_lig_rotation=0, parsers=None):
         lig_struct = pd.read_parquet(lig)
         rec_struct = pd.read_parquet(rec)
     else:
-        lig_struct = parsers[0].file_to_parquets(lig, add_polar_hydrogens=True)
-        rec_struct = parsers[1].file_to_parquets(rec, add_polar_hydrogens=True)
+        lig_struct = parsers[0].file_to_parquets(
+            lig, add_polar_hydrogens=True, extended=extended)
+        rec_struct = parsers[1].file_to_parquets(
+            rec, add_polar_hydrogens=True, extended=extended)
 
     rec_struct.types += 12
 

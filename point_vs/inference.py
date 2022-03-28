@@ -80,7 +80,9 @@ if __name__ == '__main__':
         edge_radius=cmd_line_args['edge_radius'],
         estimate_bonds=cmd_line_args.get('estimate_bonds', False),
         prune=cmd_line_args.get('prune', False),
-        rot=False, mode='val', fname_suffix=cmd_line_args['input_suffix'])
+        rot=False, mode='val', fname_suffix=cmd_line_args['input_suffix'],
+        extended_atom_types=cmd_line_args.get('extended_atom_types', False)
+    )
 
     args_to_record = vars(args)
 

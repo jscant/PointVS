@@ -59,7 +59,7 @@ class StructuralInteractionParser(StructuralFileParser):
     (some code modified from Constantin Schneider, OPIG)
     """
 
-    def mol_calculate_interactions(self, mol, pl_interaction):
+    def mol_calculate_interactions(self, mol, pl_interaction, extended=False):
         """Return dataframe with interactions from plip mol object"""
 
         mol.protcomplex.OBMol.AddHydrogens()
@@ -101,13 +101,14 @@ class StructuralInteractionParser(StructuralFileParser):
         })
 
         return self.featurise_interaction(
-            mol, interaction_info, all_ligand_coords)
+            mol, interaction_info, all_ligand_coords, extended=extended)
 
     def featurise_interaction(self, mol, interaction_dict, all_ligand_coords,
-                              include_noncovalent_bonds=True):
+                              include_noncovalent_bonds=True, extended=False):
         """Return dataframe with interactions from one particular plip site."""
         xs, ys, zs, types, atomic_nums, bp = self.get_coords_and_types_info(
-            mol.atoms.values(), all_ligand_coords, add_polar_hydrogens=True)
+            mol.atoms.values(), all_ligand_coords, add_polar_hydrogens=True,
+            extended=extended)
 
         xs = np.array(xs, dtype=float)
         ys = np.array(ys, dtype=float)

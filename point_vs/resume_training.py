@@ -19,6 +19,8 @@ def find_latest_checkpoint(root):
         if idx > max_epoch:
             res = fname
             max_epoch = idx
+    if res is None:
+        raise RuntimeError('Could not find saved model in', root)
     return res
 
 
@@ -62,7 +64,8 @@ if __name__ == '__main__':
         edge_radius=cmd_line_args['edge_radius'],
         estimate_bonds=cmd_line_args.get('estimate_bonds', False),
         prune=cmd_line_args.get('prune', False),
-        p_remove_entity=cmd_line_args.get('p_remove_entity', 0)
+        p_remove_entity=cmd_line_args.get('p_remove_entity', 0),
+        extended_atom_types=cmd_line_args.get('extended_atom_types', False)
     )
 
     if cmd_line_args['test_data_root'] is not None:
@@ -78,7 +81,8 @@ if __name__ == '__main__':
             edge_radius=cmd_line_args['edge_radius'],
             estimate_bonds=cmd_line_args.get('estimate_bonds', False),
             prune=cmd_line_args.get('prune', False),
-            rot=False, mode='val', fname_suffix=cmd_line_args['input_suffix'])
+            rot=False, mode='val', fname_suffix=cmd_line_args['input_suffix'],
+            extended_atom_types=cmd_line_args.get('extended_atom_types', False))
     else:
         test_dl = None
 

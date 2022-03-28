@@ -28,7 +28,8 @@ class PointCloudDataset(torch.utils.data.Dataset):
             augmented_active_min_angle=90, max_active_rms_distance=None,
             min_inactive_rms_distance=None, fname_suffix='parquet',
             types_fname=None, edge_radius=None, estimate_bonds=False,
-            prune=False, bp=None, p_remove_entity=0, **kwargs):
+            prune=False, bp=None, p_remove_entity=0, extended_atom_types=False,
+            **kwargs):
         """Initialise dataset.
 
         Arguments:
@@ -70,7 +71,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
         self.prune = prune
         self.bp = bp
         self.edge_radius = edge_radius
-        self.p_remove_entity=p_remove_entity
+        self.p_remove_entity = p_remove_entity
 
         self.fname_suffix = fname_suffix
         if not self.base_path.exists():
@@ -203,9 +204,9 @@ class PointCloudDataset(torch.utils.data.Dataset):
             self.atomic_number_to_index.update(atomic_number_to_index)
 
         elif polar_hydrogens:
-            self.max_feature_id = 11  # FID = 10 if polar hydrogen
+            self.max_feature_id = 11 + 8 * extended_atom_types
         else:
-            self.max_feature_id = 10  # No polar hydrogens
+            self.max_feature_id = 10 + 8 * extended_atom_types  # No polar Hs
 
         if compact:
             self.feature_dim = self.max_feature_id + 2
@@ -250,6 +251,9 @@ class PointCloudDataset(torch.utils.data.Dataset):
         if self.use_types:
             rec_fname = self.base_path / rec_fname
             lig_fname = self.base_path / lig_fname
+        if not lig_fname.is_file() * rec_fname.is_file():
+            print(lig_fname, rec_fname, lig_fname.is_file(), rec_fname.is_file())
+            raise
 
         struct = make_box(concat_structs(
             rec_fname, lig_fname, min_lig_rotation=aug_angle),
@@ -264,7 +268,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
                                    self.max_feature_id + 1)
         force_zero_label = False
         if self.p_remove_entity > 0 and random.random() < self.p_remove_entity:
-            force_zero_label  = True
+            force_zero_label = True
             if random.random() < 0.5:
                 struct = struct[struct['bp'] == 0]
             else:
@@ -318,6 +322,7 @@ class PygPointCloudDataset(PointCloudDataset):
             denoting whether the structure is an active or a decoy.
         """
         lig_fname, rec_fname, label = self.index_to_parquets(item)
+
         p, v, struct, force_zero_label = self.parquets_to_inputs(
             lig_fname, rec_fname, item=item)
         if force_zero_label:

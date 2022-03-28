@@ -72,8 +72,9 @@ class Info:
 
 class StructuralFileParser:
 
-    def __init__(self, mol_type='ligand'):
+    def __init__(self, mol_type='ligand', extended=False):
         assert mol_type in ('ligand', 'receptor')
+        self.extended = extended
         self.mol_type = mol_type
         self.non_ad_metal_names = [
             "Cu",
@@ -540,9 +541,9 @@ class StructuralFileParser:
             ),
         ]
         self.atom_types = [info.sm for info in self.atom_type_data]
-        self.type_map = self.get_type_map()
+        self.type_map = self.get_type_map(extended)
 
-    def get_type_map(self):
+    def get_type_map(self, extended=False):
         """Original author: Constantin Schneider"""
         types = [
             ['AliphaticCarbonXSHydrophobe'],
@@ -553,9 +554,20 @@ class StructuralFileParser:
             ['NitrogenXSDonor', 'NitrogenXSDonorAcceptor'],
             ['Oxygen', 'OxygenXSAcceptor'],
             ['OxygenXSDonor', 'OxygenXSDonorAcceptor'],
-            ['Sulfur', 'SulfurAcceptor'],
+            ['Sulfur', 'SulfurAcceptor', 'Selenium'],
             ['Phosphorus'],  # == 9
         ]
+        if extended:
+            types += [
+                ['Fluorine'],
+                ['Chlorine'],
+                ['Bromine'],
+                ['Zinc'],
+                ['Magnesium', 'Calcium'],
+                ['Sodium', 'Potassium'],
+                ['Iron'],
+                ['GenericMetal']
+            ]
         out_dict = {}
         generic = []
         for i, element_name in enumerate(self.atom_types):
@@ -636,7 +648,7 @@ class StructuralFileParser:
         else:
             return t
 
-    def obatom_to_smina_type(self, ob_atom):
+    def obatom_to_smina_type(self, ob_atom, extended=False):
         """Original author: Constantin schneider"""
         atomic_number = ob_atom.atomicnum
         num_to_name = {1: 'HD', 6: 'A', 7: 'NA', 8: 'OA', 16: 'SA'}
@@ -704,7 +716,8 @@ class StructuralFileParser:
             return "NumTypes"
 
     def get_coords_and_types_info(
-            self, mol, all_ligand_coords=None, add_polar_hydrogens=True):
+            self, mol, all_ligand_coords=None, add_polar_hydrogens=True,
+            extended=False):
         xs, ys, zs, atomic_nums, types, bp = [], [], [], [], [], []
         max_types_value = max(self.type_map.values()) + 2
         for atom in mol:
@@ -718,7 +731,7 @@ class StructuralFileParser:
                 else:
                     type_int = max(self.type_map.values()) + 1
             else:
-                smina_type = self.obatom_to_smina_type(atom)
+                smina_type = self.obatom_to_smina_type(atom, extended=extended)
                 if smina_type == "NumTypes":
                     smina_type_int = len(self.atom_type_data)
                 else:
@@ -738,9 +751,9 @@ class StructuralFileParser:
             atomic_nums.append(atomic_num)
         return xs, ys, zs, types, atomic_nums, bp
 
-    def obmol_to_parquet(self, mol, add_polar_hydrogens):
+    def obmol_to_parquet(self, mol, add_polar_hydrogens, extended=False):
         xs, ys, zs, types, atomic_nums, _ = self.get_coords_and_types_info(
-            mol, add_polar_hydrogens=add_polar_hydrogens)
+            mol, add_polar_hydrogens=add_polar_hydrogens, extended=extended)
         df = pd.DataFrame()
         df['x'], df['y'], df['z'] = xs, ys, zs
         df['atomic_number'] = atomic_nums
@@ -750,7 +763,7 @@ class StructuralFileParser:
 
     def file_to_parquets(
             self, input_file, output_path=None, output_fname=None,
-            add_polar_hydrogens=True, sdf_idx=None):
+            add_polar_hydrogens=True, sdf_idx=None, extended=False):
         mols = self.read_file(input_file)
         if output_path is not None:
             output_path = mkdir(output_path)
@@ -765,7 +778,7 @@ class StructuralFileParser:
             else:
                 fname = output_path / output_fname
                 print(fname)
-            df = self.obmol_to_parquet(mol, add_polar_hydrogens)
+            df = self.obmol_to_parquet(mol, add_polar_hydrogens, extended=extended)
             if output_path is None:
                 return df
             df.to_parquet(fname)
@@ -817,7 +830,7 @@ def parse_types_file(types_file):
         recpath, ligpath = None, None
         chunks = line.split()
         for chunk in chunks:
-            if chunk.find('.parquet') != -1:
+            if chunk.find('.parquet') != -1 or chunk.find('.gninatypes') != -1:
                 if recpath is None:
                     recpath = chunk
                 else:
@@ -829,23 +842,25 @@ def parse_types_file(types_file):
     with open(types_file, 'r') as f:
         for line in f.readlines():
             rec, lig = find_paths(line)
-            recs.add(rec)
-            ligs.add(lig)
+            if rec is not None and lig is not None:
+                recs.add(rec)
+                ligs.add(lig)
     return list(recs), list(ligs)
 
 
-def parse_single_types_entry(inp, outp, structure_type):
+def parse_single_types_entry(inp, outp, structure_type, extended=False):
     def get_sdf_and_index(lig):
         sdf = '_'.join(str(lig).split('_')[:-1]) + '.sdf'
         idx = int(str(lig).split('_')[-1].split('.')[0])
         return sdf, idx
 
     def get_pdb(rec):
+        if Path(rec).with_suffix('').name[-2:] == '_0':
+            rec = Path(Path(rec).parent, Path(rec).with_suffix('').name[:-2] + rec.suffix)
         return str(rec).replace(
             '.parquet', '.pdb').replace(
             '.gninatypes', '.pdb')
-
-    parser = StructuralFileParser(structure_type)
+    parser = StructuralFileParser(structure_type, extended)
     if structure_type == 'receptor':
         inp = get_pdb(inp)
         sdf_idx = None
@@ -854,10 +869,10 @@ def parse_single_types_entry(inp, outp, structure_type):
     parser.file_to_parquets(inp,
                             outp.parent,
                             outp.name.replace('.gninatypes', '.parquet'),
-                            sdf_idx=sdf_idx)
+                            sdf_idx=sdf_idx, extended=extended)
 
 
-def parse_types_mp(types_file, input_base_path, output_base_path):
+def parse_types_mp(types_file, input_base_path, output_base_path, extended):
     output_dir = mkdir(output_base_path)
     input_base_path = expand_path(input_base_path)
     recs, ligs = parse_types_file(types_file)
@@ -866,7 +881,7 @@ def parse_types_mp(types_file, input_base_path, output_base_path):
     outputs = [Path(output_dir, input) for input in inputs]
     inputs = [Path(input_base_path, input) for input in inputs]
     no_return_parallelise(
-        parse_single_types_entry, inputs, outputs, structure_types)
+        parse_single_types_entry, inputs, outputs, structure_types, extended)
 
 
 if __name__ == '__main__':
@@ -882,7 +897,9 @@ if __name__ == '__main__':
                              'made. This should contain all of the SDF files '
                              'to be converted (the same as the argument '
                              '--base_path in generate_types_file.py).')
+    parser.add_argument('--extended_atom_types', '-e', action='store_true',
+                        help='18 atom types rather than 10')
     args = parser.parse_args()
 
     parse_types_mp(args.types_file, Path(args.input_base_path).expanduser(),
-                   args.output_path)
+                   args.output_path, args.extended_atom_types)

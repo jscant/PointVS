@@ -101,6 +101,7 @@ if __name__ == '__main__':
         'estimate_bonds': args.estimate_bonds,
         'prune': args.prune,
         'p_remove_entity': args.p_remove_entity,
+        'extended_atom_types': args.extended_atom_types,
     }
 
     if args.siamese:
