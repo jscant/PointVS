@@ -721,8 +721,10 @@ class StructuralFileParser:
         xs, ys, zs, atomic_nums, types, bp = [], [], [], [], [], []
         max_types_value = max(self.type_map.values()) + 2
         for atom in mol:
-            if atom.OBAtom.GetResidue() is None or \
-                    atom.OBAtom.GetResidue().GetName().lower() == 'hoh':
+            if (self.mol_type == 'receptor' and
+                atom.OBAtom.GetResidue()) is None or \
+                    (atom.OBAtom.GetResidue() is not None and
+                     atom.OBAtom.GetResidue().GetName().lower() == 'hoh'):
                 continue
             atomic_num = atom.atomicnum
             if atomic_num == 1:
@@ -778,7 +780,8 @@ class StructuralFileParser:
             else:
                 fname = output_path / output_fname
                 print(fname)
-            df = self.obmol_to_parquet(mol, add_polar_hydrogens, extended=extended)
+            df = self.obmol_to_parquet(mol, add_polar_hydrogens,
+                                       extended=extended)
             if output_path is None:
                 return df
             df.to_parquet(fname)
@@ -856,10 +859,12 @@ def parse_single_types_entry(inp, outp, structure_type, extended=False):
 
     def get_pdb(rec):
         if Path(rec).with_suffix('').name[-2:] == '_0':
-            rec = Path(Path(rec).parent, Path(rec).with_suffix('').name[:-2] + rec.suffix)
+            rec = Path(Path(rec).parent,
+                       Path(rec).with_suffix('').name[:-2] + rec.suffix)
         return str(rec).replace(
             '.parquet', '.pdb').replace(
             '.gninatypes', '.pdb')
+
     parser = StructuralFileParser(structure_type, extended)
     if structure_type == 'receptor':
         inp = get_pdb(inp)
