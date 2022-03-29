@@ -206,22 +206,22 @@ class PointCloudDataset(torch.utils.data.Dataset):
                 })
 
             # +1 to accommodate for unmapped elements
-            self.max_feature_id = max(atomic_number_to_index.values()) + 1
+            self.n_features = max(atomic_number_to_index.values()) + 1
 
             # Any other elements not accounted for given a category of their own
             self.atomic_number_to_index = defaultdict(
-                lambda: self.max_feature_id)
+                lambda: self.n_features)
             self.atomic_number_to_index.update(atomic_number_to_index)
 
-        elif polar_hydrogens:
-            self.max_feature_id = 11 + 8 * extended_atom_types
-        else:
-            self.max_feature_id = 10 + 8 * extended_atom_types  # No polar Hs
+        elif polar_hydrogens:  # sminatypes with hydrogens
+            raise NotImplementedError('Hydrogens temporarily disabled.')
+        else:  # sminatypes without hydrogens
+            self.n_features = 11 + 8 * extended_atom_types
 
-        if compact:
-            self.feature_dim = self.max_feature_id + 2
-        else:
-            self.feature_dim = (self.max_feature_id + 1) * 2
+        if compact:  # +1 for mol type bit
+            self.feature_dim = self.n_features + 1
+        else:  # x2 for two mol types
+            self.feature_dim = self.n_features * 2
 
         self.augmented_active_min_angle = augmented_active_min_angle
 
@@ -261,13 +261,16 @@ class PointCloudDataset(torch.utils.data.Dataset):
         if self.use_types:
             rec_fname = self.base_path / rec_fname
             lig_fname = self.base_path / lig_fname
-        if not lig_fname.is_file() * rec_fname.is_file():
-            print(lig_fname, rec_fname, lig_fname.is_file(), rec_fname.is_file())
-            raise
+        if not lig_fname.is_file():
+            raise FileNotFoundError(lig_fname, 'does not exist.')
+        if not rec_fname.is_file():
+            raise FileNotFoundError(rec_fname, 'does not exist')
 
+        # struct.types is +11 for receptor atoms, i.e. 0 -> 11, 1 -> 12, etc.
         struct = make_box(concat_structs(
-            rec_fname, lig_fname, min_lig_rotation=aug_angle),
-            radius=self.radius, relative_to_ligand=True)
+            rec_fname, lig_fname, self.n_features,
+            min_lig_rotation=aug_angle), radius=self.radius,
+            relative_to_ligand=True)
 
         if not self.polar_hydrogens:
             struct = struct[struct['atomic_number'] > 1]
@@ -275,7 +278,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
         if self.use_atomic_numbers:
             struct.types = struct['atomic_number'].map(
                 self.atomic_number_to_index) + struct.bp * (
-                                   self.max_feature_id + 1)
+                    self.n_features)
         force_zero_label = False
         if self.p_remove_entity > 0 and random.random() < self.p_remove_entity:
             force_zero_label = True
@@ -289,7 +292,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
                 np.vstack([struct['x'], struct['y'], struct['z']]).T))
 
         v = make_bit_vector(
-            struct.types.to_numpy(), self.max_feature_id + 1, self.compact)
+            struct.types.to_numpy(), self.n_features, self.compact)
 
         return p, v, struct, force_zero_label
 

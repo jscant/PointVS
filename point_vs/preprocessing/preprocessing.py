@@ -217,7 +217,10 @@ def make_bit_vector(atom_types, n_atom_types, compact=True):
     Returns:
         One-hot bit vector (torch tensor) of atom ids.
     """
+    # n_atom_types = 10 + 1 == 11
+    # there are 11 possible atom types, +1 for a compact bit
     if compact:
+        # atom_types: 0 -> 0 0, 11 -> 0 1
         indices = torch.from_numpy(atom_types % n_atom_types).long()
         one_hot = F.one_hot(indices, num_classes=n_atom_types + 1)
         type_bit = torch.from_numpy((atom_types // n_atom_types)).int()
@@ -248,20 +251,19 @@ def centre_on_ligand(struct):
     return struct
 
 
-def concat_structs(rec, lig, min_lig_rotation=0, parsers=None, extended=False):
+def concat_structs(rec, lig, n_features, min_lig_rotation=0, parsers=None,
+                   extended=False):
     """Concatenate the receptor and ligand parquet structures."""
-    min_lig_rotation = np.pi * min_lig_rotation / 180
+    min_lig_rotation_rads = np.pi * min_lig_rotation / 180
 
     if parsers is None:
         lig_struct = pd.read_parquet(lig)
         rec_struct = pd.read_parquet(rec)
     else:
-        lig_struct = parsers[0].file_to_parquets(
-            lig, add_polar_hydrogens=True, extended=extended)
-        rec_struct = parsers[1].file_to_parquets(
-            rec, add_polar_hydrogens=True, extended=extended)
+        lig_struct = parsers[0].file_to_parquets(lig, add_polar_hydrogens=True)
+        rec_struct = parsers[1].file_to_parquets(rec, add_polar_hydrogens=True)
 
-    rec_struct.types += 12
+    rec_struct.types += n_features + extended * 8
 
     if min_lig_rotation:
         lig_coords_init = np.vstack(
@@ -269,7 +271,7 @@ def concat_structs(rec, lig, min_lig_rotation=0, parsers=None, extended=False):
         orig_vector = lig_coords_init[0, :]
         candidate_vector = orig_vector
         candidate_coords = lig_coords_init
-        while angle_3d(orig_vector, candidate_vector) < min_lig_rotation:
+        while angle_3d(orig_vector, candidate_vector) < min_lig_rotation_rads:
             candidate_coords = uniform_random_rotation(lig_coords_init)
             candidate_vector = candidate_coords[0, :]
         lig_struct.x = candidate_coords[:, 0]

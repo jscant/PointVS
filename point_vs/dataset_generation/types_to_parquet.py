@@ -541,9 +541,9 @@ class StructuralFileParser:
             ),
         ]
         self.atom_types = [info.sm for info in self.atom_type_data]
-        self.type_map = self.get_type_map(extended)
+        self.type_map = self.get_type_map()
 
-    def get_type_map(self, extended=False):
+    def get_type_map(self):
         """Original author: Constantin Schneider"""
         types = [
             ['AliphaticCarbonXSHydrophobe'],
@@ -557,7 +557,7 @@ class StructuralFileParser:
             ['Sulfur', 'SulfurAcceptor', 'Selenium'],
             ['Phosphorus'],  # == 9
         ]
-        if extended:
+        if self.extended:
             types += [
                 ['Fluorine'],
                 ['Chlorine'],
@@ -566,21 +566,14 @@ class StructuralFileParser:
                 ['Magnesium', 'Calcium'],
                 ['Sodium', 'Potassium'],
                 ['Iron'],
-                ['GenericMetal']
+                ['GenericMetal']  # == 17
             ]
-        out_dict = {}
-        generic = []
+        out_dict = defaultdict(lambda: len(types))
         for i, element_name in enumerate(self.atom_types):
             for types_list in types:
                 if element_name in types_list:
                     out_dict[i] = types.index(types_list)
                     break
-            if i not in out_dict.keys():
-                generic.append(i)
-
-        generic_type = len(types)  # == 10
-        for other_type in generic:
-            out_dict[other_type] = generic_type
         return out_dict
 
     @staticmethod
@@ -648,7 +641,7 @@ class StructuralFileParser:
         else:
             return t
 
-    def obatom_to_smina_type(self, ob_atom, extended=False):
+    def obatom_to_smina_type(self, ob_atom):
         """Original author: Constantin schneider"""
         atomic_number = ob_atom.atomicnum
         num_to_name = {1: 'HD', 6: 'A', 7: 'NA', 8: 'OA', 16: 'SA'}
@@ -716,10 +709,9 @@ class StructuralFileParser:
             return "NumTypes"
 
     def get_coords_and_types_info(
-            self, mol, all_ligand_coords=None, add_polar_hydrogens=True,
-            extended=False):
+            self, mol, all_ligand_coords=None, add_polar_hydrogens=True):
         xs, ys, zs, atomic_nums, types, bp = [], [], [], [], [], []
-        max_types_value = max(self.type_map.values()) + 2
+        n_features = len(set(self.type_map.values())) + 1
         for atom in mol:
             if (self.mol_type == 'receptor' and
                 atom.OBAtom.GetResidue()) is None or \
@@ -731,19 +723,20 @@ class StructuralFileParser:
                 if atom.OBAtom.IsNonPolarHydrogen() or not add_polar_hydrogens:
                     continue
                 else:
-                    type_int = max(self.type_map.values()) + 1
+                    raise NotImplementedError('Hydrogens temporarily disabled.')
             else:
-                smina_type = self.obatom_to_smina_type(atom, extended=extended)
+                smina_type = self.obatom_to_smina_type(atom)
                 if smina_type == "NumTypes":
-                    smina_type_int = len(self.atom_type_data)
+                    type_int = n_features - 1
                 else:
                     smina_type_int = self.atom_types.index(smina_type)
-                type_int = self.type_map[smina_type_int]
+                    type_int = self.type_map[smina_type_int]
+
             if isinstance(all_ligand_coords, PositionSet):
                 if coords_to_string(atom.coords) in all_ligand_coords:
                     bp.append(0)
                 else:
-                    type_int += max_types_value
+                    type_int += n_features
                     bp.append(1)
             x, y, z = atom.coords
             xs.append(x)
@@ -753,9 +746,9 @@ class StructuralFileParser:
             atomic_nums.append(atomic_num)
         return xs, ys, zs, types, atomic_nums, bp
 
-    def obmol_to_parquet(self, mol, add_polar_hydrogens, extended=False):
+    def obmol_to_parquet(self, mol, add_polar_hydrogens):
         xs, ys, zs, types, atomic_nums, _ = self.get_coords_and_types_info(
-            mol, add_polar_hydrogens=add_polar_hydrogens, extended=extended)
+            mol, add_polar_hydrogens=add_polar_hydrogens)
         df = pd.DataFrame()
         df['x'], df['y'], df['z'] = xs, ys, zs
         df['atomic_number'] = atomic_nums
@@ -765,7 +758,7 @@ class StructuralFileParser:
 
     def file_to_parquets(
             self, input_file, output_path=None, output_fname=None,
-            add_polar_hydrogens=True, sdf_idx=None, extended=False):
+            add_polar_hydrogens=True, sdf_idx=None):
         mols = self.read_file(input_file)
         if output_path is not None:
             output_path = mkdir(output_path)
@@ -780,8 +773,7 @@ class StructuralFileParser:
             else:
                 fname = output_path / output_fname
                 print(fname)
-            df = self.obmol_to_parquet(mol, add_polar_hydrogens,
-                                       extended=extended)
+            df = self.obmol_to_parquet(mol, add_polar_hydrogens)
             if output_path is None:
                 return df
             df.to_parquet(fname)
@@ -871,10 +863,9 @@ def parse_single_types_entry(inp, outp, structure_type, extended=False):
         sdf_idx = None
     else:
         inp, sdf_idx = get_sdf_and_index(inp)
-    parser.file_to_parquets(inp,
-                            outp.parent,
+    parser.file_to_parquets(inp, outp.parent,
                             outp.name.replace('.gninatypes', '.parquet'),
-                            sdf_idx=sdf_idx, extended=extended)
+                            add_polar_hydrogens=False, sdf_idx=sdf_idx)
 
 
 def parse_types_mp(types_file, input_base_path, output_base_path, extended):
