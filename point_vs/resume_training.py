@@ -57,6 +57,7 @@ if __name__ == '__main__':
         min_aug_angle=cmd_line_args['min_aug_angle'],
         max_active_rms_distance=cmd_line_args['max_active_rmsd'],
         min_inactive_rms_distance=cmd_line_args['min_inactive_rmsd'],
+        max_inactive_rms_distance=cmd_line_args.get('max_inactive_rmsd', None),
         polar_hydrogens=cmd_line_args['hydrogens'],
         mode='train',
         types_fname=cmd_line_args['train_types'],

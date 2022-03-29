@@ -232,4 +232,7 @@ def parse_args():
                              'arxiv.org/pdf/2003.04887.pdf')
     parser.add_argument('--extended_atom_types', action='store_true',
                         help='18 atom types rather than 10')
+    parser.add_argument('--max_inactive_rmsd', type=float,
+                        help='Discard structures beyond <x> RMSD from xtal '
+                             'pose')
     return parser.parse_args()

@@ -112,6 +112,7 @@ if __name__ == '__main__':
             min_aug_angle=args.min_aug_angle,
             max_active_rms_distance=args.max_active_rmsd,
             min_inactive_rms_distance=args.min_inactive_rmsd,
+            max_inactive_rms_distance=args.max_inactive_rmsd,
             types_fname=args.train_types,
             mode='train', bp=1,
             **dl_kwargs
@@ -123,6 +124,7 @@ if __name__ == '__main__':
             min_aug_angle=args.min_aug_angle,
             max_active_rms_distance=args.max_active_rmsd,
             min_inactive_rms_distance=args.min_inactive_rmsd,
+            max_inactive_rms_distance=args.max_inactive_rmsd,
             types_fname=args.train_types,
             mode='train', bp=0,
             **dl_kwargs
@@ -137,6 +139,7 @@ if __name__ == '__main__':
             min_aug_angle=args.min_aug_angle,
             max_active_rms_distance=args.max_active_rmsd,
             min_inactive_rms_distance=args.min_inactive_rmsd,
+            max_inactive_rms_distance=args.max_inactive_rmsd,
             types_fname=args.train_types,
             mode='train',
             **dl_kwargs

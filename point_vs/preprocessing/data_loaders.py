@@ -26,7 +26,8 @@ class PointCloudDataset(torch.utils.data.Dataset):
             polar_hydrogens=True, use_atomic_numbers=False,
             compact=True, rot=False, augmented_active_count=0,
             augmented_active_min_angle=90, max_active_rms_distance=None,
-            min_inactive_rms_distance=None, fname_suffix='parquet',
+            min_inactive_rms_distance=None, max_inactive_rms_distance=None,
+            fname_suffix='parquet',
             types_fname=None, edge_radius=None, estimate_bonds=False,
             prune=False, bp=None, p_remove_entity=0, extended_atom_types=False,
             **kwargs):
@@ -84,8 +85,15 @@ class PointCloudDataset(torch.utils.data.Dataset):
         labels = []
         self.use_types = False if types_fname is None else True
         if max_active_rms_distance is not None \
-                or min_inactive_rms_distance is not None:
+                or min_inactive_rms_distance is not None \
+                or max_inactive_rms_distance is not None:
             label_by_rmsd = True
+            if max_active_rms_distance is None:
+                max_active_rms_distance = np.inf
+            if max_inactive_rms_distance is None:
+                max_inactive_rms_distance = np.inf
+            if min_inactive_rms_distance is None:
+                min_inactive_rms_distance = 0
         else:
             label_by_rmsd = False
 
@@ -110,6 +118,8 @@ class PointCloudDataset(torch.utils.data.Dataset):
                         labels.append(1)
                         aug_ligs += [ligand_fname] * augmented_active_count
                         aug_recs += [receptor_fname] * augmented_active_count
+                    elif rmsd >= max_inactive_rms_distance:
+                        continue
                     elif rmsd >= min_inactive_rms_distance:
                         labels.append(0)
                     else:  # discard this entry (do not add to confirmed_ligs)
