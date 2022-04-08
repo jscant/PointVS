@@ -53,6 +53,7 @@ import argparse
 import re
 import subprocess
 from difflib import SequenceMatcher
+from itertools import product
 from pathlib import Path
 
 from openbabel import pybel
@@ -91,24 +92,25 @@ def get_rmsd(reference_fname, docked_fname):
     reference_fname = expand_path(reference_fname)
     docked_fname = expand_path(docked_fname)
     cmd = 'obrms {0} {1}'.format(docked_fname, reference_fname)
-    output = execute_cmd(cmd).stdout
+    output = execute_cmd(cmd, raise_exceptions=False, silent=True).stdout
     rmsds = []
     for line in output.split('\n'):
-        if len(line.split()):
+        if len(line.split()) and line.split()[0] == 'RMSD':
             rmsds.append(float(line.split()[-1]))
     return rmsds
 
 
 def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
                        active_exp=None, inactive_exp=None,
-                       include_crystal_structure=False):
+                       include_crystal_structure=True, separated_files=True):
     """Generate a portion of a types file."""
 
     def re_glob(exp):
         return [f for f in directory.glob('*') if f.is_file() and
                 re.match(exp, str(f.name))]
 
-    def types_line(receptor_pdb, ref_sdf=None, query_sdf=None, label=None):
+    def types_line(receptor_pdb, ref_sdf=None, query_sdf=None, label=None,
+                   ics=True):
         dir_name = directory.name
         template = '{0} -1 {1} {2} {3}\n'
 
@@ -118,14 +120,17 @@ def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
             rmsds = [-1 for _ in pybel.readfile(query_sdf.suffix[1:],
                                                 str(query_sdf))]
 
-        if include_crystal_structure:
+        if include_crystal_structure and ics:
             res = template.format(
                 1, '0.00000',
                 Path(
                     dir_name,
                     receptor_pdb.with_suffix('.parquet').name
                 ),
-                ref_sdf.with_suffix('.parquet').name
+                Path(
+                    dir_name,
+                    ref_sdf.with_suffix('').name + '_0.parquet'
+                )
             )
         else:
             res = ''
@@ -152,16 +157,18 @@ def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
     if len(pdbs) == 0:
         return -1
     s = ''
-    for receptor_pdb in pdbs:
-        print(receptor_pdb)
+    for r_idx, receptor_pdb in enumerate(pdbs):
+        #print(receptor_pdb)
         if crystal_exp is not None and docked_exp is not None:
             xtal_matches = re_glob(crystal_exp)
             docked_matches = re_glob(docked_exp)
+            #print(receptor_pdb, len(xtal_matches), len(docked_matches))
             if len(xtal_matches) * len(docked_matches):
+                types_str = None
                 if len(xtal_matches) * len(docked_matches) == 1:
                     crystal_sdf = xtal_matches[0]
                     docked_sdf = docked_matches[0]
-                else:
+                elif not separated_files:
                     longest_match = 0
                     receptor_name = receptor_pdb.with_suffix('').name
                     for xtal_match_path in xtal_matches:
@@ -185,9 +192,17 @@ def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
                         if match.size > longest_match:
                             docked_sdf = docked_match_path
                             longest_match = match.size
+                else:
+                    types_str = ''
+                    for idx, (xtal_match, docked_match) in enumerate(product(
+                            xtal_matches, docked_matches)):
+                        types_str += types_line(
+                            receptor_pdb, xtal_match, docked_match, None,
+                            ics=not idx)
 
-                types_str = types_line(receptor_pdb, crystal_sdf, docked_sdf,
-                                       None)
+                if types_str is None:
+                    types_str = types_line(
+                        receptor_pdb, crystal_sdf, docked_sdf, None)
             else:
                 xtal_to_docked_map = {}
                 types_str = ''
@@ -226,6 +241,7 @@ def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
             raise RuntimeError('Either specify both crystal_exp and docked_exp '
                                'or active_exp and inactive_exp')
         s += types_str + '\n'
+        print(types_str)
     return s[:-1]
 
 
@@ -260,6 +276,9 @@ if __name__ == '__main__':
                         help='Regex pattern for active poses')
     parser.add_argument('--inactive_pattern', '-i', type=str,
                         help='Regex pattern for inactive structures')
+    parser.add_argument('--split_sdfs', '-s', action='store_true',
+                        help='Input ligands are split up so that there is only '
+                             'one strucure per sdf')
     args = parser.parse_args()
 
     base_path = expand_path(args.base_path)
@@ -272,14 +291,19 @@ if __name__ == '__main__':
     inactive_exp = args.inactive_pattern
 
     s = ''
-    for path in base_path.glob('*'):
+    n_pdbs = len([p for p in base_path.glob('*') if p.is_dir()])
+    for idx, path in enumerate(base_path.glob('*')):
         if path.is_dir():
             s_ = generate_types_str(
-                path, pdb_exp, xtal_exp, docked_exp, active_exp, inactive_exp)
+                path, pdb_exp, xtal_exp, docked_exp, active_exp, inactive_exp,
+                separated_files=args.split_sdfs)
             if s_ != -1:
                 s += s_.strip()
-    s = '\n'.join([line for line in s.split('\n') if len(line.split()) > 1])
+                if args.split_sdfs:
+                    s += '\n'
+            print('Completed {0}/{1} targets'.format(idx, n_pdbs))
 
+    s = '\n'.join([line for line in s.split('\n') if len(line.split()) > 1])
     with open(expand_path(
             output_path / (output_path.parent.name + '.types')), 'w') as f:
         f.write(s)

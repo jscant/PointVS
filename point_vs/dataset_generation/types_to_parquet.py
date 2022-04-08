@@ -772,10 +772,13 @@ class StructuralFileParser:
                     mol.OBMol.GetTitle()).name.split('.')[0]
             else:
                 fname = output_path / output_fname
-                print(fname)
+                #print(fname)
             df = self.obmol_to_parquet(mol, add_polar_hydrogens)
             if output_path is None:
                 return df
+            if not str(fname).endswith('.parquet'):
+                print(fname)
+                raise
             df.to_parquet(fname)
 
     def download_pdbs_from_csv(self, csv, output_dir):
@@ -846,13 +849,21 @@ def parse_types_file(types_file):
 def parse_single_types_entry(inp, outp, structure_type, extended=False):
     def get_sdf_and_index(lig):
         sdf = '_'.join(str(lig).split('_')[:-1]) + '.sdf'
-        idx = int(str(lig).split('_')[-1].split('.')[0])
+        try:
+            idx = int(str(lig).split('_')[-1].split('.')[0])
+        except ValueError:
+            return sdf, 0
         return sdf, idx
 
     def get_pdb(rec):
         if Path(rec).with_suffix('').name[-2:] == '_0':
-            rec = Path(Path(rec).parent,
-                       Path(rec).with_suffix('').name[:-2] + rec.suffix)
+            try:
+                rec = Path(Path(rec).parent,
+                           Path(rec).with_suffix('').name[:-2] + rec.suffix)
+            except ValueError:
+                print(rec)
+                exit(1)
+                raise
         return str(rec).replace(
             '.parquet', '.pdb').replace(
             '.gninatypes', '.pdb')
@@ -877,7 +888,7 @@ def parse_types_mp(types_file, input_base_path, output_base_path, extended):
     outputs = [Path(output_dir, input) for input in inputs]
     inputs = [Path(input_base_path, input) for input in inputs]
     no_return_parallelise(
-        parse_single_types_entry, inputs, outputs, structure_types, extended)
+        parse_single_types_entry, inputs, outputs, structure_types, extended, cpus=1)
 
 
 if __name__ == '__main__':
