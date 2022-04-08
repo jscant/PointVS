@@ -5,24 +5,10 @@ from pathlib import Path
 
 import wandb
 
-from point_vs.models.load_model import load_model
+from point_vs.models.load_model import load_model, find_latest_checkpoint
 from point_vs.preprocessing.data_loaders import PygPointCloudDataset, \
     PointCloudDataset, get_data_loader
 from point_vs.utils import expand_path
-
-
-def find_latest_checkpoint(root):
-    res = None
-    max_epoch = -1
-    for fname in expand_path(root, 'checkpoints').glob('*.pt'):
-        idx = int(fname.with_suffix('').name.split('_')[-1])
-        if idx > max_epoch:
-            res = fname
-            max_epoch = idx
-    if res is None:
-        raise RuntimeError('Could not find saved model in', root)
-    return res
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -38,7 +24,7 @@ if __name__ == '__main__':
     ckpt = find_latest_checkpoint(base_path)
     print('Found checkpoint:', ckpt)
 
-    model, model_kwargs, cmd_line_args = load_model(
+    _, model, model_kwargs, cmd_line_args = load_model(
         ckpt, silent=False, init_path=True)
     model.train()
 

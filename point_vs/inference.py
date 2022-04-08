@@ -53,14 +53,15 @@ if __name__ == '__main__':
                              ' will be used.')
     args = parser.parse_args()
 
-    model, model_kwargs, cmd_line_args = load_model(
-        args.model_checkpoint, silent=False)
+    checkpoint_path = expand_path(args.model_checkpoint)
+    checkpoint_path, model, model_kwargs, cmd_line_args = load_model(
+        checkpoint_path, silent=False)
 
     results_fname = expand_path(Path(
-        expand_path(args.model_checkpoint).parents[1],
+        checkpoint_path.parents[1],
         'predictions_{0}-{1}.txt'.format(
             Path(args.test_types).with_suffix('').name,
-            Path(args.model_checkpoint).with_suffix('').name)))
+            checkpoint_path.with_suffix('').name)))
 
     # Is a validation set specified?
     if cmd_line_args['model'] in ('lucid', 'egnn'):
