@@ -199,7 +199,10 @@ def make_box(struct, radius=4, relative_to_ligand=True):
         (struct.sq_dist < radius ** 2) | (struct.bp == 0)].copy()
     struct.reset_index(drop=True, inplace=True)
     del struct['sq_dist']
-    del struct['index']
+    try:
+        del struct['index']
+    except KeyError:
+        pass
     return struct
 
 
