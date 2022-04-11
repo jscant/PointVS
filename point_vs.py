@@ -102,6 +102,7 @@ if __name__ == '__main__':
         'prune': args.prune,
         'p_remove_entity': args.p_remove_entity,
         'extended_atom_types': args.extended_atom_types,
+        'model_task': args.model_task,
     }
 
     if args.siamese:
@@ -191,7 +192,7 @@ if __name__ == '__main__':
         'pool': True,
         'dropout': args.dropout,
         'dim_input': dim_input,
-        'dim_output': 1,
+        'dim_output': 3 if args.model_task == 'multi_regression' else 1,
         'dim_hidden': args.channels,
         'num_heads': 8,
         'global_pool': True,
@@ -219,7 +220,8 @@ if __name__ == '__main__':
         'edge_residual': args.egnn_edge_residual,
         'linear_gap': args.linear_gap,
         'graphnorm': args.graphnorm,
-        'classify_on_edges': args.egnn_classify_on_edges,
+        'classify_on_edges': args.egnn_classify_on_edges if hasattr(
+            args, 'egnn_classify_on_edges') else False,
         'classify_on_feats': args.egnn_classify_on_feats if hasattr(
             args, 'egnn_classify_on_feats') else True,
         'multi_fc': args.multi_fc,
@@ -233,15 +235,16 @@ if __name__ == '__main__':
         'node_attention_first_only': args.node_attention_first_only,
         'edge_attention_first_only': args.edge_attention_first_only,
         'gated_residual': args.gated_residual,
-        'rezero': args.rezero
+        'rezero': args.rezero,
+        'model_task': args.model_task,
     }
 
     args_to_record.update(model_kwargs)
 
-    if args.load_weights is not None:
-        model_kwargs = load_yaml(Path(Path(
-            args.load_weights).parents[1].expanduser(), 'model_kwargs.yaml'))
-        model_kwargs['group'] = SE3(0.2)
+    #if args.load_weights is not None:
+    #    model_kwargs = load_yaml(Path(Path(
+    #        args.load_weights).parents[1].expanduser(), 'model_kwargs.yaml'))
+    #    model_kwargs['group'] = SE3(0.2)
 
     if args.wandb_dir is None:
         wandb_dir = save_path

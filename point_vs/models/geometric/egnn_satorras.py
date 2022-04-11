@@ -1,8 +1,8 @@
 import torch
 from torch import nn
+from torch.nn import functional as F
 from torch_geometric.nn.norm import GraphNorm
 from torch_geometric.utils import dropout_adj
-from torch.nn import functional as F
 
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase, \
     PygLinearPass, unsorted_segment_sum, unsorted_segment_mean
@@ -193,7 +193,9 @@ class SartorrasEGNN(PNNGeometricBase):
                   edge_attention_final_only=False,
                   node_attention_first_only=False,
                   edge_attention_first_only=False,
-                  gated_residual=False, rezero=False, **kwargs):
+                  gated_residual=False, rezero=False,
+                  model_task='classification',
+                  **kwargs):
         """
         Arguments:
             dim_input: Number of features for 'h' at the input
@@ -226,6 +228,9 @@ class SartorrasEGNN(PNNGeometricBase):
             edge_attention_final_only:
             node_attention_first_only:
             edge_attention_first_only:
+            gated_residual:
+            rezero:
+            model_task:
         """
         layers = [PygLinearPass(nn.Linear(dim_input, k),
                                 return_coords_and_edges=True)]
@@ -235,6 +240,7 @@ class SartorrasEGNN(PNNGeometricBase):
         self.edge_residual = edge_residual
         self.gated_residual = gated_residual
         self.rezero = rezero
+        self.model_task = model_task
 
         assert classify_on_feats or classify_on_edges, \
             'We must use either or both of classify_on_feats and ' \

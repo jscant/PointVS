@@ -50,15 +50,70 @@ which are selected by specifying EITHER:
     patterns will be assigned labels 1 and 0 respectively.
 """
 import argparse
+import io
 import re
 import subprocess
 from difflib import SequenceMatcher
 from itertools import product
 from pathlib import Path
 
+import pandas as pd
 from openbabel import pybel
+from pandas._libs.lib import NoDefault
 
 from point_vs.utils import expand_path, pretify_dict, mkdir
+
+
+def extract_pdbbind_affinities(csv):
+    def extract_affinity_metric(affinity):
+        if '<' in affinity:
+            split_char = '<'
+        elif '>' in affinity:
+            split_char = '>'
+        elif '=' in affinity:
+            split_char = '='
+        elif '~' in affinity:
+            split_char = '~'
+        else:
+            return None
+        return 'p' + affinity.split(split_char)[0].lower()
+
+    year = 2020
+    with open(expand_path(csv), 'r') as f:
+        lines = []
+        for idx, line in enumerate(f.readlines()):
+            if line.startswith('#'):
+                lines.append(line.strip())
+            elif idx:
+                break
+            else:
+                if line.startswith('ID'):
+                    names = ('ID', 'PDB code', 'Subset', 'Affinity Data',
+                             'pKd pKi pIC50', 'Ligand Name')
+                else:
+                    names = NoDefault.no_default
+                year = 2016
+    if year == 2020:
+        names = (lines[-2][2:].split(', ')[:5])
+        with open(expand_path(csv), 'r') as f:
+            csv_as_str = '\n'.join(
+                [' '.join(line.split()[:5]) for line in f.readlines()])
+        pdbbind_csv = pd.read_csv(
+            io.StringIO(csv_as_str), sep='\s+', header=idx, names=names)
+        affinity_field = 'Kd/Ki'
+        pk_field = '-logKd/Ki'
+    else:
+        pdbbind_csv = pd.read_csv(expand_path(csv), sep=',', names=names)
+        affinity_field = 'Affinity Data'
+        pk_field = 'pKd pKi pIC50'
+
+    pdbbind_csv['metric'] = pdbbind_csv[affinity_field].map(
+        extract_affinity_metric)
+    return pd.DataFrame({
+        'pdbid': pdbbind_csv['PDB code'],
+        'affinity': pdbbind_csv[pk_field],
+        'metric': pdbbind_csv['metric']
+    })
 
 
 def execute_cmd(cmd, raise_exceptions=True, silent=False):
@@ -102,15 +157,32 @@ def get_rmsd(reference_fname, docked_fname):
 
 def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
                        active_exp=None, inactive_exp=None,
-                       include_crystal_structure=True, separated_files=True):
+                       include_crystal_structure=True, separated_files=True,
+                       affinity_dict=None):
     """Generate a portion of a types file."""
 
     def re_glob(exp):
         return [f for f in directory.glob('*') if f.is_file() and
                 re.match(exp, str(f.name))]
 
-    def types_line(receptor_pdb, ref_sdf=None, query_sdf=None, label=None,
-                   ics=True):
+    def types_line_regression(receptor_pdb, ligand_sdf, affinity, metric):
+        affinities = [-1, -1, -1]
+        try:
+            affinities[['pki', 'pkd', 'pic50'].index(metric)] = affinity
+        except IndexError:
+            print('Could not find affinity data for', receptor_pdb)
+            return None
+        affinity_str = '{0} {1} {2}'.format(*affinities)
+        rec_path = Path(
+            directory.name, receptor_pdb.with_suffix('.parquet').name)
+        lig_path = Path(
+            directory.name,
+            ligand_sdf.with_suffix('').name + '_0.parquet')
+        print('{0} {1} {2}\n'.format(affinity_str, rec_path, lig_path))
+        return '{0} {1} {2}\n'.format(affinity_str, rec_path, lig_path)
+
+    def types_line_classification(
+            receptor_pdb, ref_sdf=None, query_sdf=None, label=None, ics=True):
         dir_name = directory.name
         template = '{0} -1 {1} {2} {3}\n'
 
@@ -158,11 +230,11 @@ def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
         return -1
     s = ''
     for r_idx, receptor_pdb in enumerate(pdbs):
-        #print(receptor_pdb)
+        # print(receptor_pdb)
         if crystal_exp is not None and docked_exp is not None:
             xtal_matches = re_glob(crystal_exp)
             docked_matches = re_glob(docked_exp)
-            #print(receptor_pdb, len(xtal_matches), len(docked_matches))
+            # print(receptor_pdb, len(xtal_matches), len(docked_matches))
             if len(xtal_matches) * len(docked_matches):
                 types_str = None
                 if len(xtal_matches) * len(docked_matches) == 1:
@@ -183,8 +255,6 @@ def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
                     longest_match = 0
                     for docked_match_path in docked_matches:
                         docked_match = docked_match_path.with_suffix('').name
-
-                        docked_match = docked_match_path.with_suffix('').name
                         match = SequenceMatcher(
                             None, docked_match, receptor_name
                         ).find_longest_match(
@@ -196,12 +266,12 @@ def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
                     types_str = ''
                     for idx, (xtal_match, docked_match) in enumerate(product(
                             xtal_matches, docked_matches)):
-                        types_str += types_line(
+                        types_str += types_line_classification(
                             receptor_pdb, xtal_match, docked_match, None,
                             ics=not idx)
 
                 if types_str is None:
-                    types_str = types_line(
+                    types_str = types_line_classification(
                         receptor_pdb, crystal_sdf, docked_sdf, None)
             else:
                 xtal_to_docked_map = {}
@@ -224,24 +294,44 @@ def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
                     raise RuntimeError('Could not determine matching pattern '
                                        'for {}'.format(directory))
                 for crystal_sdf, docked_sdf in xtal_to_docked_map.items():
-                    types_str += types_line(receptor_pdb, crystal_sdf,
-                                            docked_sdf)
+                    types_str += types_line_classification(
+                        receptor_pdb, crystal_sdf, docked_sdf)
         elif active_exp is not None and inactive_exp is not None:
             types_str = ''
             active_matches = re_glob(active_exp)
             inactive_matches = re_glob(inactive_exp)
             for active_match in active_matches:
-                types_str += types_line(
+                types_str += types_line_classification(
                     receptor_pdb, query_sdf=active_match, label=1)
             for inactive_match in inactive_matches:
-                types_str += types_line(
+                types_str += types_line_classification(
                     receptor_pdb, query_sdf=inactive_match, label=0)
-
+        elif crystal_exp is not None and affinity_dict:
+            types_str = ''
+            crystal_match = list(re_glob(crystal_exp))[0]
+            recstem = receptor_pdb.with_suffix('').name
+            pdbid, affinity, metric = None, None, None
+            for i in range(len(recstem) - 4):
+                candidate_pdbid = recstem[i:i + 4]
+                try:
+                    affinity, metric = affinity_dict[candidate_pdbid]
+                except:
+                    pass
+                else:
+                    pdbid = candidate_pdbid
+                    break
+            if pdbid is None:
+                print(
+                    'Could not find affinity data for pdb' + str(receptor_pdb))
+                continue
+            types_line = types_line_regression(
+                receptor_pdb, crystal_match, affinity, metric)
+            if types_line is not None:
+                types_str += types_line
         else:
             raise RuntimeError('Either specify both crystal_exp and docked_exp '
                                'or active_exp and inactive_exp')
         s += types_str + '\n'
-        print(types_str)
     return s[:-1]
 
 
@@ -279,6 +369,10 @@ if __name__ == '__main__':
     parser.add_argument('--split_sdfs', '-s', action='store_true',
                         help='Input ligands are split up so that there is only '
                              'one strucure per sdf')
+    parser.add_argument('--affinity', '-p', type=str, default=None,
+                        help='CSV file from PDBBind website with affinity data '
+                             'for regression (only crystal_pose_pattern must be'
+                             ' supplied with this')
     args = parser.parse_args()
 
     base_path = expand_path(args.base_path)
@@ -292,11 +386,23 @@ if __name__ == '__main__':
 
     s = ''
     n_pdbs = len([p for p in base_path.glob('*') if p.is_dir()])
+
+    affinity_dict = None
+    if args.affinity is not None:
+        affinity_df = extract_pdbbind_affinities(args.affinity)
+        print(affinity_df)
+        affinity_dict = {
+            pdbid: (affinity, metric) for
+            pdbid, affinity, metric in zip(
+                affinity_df['pdbid'],
+                affinity_df['affinity'],
+                affinity_df['metric'])
+        }
     for idx, path in enumerate(base_path.glob('*')):
         if path.is_dir():
             s_ = generate_types_str(
                 path, pdb_exp, xtal_exp, docked_exp, active_exp, inactive_exp,
-                separated_files=args.split_sdfs)
+                separated_files=args.split_sdfs, affinity_dict=affinity_dict)
             if s_ != -1:
                 s += s_.strip()
                 if args.split_sdfs:

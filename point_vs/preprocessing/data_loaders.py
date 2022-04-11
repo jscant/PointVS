@@ -7,6 +7,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import psutil
 import torch
 from torch.nn.functional import one_hot
@@ -15,7 +16,7 @@ from torch_geometric.data import DataLoader as GeoDataLoader, Data
 
 from point_vs.preprocessing.preprocessing import make_box, \
     concat_structs, make_bit_vector, uniform_random_rotation, generate_edges
-from point_vs.utils import load_yaml
+from point_vs.utils import load_yaml, expand_path, shorten_home
 
 
 class PointCloudDataset(torch.utils.data.Dataset):
@@ -27,7 +28,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
             compact=True, rot=False, augmented_active_count=0,
             augmented_active_min_angle=90, max_active_rms_distance=None,
             min_inactive_rms_distance=None, max_inactive_rms_distance=None,
-            fname_suffix='parquet',
+            fname_suffix='parquet', model_task='classification',
             types_fname=None, edge_radius=None, estimate_bonds=False,
             prune=False, bp=None, p_remove_entity=0, extended_atom_types=False,
             **kwargs):
@@ -73,6 +74,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
         self.bp = bp
         self.edge_radius = edge_radius
         self.p_remove_entity = p_remove_entity
+        self.model_task = model_task
 
         self.fname_suffix = fname_suffix
         if not self.base_path.exists():
@@ -101,35 +103,44 @@ class PointCloudDataset(torch.utils.data.Dataset):
         confirmed_ligs = []
         confirmed_recs = []
         if self.use_types:
-            _labels, rmsds, receptor_fnames, ligand_fnames = \
-                types_to_list(types_fname)
+            if self.model_task.endswith('regression'):
+                self.pki, self.pkd, self.ic50, self.receptor_fnames, \
+                    self.ligand_fnames = regression_types_to_lists(
+                    self.base_path, types_fname)
+            else:
+                _labels, rmsds, receptor_fnames, ligand_fnames = \
+                    classifiaction_types_to_lists(types_fname)
 
-            # Do we use provided labels or do we generate our own using rmsds?
-            labels = [] if label_by_rmsd else _labels
-            for path_idx, (receptor_fname, ligand_fname) in enumerate(
-                    zip(receptor_fnames, ligand_fnames)):
-                if label_by_rmsd:
-                    # Pose selection, filter by max/min active/inactive rmsd
-                    # from xtal poses
-                    rmsd = rmsds[path_idx]
-                    if rmsd < 0:
-                        continue
-                    elif rmsd < max_active_rms_distance:
-                        labels.append(1)
+                # Do we use provided labels or do we generate our own using
+                # rmsds?
+                labels = [] if label_by_rmsd else _labels
+                for path_idx, (receptor_fname, ligand_fname) in enumerate(
+                        zip(receptor_fnames, ligand_fnames)):
+                    if label_by_rmsd:
+                        # Pose selection, filter by max/min active/inactive rmsd
+                        # from xtal poses
+                        rmsd = rmsds[path_idx]
+                        if rmsd < 0:
+                            continue
+                        elif rmsd < max_active_rms_distance:
+                            labels.append(1)
+                            aug_ligs += [ligand_fname] * augmented_active_count
+                            aug_recs += [
+                                            receptor_fname] * \
+                                        augmented_active_count
+                        elif rmsd >= max_inactive_rms_distance:
+                            continue
+                        elif rmsd >= min_inactive_rms_distance:
+                            labels.append(0)
+                        else:  # discard this entry (do not add to
+                            # confirmed_ligs)
+                            continue
+                    elif labels[path_idx]:
                         aug_ligs += [ligand_fname] * augmented_active_count
                         aug_recs += [receptor_fname] * augmented_active_count
-                    elif rmsd >= max_inactive_rms_distance:
-                        continue
-                    elif rmsd >= min_inactive_rms_distance:
-                        labels.append(0)
-                    else:  # discard this entry (do not add to confirmed_ligs)
-                        continue
-                elif labels[path_idx]:
-                    aug_ligs += [ligand_fname] * augmented_active_count
-                    aug_recs += [receptor_fname] * augmented_active_count
-                confirmed_ligs.append(ligand_fname)
-                confirmed_recs.append(receptor_fname)
-            self.receptor_fnames = confirmed_recs + aug_recs
+                    confirmed_ligs.append(ligand_fname)
+                    confirmed_recs.append(receptor_fname)
+                self.receptor_fnames = confirmed_recs + aug_recs
         else:
             print('Loading all structures in', self.base_path)
             ligand_fnames = list(
@@ -166,25 +177,26 @@ class PointCloudDataset(torch.utils.data.Dataset):
                 confirmed_ligs.append(ligand_fname)
                 self.receptor_fnames = None
 
-        self.pre_aug_ds_len = len(ligand_fnames)
-        self.ligand_fnames = confirmed_ligs + aug_ligs
+            self.pre_aug_ds_len = len(ligand_fnames)
+            self.ligand_fnames = confirmed_ligs + aug_ligs
 
-        labels += [0] * len(aug_ligs)
-        labels = np.array(labels)
-        active_count = np.sum(labels)
-        class_sample_count = np.array(
-            [len(labels) - active_count, active_count])
-        if np.sum(labels) == len(labels) or np.sum(labels) == 0:
-            self.sampler = None
-        else:
-            weights = 1. / class_sample_count
-            self.sample_weights = torch.from_numpy(
-                np.array([weights[i] for i in labels]))
-            self.sampler = torch.utils.data.WeightedRandomSampler(
-                self.sample_weights, len(self.sample_weights)
-            )
-        self.labels = labels
-        print('There are', len(labels), 'training points in', base_path)
+            labels += [0] * len(aug_ligs)
+            labels = np.array(labels)
+            active_count = np.sum(labels)
+            class_sample_count = np.array(
+                [len(labels) - active_count, active_count])
+            if np.sum(labels) == len(labels) or np.sum(labels) == 0:
+                self.sampler = None
+            else:
+                weights = 1. / class_sample_count
+                self.sample_weights = torch.from_numpy(
+                    np.array([weights[i] for i in labels]))
+                self.sampler = torch.utils.data.WeightedRandomSampler(
+                    self.sample_weights, len(self.sample_weights)
+                )
+            self.labels = labels
+        print('There are', len(self.ligand_fnames), 'training points in',
+              shorten_home(base_path))
 
         # apply random rotations to ALL coordinates?
         self.transformation = uniform_random_rotation if rot else lambda x: x
@@ -230,7 +242,12 @@ class PointCloudDataset(torch.utils.data.Dataset):
         return len(self.ligand_fnames)
 
     def index_to_parquets(self, item):
-        label = self.labels[item]
+        if self.model_task == 'classification':
+            label = self.labels[item]
+        elif self.model_task == 'multi_regression':
+            label = (self.pki[item], self.pkd[item], self.ic50[item])
+        else:
+            label = max((self.pki[item], self.pkd[item], self.ic50[item]))
         if self.use_types:
             lig_fname = Path(self.ligand_fnames[item])
             rec_fname = Path(self.receptor_fnames[item])
@@ -253,7 +270,8 @@ class PointCloudDataset(torch.utils.data.Dataset):
         # rotation? This determination is made using the index, made possible
         # due to the construction of the filenames class variable in the
         # constructor: all actives labelled as decoys are found at the end.
-        if item is None or item < self.pre_aug_ds_len:
+        if self.model_task.endswith('regression') or (
+                item is None or item < self.pre_aug_ds_len):
             aug_angle = 0
         else:
             aug_angle = self.augmented_active_min_angle
@@ -278,7 +296,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
         if self.use_atomic_numbers:
             struct.types = struct['atomic_number'].map(
                 self.atomic_number_to_index) + struct.bp * (
-                    self.n_features)
+                               self.n_features)
         force_zero_label = False
         if self.p_remove_entity > 0 and random.random() < self.p_remove_entity:
             force_zero_label = True
@@ -339,7 +357,7 @@ class PygPointCloudDataset(PointCloudDataset):
         p, v, struct, force_zero_label = self.parquets_to_inputs(
             lig_fname, rec_fname, item=item)
         if force_zero_label:
-            label = 0
+            label = 0 if isinstance(label, int) == 1 else (0, 0, 0)
         edge_radius = self.edge_radius if self.edge_radius > 0 else 4
         intra_radius = 2.0 if self.estimate_bonds else edge_radius
 
@@ -354,15 +372,17 @@ class PygPointCloudDataset(PointCloudDataset):
             edge_attrs = one_hot(torch.from_numpy(edge_attrs).long(), 3)
 
         else:
-
             edge_indices, edge_attrs = torch.ones(1), torch.ones(1)
+
+        y = torch.from_numpy(np.array(label))
+        y = y.long() if self.model_task == 'classification' else y.float()
 
         return Data(
             x=v,
             edge_index=edge_indices,
             edge_attr=edge_attrs,
             pos=p,
-            y=torch.from_numpy(np.array(label)).long(),
+            y=y,
             rec_fname=rec_fname,
             lig_fname=lig_fname,
         )
@@ -372,7 +392,7 @@ def get_data_loader(
         data_root, dataset_class, receptors=None, batch_size=32, compact=True,
         use_atomic_numbers=False, radius=6, rot=True,
         augmented_actives=0, min_aug_angle=30,
-        polar_hydrogens=True, mode='train',
+        polar_hydrogens=True, mode='train', model_task='classification',
         max_active_rms_distance=None, fname_suffix='parquet',
         min_inactive_rms_distance=None, types_fname=None, edge_radius=None,
         prune=False, estimate_bonds=False, bp=None, **kwargs):
@@ -389,9 +409,12 @@ def get_data_loader(
         types_fname=types_fname,
         edge_radius=edge_radius,
         estimate_bonds=estimate_bonds,
-        prune=prune, bp=bp, radius=radius, rot=rot,
+        prune=prune, bp=bp, radius=radius, rot=rot, model_task=model_task,
         **kwargs)
-    sampler = ds.sampler if mode == 'train' else None
+    if ds.model_task == 'classification':
+        sampler = ds.sampler if mode == 'train' else None
+    else:
+        sampler = None
     if dataset_class == PointCloudDataset:
         collate = get_collate_fn(ds.feature_dim)
         return DataLoader(
@@ -405,7 +428,32 @@ def get_data_loader(
             num_workers=min(4, psutil.cpu_count()))
 
 
-def types_to_list(types_fname):
+def regression_types_to_lists(data_root, types_fname):
+    df = pd.read_csv(
+        expand_path(types_fname),
+        names=('pki', 'pkd', 'ic50', 'receptor', 'ligand'), sep='\s+')
+    lists = [list(df[col]) for col in df.columns]
+    pki, pkd, ic50, receptors, ligands = [], [], [], [], []
+    missing = []
+    for i in range(len(df)):
+        if Path(data_root, lists[-2][i]).is_file() and Path(data_root, lists[-1][i]).is_file():
+            pki.append(lists[0][i])
+            pkd.append(lists[1][i])
+            ic50.append(lists[2][i])
+            receptors.append(lists[3][i])
+            ligands.append(lists[4][i])
+        else:
+            missing.append((lists[-2][i], lists[-1][i]))
+    if len(missing):
+        print('Missing sturctures:')
+        for lost in missing:
+            for item in lost:
+                if not Path(data_root, item).is_file():
+                    print(Path(data_root, item))
+    return pki, pkd, ic50, receptors, ligands
+
+
+def classifiaction_types_to_lists(types_fname):
     """Take a types file and returns four lists containing paths and labels.
 
     Types files should be of the format:

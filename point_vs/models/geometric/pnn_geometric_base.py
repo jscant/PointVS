@@ -81,8 +81,8 @@ class PNNGeometricBase(PointNeuralNetworkBase):
                 messages = global_mean_pool(messages, batch)
         else:
             if self.feats_linear_layers is not None:
-                feats = global_mean_pool(feats, batch)
-                feats = self.feats_linear_layers(feats)
+                feats = global_mean_pool(feats, batch)  # (total_nodes, k)
+                feats = self.feats_linear_layers(feats)  # (bs, k)
             if self.edges_linear_layers is not None:
                 agg = unsorted_segment_sum(
                     messages, row, num_segments=size)

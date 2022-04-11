@@ -846,9 +846,11 @@ def parse_types_file(types_file):
     return list(recs), list(ligs)
 
 
-def parse_single_types_entry(inp, outp, structure_type, extended=False):
+def parse_single_types_entry(inp, outp, structure_type, extended=False,
+                             mol2=False):
+
     def get_sdf_and_index(lig):
-        sdf = '_'.join(str(lig).split('_')[:-1]) + '.sdf'
+        sdf = '_'.join(str(lig).split('_')[:-1]) + extension
         try:
             idx = int(str(lig).split('_')[-1].split('.')[0])
         except ValueError:
@@ -868,27 +870,33 @@ def parse_single_types_entry(inp, outp, structure_type, extended=False):
             '.parquet', '.pdb').replace(
             '.gninatypes', '.pdb')
 
+    extension = '.mol2' if mol2 else '.sdf'
     parser = StructuralFileParser(structure_type, extended)
     if structure_type == 'receptor':
         inp = get_pdb(inp)
         sdf_idx = None
     else:
         inp, sdf_idx = get_sdf_and_index(inp)
+    print(inp)
     parser.file_to_parquets(inp, outp.parent,
                             outp.name.replace('.gninatypes', '.parquet'),
                             add_polar_hydrogens=False, sdf_idx=sdf_idx)
 
 
-def parse_types_mp(types_file, input_base_path, output_base_path, extended):
+def parse_types_mp(types_file, input_base_path, output_base_path, extended,
+                   mol2=False):
     output_dir = mkdir(output_base_path)
     input_base_path = expand_path(input_base_path)
     recs, ligs = parse_types_file(types_file)
+    recs = []
     inputs = recs + ligs
     structure_types = ['receptor' for _ in recs] + ['ligand' for _ in ligs]
     outputs = [Path(output_dir, input) for input in inputs]
     inputs = [Path(input_base_path, input) for input in inputs]
+    mol2s = [mol2 for _ in inputs]
     no_return_parallelise(
-        parse_single_types_entry, inputs, outputs, structure_types, extended, cpus=1)
+        parse_single_types_entry, inputs, outputs, structure_types, extended,
+        mol2s, cpus=1)
 
 
 if __name__ == '__main__':
@@ -906,7 +914,10 @@ if __name__ == '__main__':
                              '--base_path in generate_types_file.py).')
     parser.add_argument('--extended_atom_types', '-e', action='store_true',
                         help='18 atom types rather than 10')
+    parser.add_argument('--use_mol2', '-m', action='store_true',
+                        help='Look for mol2 files rather than sdf')
     args = parser.parse_args()
 
     parse_types_mp(args.types_file, Path(args.input_base_path).expanduser(),
-                   args.output_path, args.extended_atom_types)
+                   args.output_path, args.extended_atom_types,
+                   mol2=args.use_mol2)

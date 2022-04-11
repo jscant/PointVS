@@ -13,7 +13,7 @@ from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingWarmRestarts
 
 from point_vs.analysis.top_n import top_n
 from point_vs.utils import get_eta, format_time, print_with_overwrite, mkdir, \
-    to_numpy, expand_path
+    to_numpy, expand_path, load_yaml, get_regression_pearson
 
 
 class PointNeuralNetworkBase(nn.Module):
@@ -24,10 +24,12 @@ class PointNeuralNetworkBase(nn.Module):
                  use_1cycle=False, warm_restarts=False,
                  only_save_best_models=False, **model_kwargs):
         super().__init__()
+        self.model_task = model_kwargs.get('model_task', 'classification')
+
         self.batch = 0
         self.epoch = 0
         self.losses = []
-        self.final_activation = nn.CrossEntropyLoss()
+        # self.final_activation = nn.CrossEntropyLoss()
         self.feats_linear_layers = None
         self.edges_linear_layers = None
         self.save_path = Path(save_path).expanduser()
@@ -46,7 +48,15 @@ class PointNeuralNetworkBase(nn.Module):
 
         self.loss_log_file = self.save_path / 'loss.log'
 
-        self.cross_entropy = nn.BCEWithLogitsLoss()
+        if self.model_task == 'classification':
+            self.loss_function = nn.BCEWithLogitsLoss()
+            self.model_task_string = 'Binary crossentropy'
+        elif self.model_task.endswith('regression'):
+            self.loss_function = nn.MSELoss()
+            self.model_task_string = 'Mean squared error'
+        else:
+            raise RuntimeError(
+                'model_task must be either classification or regression')
 
         self.wandb_project = wandb_project
         self.wandb_path = self.save_path / 'wandb_{}'.format(wandb_project)
@@ -67,7 +77,7 @@ class PointNeuralNetworkBase(nn.Module):
         self.decoy_mean_pred, self.active_mean_pred = 0.5, 0.5
         self.log_interval = 10
         self.scheduler = None  # will change this in training preamble
-        self.best_top1 = 0
+        self.test_metric = 0
 
         if not silent:
             with open(save_path / 'model_kwargs.yaml', 'w') as f:
@@ -155,18 +165,43 @@ class PointNeuralNetworkBase(nn.Module):
                     data_loader):
                 y_pred, y_true, ligands, receptors = self.process_graph(graph)
 
-                y_true_np = to_numpy(y_true).reshape((-1,))
-                y_pred_np = to_numpy(nn.Sigmoid()(y_pred)).reshape((-1,))
+                if self.model_task == 'classification':
+                    y_true_np = to_numpy(y_true).reshape((-1,))
+                    y_pred_np = to_numpy(nn.Sigmoid()(y_pred)).reshape((-1,))
+                    num_type = int
+                elif self.model_task == 'multi_regression':
+                    y_true_np = to_numpy(y_true).reshape((-1, 3))
+                    y_pred_np = to_numpy(y_pred).reshape((-1, 3))
+                    metrics = np.array(
+                        [['pki', 'pkd', 'ic50'] for _ in range(len(ligands))])
+                    metrics = list(metrics[np.where(y_true_np > -0.5)])
+                    y_pred_np = y_pred_np[np.where(y_true_np > -0.5)]
+                    y_true_np = y_true_np[np.where(y_true_np > -0.5)]
+                    num_type = float
+                else:
+                    y_true_np = to_numpy(y_true).reshape((-1,))
+                    y_pred_np = to_numpy(y_pred).reshape((-1,))
+                    num_type = float
 
                 self.get_mean_preds(y_true, y_pred)
                 self.record_and_display_info(
                     start_time, None, data_loader, None, record_type='test')
 
-                predictions += '\n'.join(['{0} | {1:.7f} {2} {3}'.format(
-                    int(y_true_np[i]),
-                    y_pred_np[i],
-                    receptors[i],
-                    ligands[i]) for i in range(len(receptors))]) + '\n'
+                if self.model_task == 'multi_regression':
+                    predictions += '\n'.join(
+                        ['{0:.3f} | {1:.3f} {2} {3} | {4}'.format(
+                            num_type(y_true_np[i]),
+                            y_pred_np[i],
+                            receptors[i],
+                            ligands[i],
+                            metrics[i]) for i in range(len(receptors))]) + '\n'
+                else:
+                    predictions += '\n'.join(
+                        ['{0:.3f} | {1:.3f} {2} {3}'.format(
+                            num_type(y_true_np[i]),
+                            y_pred_np[i],
+                            receptors[i],
+                            ligands[i]) for i in range(len(receptors))]) + '\n'
 
                 predictions = self.write_predictions(
                     predictions,
@@ -175,26 +210,42 @@ class PointNeuralNetworkBase(nn.Module):
                 )
 
         if top1_on_end:
-            try:
+            if self.model_task == 'classification':
                 top_1 = top_n(predictions_file)
-                if top_1 > self.best_top1:
-                    self.best_top1 = top_1
+                if top_1 > self.test_metric:
+                    self.test_metric = top_1
+                    best = True
+                else:
+                    best = False
+                try:
+                    wandb.log({
+                        'Validation Top1': top_1,
+                        'Best validation Top1': self.test_metric,
+                        'Epoch': self.epoch + 1
+                    })
+                except Exception:
+                    pass  # wandb has not been initialised so ignore
+            else:
+                r, p = get_regression_pearson(predictions_file)
+                if p < 0.05 and r > self.test_metric:
+                    self.test_metric = r
                     best = True
                 else:
                     best = False
                 wandb.log({
-                    'Validation Top1': top_1,
-                    'Best validation Top1': self.best_top1,
+                    'Pearson''s correlation coefficient': r,
+                    'Best PCC': self.test_metric,
                     'Epoch': self.epoch + 1
                 })
-            except Exception:
-                pass  # wandb has not been initialised so ignore
             if self.only_save_best_models and not best:
                 return False
         return True
 
     def get_loss(self, y_true, y_pred):
-        return self.cross_entropy(y_pred, y_true.cuda())
+        if self.model_task != 'multi_regression':
+            return self.loss_function(y_pred, y_true.cuda())
+        y_pred[torch.where(y_true == -1)] = -1
+        return 3 * self.loss_function(y_pred, y_true.cuda())
 
     def training_setup(self, data_loader, epochs):
         start_time = time.time()
@@ -261,30 +312,45 @@ class PointNeuralNetworkBase(nn.Module):
         if record_type == 'train':
             wandb_update_dict = {
                 'Time remaining (train)': eta,
-                'Binary crossentropy (train)': loss,
+                '{} (train)'.format(self.model_task_string): loss,
                 'Batch (train)':
                     (self.epoch * len(data_loader) + self.batch + 1),
-                'Mean active prediction (train)': self.active_mean_pred,
-                'Mean decoy prediction (train)': self.decoy_mean_pred,
                 'Examples seen (train)':
                     self.epoch * len(
                         data_loader) * data_loader.batch_size +
                     data_loader.batch_size * self.batch,
                 'Learning rate (train)': lr
             }
-            print_with_overwrite(
-                (
-                    'Epoch:',
-                    '{0}/{1}'.format(self.epoch + 1, epochs),
-                    '|', 'Batch:', '{0}/{1}'.format(
-                        self.batch + 1, len(data_loader)),
-                    'LR:', '{0:.3e}'.format(lr)),
-                ('Time elapsed:', time_elapsed, '|',
-                 'Time remaining:', eta),
-                ('Loss: {0:.4f}'.format(loss), '|',
-                 'Mean active: {0:.4f}'.format(self.active_mean_pred),
-                 '|', 'Mean decoy: {0:.4f}'.format(self.decoy_mean_pred))
-            )
+            if self.model_task == 'classification':
+                wandb_update_dict.update({
+                    'Mean active prediction (train)': self.active_mean_pred,
+                    'Mean inactive prediction (train)': self.decoy_mean_pred
+                })
+                print_with_overwrite(
+                    (
+                        'Epoch:',
+                        '{0}/{1}'.format(self.epoch + 1, epochs),
+                        '|', 'Batch:', '{0}/{1}'.format(
+                            self.batch + 1, len(data_loader)),
+                        'LR:', '{0:.3e}'.format(lr)),
+                    ('Time elapsed:', time_elapsed, '|',
+                     'Time remaining:', eta),
+                    ('Loss: {0:.4f}'.format(loss), '|',
+                     'Mean active: {0:.4f}'.format(self.active_mean_pred),
+                     '|', 'Mean decoy: {0:.4f}'.format(self.decoy_mean_pred))
+                )
+            else:
+                print_with_overwrite(
+                    (
+                        'Epoch:',
+                        '{0}/{1}'.format(self.epoch + 1, epochs),
+                        '|', 'Batch:', '{0}/{1}'.format(
+                            self.batch + 1, len(data_loader)),
+                        'LR:', '{0:.3e}'.format(lr)),
+                    ('Time elapsed:', time_elapsed, '|',
+                     'Time remaining:', eta),
+                    ('Loss: {0:.4f}'.format(loss),)
+                )
         else:
             wandb_update_dict = {
                 'Time remaining (validation)': eta,
@@ -292,20 +358,31 @@ class PointNeuralNetworkBase(nn.Module):
                     self.epoch * len(
                         data_loader) * data_loader.batch_size +
                     data_loader.batch_size * self.batch,
-                'Mean active prediction (validation)':
-                    self.active_mean_pred,
-                'Mean decoy prediction (validation)':
-                    self.decoy_mean_pred,
             }
-            print_with_overwrite(
-                ('Inference on: {}'.format(data_loader.dataset.base_path),
-                 '|', 'Iteration:', '{0}/{1}'.format(
-                    self.batch + 1, len(data_loader))),
-                ('Time elapsed:', time_elapsed, '|',
-                 'Time remaining:', eta),
-                ('Mean active: {0:.4f}'.format(self.active_mean_pred), '|',
-                 'Mean decoy: {0:.4f}'.format(self.decoy_mean_pred))
-            )
+            if self.model_task == 'classification':
+                wandb_update_dict.update({
+                    'Mean active prediction (validation)':
+                        self.active_mean_pred,
+                    'Mean decoy prediction (validation)':
+                        self.decoy_mean_pred,
+                })
+                print_with_overwrite(
+                    ('Inference on: {}'.format(data_loader.dataset.base_path),
+                     '|', 'Iteration:', '{0}/{1}'.format(
+                        self.batch + 1, len(data_loader))),
+                    ('Time elapsed:', time_elapsed, '|',
+                     'Time remaining:', eta),
+                    ('Mean active: {0:.4f}'.format(self.active_mean_pred), '|',
+                     'Mean decoy: {0:.4f}'.format(self.decoy_mean_pred))
+                )
+            else:
+                print_with_overwrite(
+                    ('Inference on: {}'.format(data_loader.dataset.base_path),
+                     '|', 'Iteration:', '{0}/{1}'.format(
+                        self.batch + 1, len(data_loader))),
+                    ('Time elapsed:', time_elapsed, '|',
+                     'Time remaining:', eta)
+                )
         try:
             try:
                 wandb.log(wandb_update_dict)
@@ -325,9 +402,9 @@ class PointNeuralNetworkBase(nn.Module):
                 self.predictions_file.parent,
                 'predictions_epoch_{}.txt'.format(self.epoch + 1))
             best = self.val(
-                    epoch_end_validation_set,
-                    predictions_file=epoch_end_predictions_fname,
-                    top1_on_end=top1_on_end)
+                epoch_end_validation_set,
+                predictions_file=epoch_end_predictions_fname,
+                top1_on_end=top1_on_end)
             if self.only_save_best_models and best:
                 self.save()
 
@@ -369,37 +446,44 @@ class PointNeuralNetworkBase(nn.Module):
     def load_weights(self, checkpoint_file, silent=False):
         """All this crap is required because I renamed some things ages ago."""
         checkpoint = torch.load(str(Path(checkpoint_file).expanduser()))
-        rename = False
-        try:
-            self.load_state_dict(checkpoint['model_state_dict'])
-        except RuntimeError:
-            for layer in self.layers:
-                if hasattr(layer, 'att_mlp'):
-                    layer.att_mlp = nn.Sequential(
-                        nn.Identity(),  # Compatability
-                        nn.Identity(),  # Compatability
-                        nn.Linear(layer.hidden_nf, 1),
-                        layer.attention_activation())
+        if self.model_task == load_yaml(
+                expand_path(checkpoint_file).parents[1] /
+                'model_kwargs.yaml').get('model_task', 'classification'):
+            rename = False
             try:
                 self.load_state_dict(checkpoint['model_state_dict'])
             except RuntimeError:
-                rename = True
-                self.load_state_dict(self._transform_names(
-                    checkpoint['model_state_dict']))
-        self.optimiser.load_state_dict(checkpoint['optimiser_state_dict'])
-        self.epoch = checkpoint['epoch']
-        if not self.epoch:
-            self.epoch += 1
-        self.losses = checkpoint['losses']
-        if rename:
-            for layer in self.layers:
-                if hasattr(layer, 'att_mlp'):
-                    layer.att_mlp = layer.att_mlp
+                for layer in self.layers:
+                    if hasattr(layer, 'att_mlp'):
+                        layer.att_mlp = nn.Sequential(
+                            nn.Identity(),  # Compatability
+                            nn.Identity(),  # Compatability
+                            nn.Linear(layer.hidden_nf, 1),
+                            layer.attention_activation())
+                try:
+                    self.load_state_dict(checkpoint['model_state_dict'])
+                except RuntimeError:
+                    rename = True
+                    self.load_state_dict(self._transform_names(
+                        checkpoint['model_state_dict']))
+            self.optimiser.load_state_dict(checkpoint['optimiser_state_dict'])
+            self.epoch = checkpoint['epoch']
+            if not self.epoch:
+                self.epoch += 1
+            self.losses = checkpoint['losses']
+            if rename:
+                for layer in self.layers:
+                    if hasattr(layer, 'att_mlp'):
+                        layer.att_mlp = layer.att_mlp
+        else:
+            own_state = self.state_dict()
+            for name, param in checkpoint['model_state_dict'].items():
+                own_state[name].copy_(param)
         if not silent:
             try:
-                pth = checkpoint_file.relative_to(expand_path(Path('.')))
+                pth = Path(checkpoint_file).relative_to(expand_path(Path('.')))
             except ValueError:
-                pth = checkpoint_file
+                pth = Path(checkpoint_file)
             print('Sucesfully loaded weights from', pth)
 
     def save_loss(self, save_interval):

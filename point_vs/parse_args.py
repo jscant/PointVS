@@ -235,4 +235,8 @@ def parse_args():
     parser.add_argument('--max_inactive_rmsd', type=float,
                         help='Discard structures beyond <x> RMSD from xtal '
                              'pose')
+    parser.add_argument('--model_task', type=str, default='classification',
+                        help='One of either classification or regression; '
+                             'regression is 3-class regression on binding '
+                             'affinities.')
     return parser.parse_args()

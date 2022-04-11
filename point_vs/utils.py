@@ -16,6 +16,141 @@ import torch
 import torch.nn as nn
 import yaml
 from matplotlib import pyplot as plt
+from pymol import cmd
+from scipy.stats import pearsonr
+
+from point_vs.constants import AA_TRIPLET_CODES
+
+
+def get_regression_pearson(predictions_file):
+    with open(expand_path(predictions_file), 'r') as f:
+        if len(f.readlines()[0].split()) == 7:
+            names = ('y_true', '_sep1', 'y_pred', 'receptor', 'ligand', '_set2',
+                     'metric')
+        else:
+            names = ('y_true', '_sep1', 'y_pred', 'receptor', 'ligand')
+    df = pd.read_csv(expand_path(predictions_file), sep='\s+',
+                     names=names)
+    return pearsonr(df['y_true'], df['y_pred'])
+
+
+def rename_lig(fname, output_path=None, ligname='LIG', remove_solvent=True,
+               handle_conformers='separate', atom_count_threshold=0,
+               add_h=True):
+    def detect_conformers():
+        confs = set()
+        with open(fname, 'r') as f:
+            for line in f.readlines():
+                if not (line.startswith('ATOM') or line.startswith('HETATM')):
+                    continue
+                if len(line) > 16 and len(line[16].strip()):
+                    confs.add(line[16])
+        return confs
+
+    def get_residue_ids():
+
+        def obtain_res_id(chain, resi, resn):
+            nonlocal res_ids
+            res_ids.add((chain, resi, resn.strip().upper()))
+
+        cmd.iterate('all',
+                    'obtain_res_id(chain, resi, resn)',
+                    space={'obtain_res_id': obtain_res_id})
+
+    assert handle_conformers in ('separate', 'ignore', 'discard'), \
+        'handle_conformers must be one of separate, ignore or discard'
+
+    solvent_names = ('HOH', 'WAT', 'H20', 'TIP', 'SOL')  # default in pymol
+
+    fname = str(expand_path(fname))
+    fnames = []
+    confs = detect_conformers()
+
+    if handle_conformers == 'ignore' or len(confs) < 1:
+        new_path = Path(
+            mkdir(output_path), Path(fname).name.replace('.pdb', '_fixed.pdb'))
+        shutil.copy(fname, new_path)
+        fnames.append(new_path)
+    else:
+        for conf in confs:
+            conf_fname = remove_conformers(
+                fname, output_path, confs, conf, True,
+                add_conf_suffix=handle_conformers == 'separate')
+            fnames.append(conf_fname)
+            if handle_conformers == 'discard':
+                break
+    fnames = sorted(fnames)
+    for fname in fnames:
+        cmd.reinitialize()
+        cmd.load(fname)
+        if remove_solvent:
+            cmd.remove('solvent')
+
+        if atom_count_threshold > 0:
+            res_ids = set()
+            get_residue_ids()
+            for chain, res_id, res_name in res_ids:
+                cmd.select(res_id, 'chain {0} and resi {1} and resn {2}'.format(
+                    chain, res_id, res_name))
+                if cmd.count_atoms(res_id) < atom_count_threshold and \
+                        res_name not in solvent_names and res_name not in \
+                        AA_TRIPLET_CODES:
+                    cmd.remove(res_id)
+
+        cmd.select('ligand', 'hetatm and not resn HOH')
+        cmd.alter('ligand', 'resn="{}"'.format(ligname))
+        if add_h:
+            cmd.h_add('all')
+        cmd.save(str(fname))
+        cmd.remove('all')
+        cmd.delete('all')
+        cmd.reset()
+        cmd.reinitialize()
+    return fnames
+
+
+def remove_conformers(
+        fname, output_path, conf_ids, keep_id, add_fixed_suffix=False,
+        add_conf_suffix=True):
+    fname = expand_path(fname)
+    cmd.reinitialize()
+    cmd.load(str(fname))
+    for conf_id in conf_ids:
+        if conf_id == keep_id:
+            continue
+        selename = 'conf_' + conf_id
+        cmd.select(selename, 'alt ' + conf_id)
+        cmd.remove(selename)
+    conf_suffix = '_conf_' + keep_id if add_conf_suffix else ''
+    if add_fixed_suffix:
+        outname = fname.with_suffix('').name + conf_suffix + '_fixed.pdb'
+    else:
+        outname = fname.with_suffix('').name + conf_suffix + keep_id + '.pdb'
+    output_fname = Path(mkdir(output_path), outname)
+    cmd.save(str(output_fname))
+    cmd.remove('all')
+    cmd.delete('all')
+    cmd.reset()
+    cmd.reinitialize()
+    return output_fname
+
+
+def fetch_atom_info(atom):
+    """Fetch and assign relevant structural info to pybel atom."""
+    obatom = atom.OBAtom
+    res = obatom.GetResidue()
+    atom.chain = res.GetChain().strip()
+    atom_name = res.GetAtomID(obatom).strip()
+    if len(atom_name) == 4:
+        atom.name = atom_name[1:]
+    else:
+        atom.name = atom_name
+    atom.resi = res.GetNum()
+    atom.resn = res.GetName().strip()
+    if not len(atom.chain):
+        raise Exception('No chain for atom', atom)
+    return '{0}:{1}:{2}:{3}'.format(
+        atom.chain, atom.resi, atom.resn, atom.name)
 
 
 def wipe_new_pdbs(directory, exempt=None):
@@ -146,6 +281,16 @@ def load_yaml(fname):
     """Load a yaml dictionary"""
     with open(Path(fname).expanduser(), 'r') as f:
         return yaml.load(f, Loader=yaml.Loader)
+
+
+def shorten_home(path, make_absolute=False):
+    home_path = str(Path.home()) + '/'
+    if make_absolute:
+        path = expand_path(path)
+    path = str(path)
+    if path.startswith(home_path):
+        return Path('~/' + path[len(home_path):])
+    return Path(path)
 
 
 def get_layer_shapes(model):
