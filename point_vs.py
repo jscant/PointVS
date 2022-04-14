@@ -84,7 +84,10 @@ if __name__ == '__main__':
             'model must be one of ' + ', '.join(model_classes.keys()))
 
     if args.model in ('lucid', 'egnn', 'lietransformer'):
-        dataset_class = PygPointCloudDataset
+        if args.synthpharm:
+            dataset_class = SynthPharmDataset
+        else:
+            dataset_class = PygPointCloudDataset
     else:
         dataset_class = PointCloudDataset
 

@@ -255,7 +255,7 @@ def centre_on_ligand(struct):
 
 
 def concat_structs(rec, lig, n_features, min_lig_rotation=0, parsers=None,
-                   extended=False):
+                   extended=False, synth_pharm=False):
     """Concatenate the receptor and ligand parquet structures."""
     min_lig_rotation_rads = np.pi * min_lig_rotation / 180
 
@@ -266,22 +266,29 @@ def concat_structs(rec, lig, n_features, min_lig_rotation=0, parsers=None,
         lig_struct = parsers[0].file_to_parquets(lig, add_polar_hydrogens=True)
         rec_struct = parsers[1].file_to_parquets(rec, add_polar_hydrogens=True)
 
-    rec_struct.types += n_features + extended * 8
+    if synth_pharm:
+        rec_struct.types += n_features + extended * 8
 
-    if min_lig_rotation:
-        lig_coords_init = np.vstack(
-            [lig_struct.x, lig_struct.y, lig_struct.z]).T
-        orig_vector = lig_coords_init[0, :]
-        candidate_vector = orig_vector
-        candidate_coords = lig_coords_init
-        while angle_3d(orig_vector, candidate_vector) < min_lig_rotation_rads:
-            candidate_coords = uniform_random_rotation(lig_coords_init)
-            candidate_vector = candidate_coords[0, :]
-        lig_struct.x = candidate_coords[:, 0]
-        lig_struct.y = candidate_coords[:, 1]
-        lig_struct.z = candidate_coords[:, 2]
+        if min_lig_rotation:
+            lig_coords_init = np.vstack(
+                [lig_struct.x, lig_struct.y, lig_struct.z]).T
+            orig_vector = lig_coords_init[0, :]
+            candidate_vector = orig_vector
+            candidate_coords = lig_coords_init
+            while angle_3d(orig_vector, candidate_vector) < min_lig_rotation_rads:
+                candidate_coords = uniform_random_rotation(lig_coords_init)
+                candidate_vector = candidate_coords[0, :]
+            lig_struct.x = candidate_coords[:, 0]
+            lig_struct.y = candidate_coords[:, 1]
+            lig_struct.z = candidate_coords[:, 2]
 
-    concatted_structs = lig_struct.append(rec_struct, ignore_index=True)
+        concatted_structs = lig_struct.append(rec_struct, ignore_index=True)
+    else:
+        atomic_nums = (6, 7, 8, 9, 15, 16, 17, 35, 53)
+        lig_struct['atom_id'] = lig_struct['type'].map({
+            num: (idx + 3) for idx, num in enumerate(atomic_nums)
+        })
+        concatted_structs = lig_struct.append()
     return concatted_structs
 
 

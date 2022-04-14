@@ -105,7 +105,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
         if self.use_types:
             if self.model_task.endswith('regression'):
                 self.pki, self.pkd, self.ic50, self.receptor_fnames, \
-                    self.ligand_fnames = regression_types_to_lists(
+                self.ligand_fnames = regression_types_to_lists(
                     self.base_path, types_fname)
             else:
                 _labels, rmsds, receptor_fnames, ligand_fnames = \
@@ -388,6 +388,37 @@ class PygPointCloudDataset(PointCloudDataset):
         )
 
 
+class SynthPharmDataset(PygPointCloudDataset):
+
+    def parquets_to_inputs(self, lig_fname, rec_fname, item=None):
+
+        # Are we using an active and labelling it as a decoy through random
+        # rotation? This determination is made using the index, made possible
+        # due to the construction of the filenames class variable in the
+        # constructor: all actives labelled as decoys are found at the end.
+
+        rec_fname = self.base_path / rec_fname
+        lig_fname = self.base_path / lig_fname
+        if not lig_fname.is_file():
+            raise FileNotFoundError(lig_fname, 'does not exist.')
+        if not rec_fname.is_file():
+            raise FileNotFoundError(rec_fname, 'does not exist')
+
+        # struct.types is +11 for receptor atoms, i.e. 0 -> 11, 1 -> 12, etc.
+        struct = make_box(concat_structs(
+            rec_fname, lig_fname, self.n_features,
+            min_lig_rotation=0, synth_pharm=True), radius=self.radius,
+            relative_to_ligand=True)
+
+        p = torch.from_numpy(
+                np.vstack([struct['x'], struct['y'], struct['z']]).T)
+
+        v = make_bit_vector(
+            struct.types.to_numpy(), self.n_features, self.compact)
+
+        return p, v, struct, False
+
+
 def get_data_loader(
         data_root, dataset_class, receptors=None, batch_size=32, compact=True,
         use_atomic_numbers=False, radius=6, rot=True,
@@ -436,7 +467,9 @@ def regression_types_to_lists(data_root, types_fname):
     pki, pkd, ic50, receptors, ligands = [], [], [], [], []
     missing = []
     for i in range(len(df)):
-        if Path(data_root, lists[-2][i]).is_file() and Path(data_root, lists[-1][i]).is_file():
+        if Path(data_root, lists[-2][i]).is_file() and Path(data_root,
+                                                            lists[-1][
+                                                                i]).is_file():
             pki.append(lists[0][i])
             pkd.append(lists[1][i])
             ic50.append(lists[2][i])

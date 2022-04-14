@@ -239,4 +239,5 @@ def parse_args():
                         help='One of either classification or regression; '
                              'regression is 3-class regression on binding '
                              'affinities.')
+    parser.add_argument('--synthpharm', action='store_true', help='For tom')
     return parser.parse_args()
