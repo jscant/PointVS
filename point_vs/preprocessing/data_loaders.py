@@ -102,80 +102,45 @@ class PointCloudDataset(torch.utils.data.Dataset):
         aug_recs, aug_ligs = [], []
         confirmed_ligs = []
         confirmed_recs = []
-        if self.use_types:
-            if self.model_task.endswith('regression'):
-                self.pki, self.pkd, self.ic50, self.receptor_fnames, \
-                self.ligand_fnames = regression_types_to_lists(
-                    self.base_path, types_fname)
-            else:
-                _labels, rmsds, receptor_fnames, ligand_fnames = \
-                    classifiaction_types_to_lists(types_fname)
-
-                # Do we use provided labels or do we generate our own using
-                # rmsds?
-                labels = [] if label_by_rmsd else _labels
-                for path_idx, (receptor_fname, ligand_fname) in enumerate(
-                        zip(receptor_fnames, ligand_fnames)):
-                    if label_by_rmsd:
-                        # Pose selection, filter by max/min active/inactive rmsd
-                        # from xtal poses
-                        rmsd = rmsds[path_idx]
-                        if rmsd < 0:
-                            continue
-                        elif rmsd < max_active_rms_distance:
-                            labels.append(1)
-                            aug_ligs += [ligand_fname] * augmented_active_count
-                            aug_recs += [
-                                            receptor_fname] * \
-                                        augmented_active_count
-                        elif rmsd >= max_inactive_rms_distance:
-                            continue
-                        elif rmsd >= min_inactive_rms_distance:
-                            labels.append(0)
-                        else:  # discard this entry (do not add to
-                            # confirmed_ligs)
-                            continue
-                    elif labels[path_idx]:
-                        aug_ligs += [ligand_fname] * augmented_active_count
-                        aug_recs += [receptor_fname] * augmented_active_count
-                    confirmed_ligs.append(ligand_fname)
-                    confirmed_recs.append(receptor_fname)
-                self.receptor_fnames = confirmed_recs + aug_recs
+        if self.model_task.endswith('regression'):
+            self.pki, self.pkd, self.ic50, self.receptor_fnames, \
+            self.ligand_fnames = regression_types_to_lists(
+                self.base_path, types_fname)
         else:
-            print('Loading all structures in', self.base_path)
-            ligand_fnames = list(
-                (self.base_path / 'ligands').glob('**/*.' + fname_suffix))
-            if label_by_rmsd:
-                rmsd_info_fname = Path(self.base_path, 'rmsd_info.yaml')
-                rmsd_info = load_yaml(rmsd_info_fname)
+            _labels, rmsds, receptor_fnames, ligand_fnames = \
+                classifiaction_types_to_lists(types_fname)
 
-            for path_idx, ligand_fname in enumerate(ligand_fnames):
+            # Do we use provided labels or do we generate our own using
+            # rmsds?
+            labels = [] if label_by_rmsd else _labels
+            for path_idx, (receptor_fname, ligand_fname) in enumerate(
+                    zip(receptor_fnames, ligand_fnames)):
                 if label_by_rmsd:
-                    if str(ligand_fname.parent.name).find('active') != -1:
-                        continue
-                    pdbid = ligand_fname.parent.name.split('_')[0]
-                    idx = int(Path(ligand_fname.name).stem.split('_')[-1])
-                    try:
-                        rmsd = rmsd_info[pdbid]['docked_wrt_crystal'][idx]
-                    except KeyError:
-                        continue
+                    # Pose selection, filter by max/min active/inactive rmsd
+                    # from xtal poses
+                    rmsd = rmsds[path_idx]
                     if rmsd < 0:
                         continue
-                    if rmsd < max_active_rms_distance:
+                    elif rmsd < max_active_rms_distance:
                         labels.append(1)
                         aug_ligs += [ligand_fname] * augmented_active_count
+                        aug_recs += [
+                                        receptor_fname] * \
+                                    augmented_active_count
+                    elif rmsd >= max_inactive_rms_distance:
+                        continue
                     elif rmsd >= min_inactive_rms_distance:
                         labels.append(0)
-                    else:  # discard this entry (do not add to confirmed_ligs)
+                    else:  # discard this entry (do not add to
+                        # confirmed_ligs)
                         continue
-                else:
-                    if str(ligand_fname.parent.name).find('active') == -1:
-                        labels.append(0)
-                    else:
-                        labels.append(1)
-                        aug_ligs += [ligand_fname] * augmented_active_count
+                elif labels[path_idx]:
+                    aug_ligs += [ligand_fname] * augmented_active_count
+                    aug_recs += [receptor_fname] * augmented_active_count
                 confirmed_ligs.append(ligand_fname)
-                self.receptor_fnames = None
+                confirmed_recs.append(receptor_fname)
+            self.receptor_fnames = confirmed_recs + aug_recs
+            self.ligand_fnames = ligand_fnames
 
             self.pre_aug_ds_len = len(ligand_fnames)
             self.ligand_fnames = confirmed_ligs + aug_ligs
@@ -194,7 +159,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
                 self.sampler = torch.utils.data.WeightedRandomSampler(
                     self.sample_weights, len(self.sample_weights)
                 )
-            self.labels = labels
+        self.labels = labels
         print('There are', len(self.ligand_fnames), 'training points in',
               shorten_home(base_path))
 
@@ -399,24 +364,72 @@ class SynthPharmDataset(PygPointCloudDataset):
 
         rec_fname = self.base_path / rec_fname
         lig_fname = self.base_path / lig_fname
+
         if not lig_fname.is_file():
             raise FileNotFoundError(lig_fname, 'does not exist.')
         if not rec_fname.is_file():
             raise FileNotFoundError(rec_fname, 'does not exist')
 
         # struct.types is +11 for receptor atoms, i.e. 0 -> 11, 1 -> 12, etc.
-        struct = make_box(concat_structs(
+        struct = concat_structs(
             rec_fname, lig_fname, self.n_features,
-            min_lig_rotation=0, synth_pharm=True), radius=self.radius,
-            relative_to_ligand=True)
+            min_lig_rotation=0, synth_pharm=True)
 
         p = torch.from_numpy(
                 np.vstack([struct['x'], struct['y'], struct['z']]).T)
 
-        v = make_bit_vector(
-            struct.types.to_numpy(), self.n_features, self.compact)
+        v = torch.nn.functional.one_hot(
+            torch.from_numpy(struct.atom_id.to_numpy()), num_classes=12)
 
         return p, v, struct, False
+
+    def __getitem__(self, item):
+        """Given an index, locate and preprocess relevant parquet file.
+
+        Arguments:
+            item: index in the list of filenames denoting which ligand and
+                receptor to fetch
+
+        Returns:
+            Tuple containing (a) a tuple with a list of tensors: cartesian
+            coordinates, feature vectors and masks for each point, as well as
+            the number of points in the structure and (b) the label \in \{0, 1\}
+            denoting whether the structure is an active or a decoy.
+        """
+        lig_fname, rec_fname, label = self.index_to_parquets(item)
+
+        p, v, struct, force_zero_label = self.parquets_to_inputs(
+            lig_fname, rec_fname, item=item)
+        if force_zero_label:
+            label = 0 if isinstance(label, int) == 1 else (0, 0, 0)
+        edge_radius = self.edge_radius if self.edge_radius > 0 else 4
+        intra_radius = 2.0 if self.estimate_bonds else edge_radius
+
+        if self.bp is not None:
+            struct = struct[struct.bp == self.bp]
+
+        if self.edge_radius >= 0:
+            struct, edge_indices, edge_attrs = generate_edges(
+                struct, inter_radius=edge_radius, intra_radius=intra_radius,
+                prune=self.prune, synthpharm=True)
+            edge_indices = torch.from_numpy(np.vstack(edge_indices)).long()
+            edge_attrs = one_hot(torch.from_numpy(edge_attrs).long(), 3)
+
+        else:
+            edge_indices, edge_attrs = torch.ones(1), torch.ones(1)
+
+        y = torch.from_numpy(np.array(label))
+        y = y.long() if self.model_task == 'classification' else y.float()
+
+        return Data(
+            x=v,
+            edge_index=edge_indices,
+            edge_attr=edge_attrs,
+            pos=p,
+            y=y,
+            rec_fname=rec_fname,
+            lig_fname=lig_fname,
+        )
 
 
 def get_data_loader(

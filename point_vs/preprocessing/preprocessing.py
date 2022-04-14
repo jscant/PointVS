@@ -65,7 +65,8 @@ def angle_3d(v1, v2):
     return angle
 
 
-def generate_edges(struct, inter_radius=4.0, intra_radius=2.0, prune=True):
+def generate_edges(struct, inter_radius=4.0, intra_radius=2.0, prune=True,
+                   synthpharm=False):
     """Generate edges of graph with specified distance cutoff.
 
     Arguments:
@@ -99,6 +100,10 @@ def generate_edges(struct, inter_radius=4.0, intra_radius=2.0, prune=True):
 
     struct.reset_index(inplace=True, drop=True)
     coords = extract_coords(struct)
+
+    if synthpharm:
+        struct['bp'] = struct['atom_id'].apply(lambda x: int(x <= 2))
+
     lig_or_rec = struct.bp.to_numpy()
     distances = cdist(coords, coords, 'euclidean')
 
@@ -266,7 +271,7 @@ def concat_structs(rec, lig, n_features, min_lig_rotation=0, parsers=None,
         lig_struct = parsers[0].file_to_parquets(lig, add_polar_hydrogens=True)
         rec_struct = parsers[1].file_to_parquets(rec, add_polar_hydrogens=True)
 
-    if synth_pharm:
+    if not synth_pharm:
         rec_struct.types += n_features + extended * 8
 
         if min_lig_rotation:
@@ -288,7 +293,8 @@ def concat_structs(rec, lig, n_features, min_lig_rotation=0, parsers=None,
         lig_struct['atom_id'] = lig_struct['type'].map({
             num: (idx + 3) for idx, num in enumerate(atomic_nums)
         })
-        concatted_structs = lig_struct.append()
+        rec_struct['atom_id'] = rec_struct['type']
+        concatted_structs = lig_struct.append(rec_struct, ignore_index=True)
     return concatted_structs
 
 

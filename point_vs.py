@@ -25,7 +25,7 @@ from point_vs.models.siamese import SiameseNeuralNetwork
 from point_vs.models.vanilla.lie_conv import LieResNet
 from point_vs.parse_args import parse_args
 from point_vs.preprocessing.data_loaders import get_data_loader, \
-    PointCloudDataset, PygPointCloudDataset
+    PointCloudDataset, PygPointCloudDataset, SynthPharmDataset
 from point_vs.utils import load_yaml, mkdir
 
 try:
