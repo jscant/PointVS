@@ -146,6 +146,7 @@ if __name__ == '__main__':
             max_inactive_rms_distance=args.max_inactive_rmsd,
             types_fname=args.train_types,
             mode='train',
+            p_noise=args.p_noise,
             **dl_kwargs
         )
         dim_input = train_dl.dataset.feature_dim

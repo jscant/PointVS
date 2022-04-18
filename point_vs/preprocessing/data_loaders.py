@@ -16,7 +16,7 @@ from torch_geometric.data import DataLoader as GeoDataLoader, Data
 
 from point_vs.preprocessing.preprocessing import make_box, \
     concat_structs, make_bit_vector, uniform_random_rotation, generate_edges
-from point_vs.utils import load_yaml, expand_path, shorten_home
+from point_vs.utils import expand_path, shorten_home
 
 
 class PointCloudDataset(torch.utils.data.Dataset):
@@ -31,6 +31,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
             fname_suffix='parquet', model_task='classification',
             types_fname=None, edge_radius=None, estimate_bonds=False,
             prune=False, bp=None, p_remove_entity=0, extended_atom_types=False,
+            p_noise=-1,
             **kwargs):
         """Initialise dataset.
 
@@ -75,6 +76,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
         self.edge_radius = edge_radius
         self.p_remove_entity = p_remove_entity
         self.model_task = model_task
+        self.p_noise = p_noise
 
         self.fname_suffix = fname_suffix
         if not self.base_path.exists():
@@ -209,6 +211,8 @@ class PointCloudDataset(torch.utils.data.Dataset):
     def index_to_parquets(self, item):
         if self.model_task == 'classification':
             label = self.labels[item]
+            if random.random() < self.p_noise:  # invert label with probability
+                label = 1 - label
         elif self.model_task == 'multi_regression':
             label = (self.pki[item], self.pkd[item], self.ic50[item])
         else:
@@ -376,7 +380,7 @@ class SynthPharmDataset(PygPointCloudDataset):
             min_lig_rotation=0, synth_pharm=True)
 
         p = torch.from_numpy(
-                np.vstack([struct['x'], struct['y'], struct['z']]).T)
+            np.vstack([struct['x'], struct['y'], struct['z']]).T)
 
         v = torch.nn.functional.one_hot(
             torch.from_numpy(struct.atom_id.to_numpy()), num_classes=12)
@@ -439,7 +443,8 @@ def get_data_loader(
         polar_hydrogens=True, mode='train', model_task='classification',
         max_active_rms_distance=None, fname_suffix='parquet',
         min_inactive_rms_distance=None, types_fname=None, edge_radius=None,
-        prune=False, estimate_bonds=False, bp=None, **kwargs):
+        prune=False, estimate_bonds=False, bp=None, p_noise=-1,
+        **kwargs):
     """Give a DataLoader from a list of receptors and data roots."""
     ds = dataset_class(
         data_root, compact=compact, receptors=receptors,
@@ -454,6 +459,7 @@ def get_data_loader(
         edge_radius=edge_radius,
         estimate_bonds=estimate_bonds,
         prune=prune, bp=bp, radius=radius, rot=rot, model_task=model_task,
+        p_noise=p_noise,
         **kwargs)
     if ds.model_task == 'classification':
         sampler = ds.sampler if mode == 'train' else None
