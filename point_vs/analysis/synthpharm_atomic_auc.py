@@ -175,4 +175,5 @@ if __name__ == '__main__':
         plot_rank_histogram(
             lig_positions, rec_positions, project_name,
             mkdir(args.output_dir) / 'rank_histogram_{0}_{1}.png'.format(
-                fn_name, project_name))
+                fn_name, 'Project: {0}    Attibution method: {1}'.format(
+                    project_name, fn_name)))
