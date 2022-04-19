@@ -359,6 +359,10 @@ class PygPointCloudDataset(PointCloudDataset):
 
 class SynthPharmDataset(PygPointCloudDataset):
 
+    def __init__(self, no_receptor=False, *args, **kwargs):
+        self.no_receptor = no_receptor
+        super().__init__(*args, **kwargs)
+
     def parquets_to_inputs(self, lig_fname, rec_fname, item=None):
 
         # Are we using an active and labelling it as a decoy through random
@@ -378,6 +382,9 @@ class SynthPharmDataset(PygPointCloudDataset):
         struct = concat_structs(
             rec_fname, lig_fname, self.n_features,
             min_lig_rotation=0, synth_pharm=True)
+
+        if self.no_receptor:
+            struct = struct[struct['bp'] == 0]
 
         p = torch.from_numpy(
             np.vstack([struct['x'], struct['y'], struct['z']]).T)
@@ -433,6 +440,7 @@ class SynthPharmDataset(PygPointCloudDataset):
             y=y,
             rec_fname=rec_fname,
             lig_fname=lig_fname,
+            df=struct
         )
 
 
