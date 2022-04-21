@@ -2,6 +2,7 @@
 Some basic helper functions for formatting time and sticking dataframes
 together.
 """
+import copy
 import math
 import multiprocessing as mp
 import shutil
@@ -17,9 +18,137 @@ import torch.nn as nn
 import yaml
 from matplotlib import pyplot as plt
 from pymol import cmd
+from rdkit import Chem
+from rdkit.Chem import AllChem, SDMolSupplier, MolFromMol2File, MolToSmiles, \
+    Kekulize
+from rdkit.Chem.rdMolAlign import AlignMol, CalcRMS
 from scipy.stats import pearsonr
 
 from point_vs.constants import AA_TRIPLET_CODES
+
+
+def split_sdfs(sdf, output_dir):
+    cmd.reinitialize()
+    if len(cmd.get_object_list()):
+        raise RuntimeError('Pymol not properly wiped')
+    sdf = expand_path(sdf)
+    fname_base = sdf.with_suffix('').name
+    cmd.load(str(sdf))
+    cmd.split_states('all', prefix='state_')
+    output_dir = mkdir(output_dir)
+    output_sdfs = []
+    for i in range(1, len(cmd.get_object_list())):
+        mol_fname = '{0}_{1}.sdf'.format(fname_base, i - 1)
+        mol_path = Path(output_dir, mol_fname)
+        cmd.save(mol_path, selection='state_{}'.format(str(i).zfill(4)))
+        output_sdfs.append(mol_path)
+    return output_sdfs
+
+
+def py_mollify(sdf, overwrite=False):
+    """Use pymol to sanitise an SDF file for use in RDKit.
+
+    Arguments:
+        sdf: location of faulty sdf file
+        overwrite: whether or not to overwrite the original sdf. If False,
+            a new file will be written in the form <sdf_fname>_pymol.sdf
+
+    Returns:
+        Original sdf filename if overwrite == False, else the filename of the
+        sanitised output.
+    """
+    sdf = Path(sdf).expanduser().resolve()
+    mol2_fname = str(sdf).replace('.sdf', '_pymol.mol2')
+    new_sdf_fname = sdf if overwrite else str(sdf).replace('.sdf', '_pymol.sdf')
+    cmd.load(str(sdf))
+    cmd.h_add('all')
+    cmd.save(mol2_fname)
+    cmd.reinitialize()
+    cmd.load(mol2_fname)
+    cmd.h_add('all')
+    cmd.save(str(new_sdf_fname))
+    return new_sdf_fname
+
+
+def find_delta_E(sdf, multiple_structures=False):
+    """
+    Modified from https://github.com/bowenliu16/rl_graph_generation/blob
+    /master/gym-molecule/gym_molecule/envs/molecule.py#L1131
+    """
+    original_sdf = sdf
+    if multiple_structures:
+        sdf = expand_path(sdf)
+        split_dir = Path(
+            sdf.parents[2],
+            sdf.parents[1].name + '_split',
+            sdf.parent.name
+        )
+        sdfs = split_sdfs(sdf, output_dir=split_dir)
+    else:
+        sdfs = [sdf]
+    res = {}
+    original_mols = {}
+    original_energies = {}
+    lowest_energy = np.inf
+    lowest_energy_mol = None
+    for idx, sdf in enumerate(sdfs):
+        try:
+            mol = SDMolSupplier(str(expand_path(sdf)))[0]
+        except OSError:
+            res[idx] = 'not_present'
+            continue
+        if mol is None:
+            pymol_sdf = str(py_mollify(sdf))
+            mol = SDMolSupplier(pymol_sdf)[0]
+            if mol is not None:
+                print('Pymolification success for', Path(sdf).parent.name,
+                      '(sdf)')
+            else:
+                mol = MolFromMol2File(pymol_sdf.replace('.sdf', '.mol2'))
+                if mol is None:
+                    res[idx] = 'pymol_fail'
+                    continue
+                else:
+                    print('Pymolification success for',
+                          Path(sdf).parent.name, '(mol2)')
+        if not idx in res.keys():
+            Chem.AddHs(mol)
+            original_mols[idx] = mol
+            minimising_mol = copy.deepcopy(mol)
+            if AllChem.MMFFHasAllMoleculeParams(mol):
+                mmff_props = AllChem.MMFFGetMoleculeProperties(mol)
+                try:
+                    ff = AllChem.MMFFGetMoleculeForceField(mol, mmff_props)
+                except:
+                    res[idx] = 'forcefield_error'
+                    continue
+            else:
+                res[idx] = 'unrecognised_atom_type'
+                continue
+            original_energy = ff.CalcEnergy()
+            failed, opt_energy = AllChem.MMFFOptimizeMoleculeConfs(
+                minimising_mol, maxIters=1000000, nonBondedThresh=1000)[0]
+            if failed:
+                res[idx] = 'did_not_converge'
+            else:
+                if opt_energy < lowest_energy:
+                    lowest_energy = opt_energy
+                    lowest_energy_mol = minimising_mol
+                original_energies[idx] = original_energy
+
+    for idx, mol in original_mols.items():
+        if idx in res.keys():
+            continue
+        try:
+            rmsd = CalcRMS(mol, lowest_energy_mol)
+        except RuntimeError:
+            res[idx] = 'no_common_substructure'
+        else:
+            res[idx] = (original_energies[idx] - lowest_energy, rmsd)
+
+    print(res)
+    print(original_sdf)
+    return res
 
 
 def get_regression_pearson(predictions_file):
