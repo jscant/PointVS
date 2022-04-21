@@ -594,9 +594,6 @@ def classifiaction_types_to_lists(types_fname, include_strain_info=False):
             else:
                 dEs.append(None)
                 rmsds.append(None)
-            if not isinstance(dE, float) or not isinstance(rmsd, float):
-                print(line)
-                raise
 
     return labels, rmsds, recs, ligs, dEs, rmsds
 
