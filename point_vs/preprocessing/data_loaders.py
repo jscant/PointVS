@@ -570,12 +570,12 @@ def classifiaction_types_to_lists(types_fname, include_strain_info=False):
                 if idx == len(chunks) - 2:
                     dE = float(chunk)
                 elif idx == len(chunks) - 1:
-                    rmsd = float(chunk)
+                    strain_rmsd = float(chunk)
         if include_strain_info:
-            return label, rmsd, recpath, ligpath, dE, rmsd
+            return label, rmsd, recpath, ligpath, dE, strain_rmsd
         return label, rmsd, recpath, ligpath
 
-    labels, rmsds, recs, ligs, dEs, rmsds = [], [], [], [], [], []
+    labels, rmsds, recs, ligs, dEs, strain_rmsds = [], [], [], [], [], []
     with open(types_fname, 'r') as f:
         for line in f.readlines():
             info = find_paths(line)
@@ -593,9 +593,9 @@ def classifiaction_types_to_lists(types_fname, include_strain_info=False):
                 rmsds.append(rmsd)
             else:
                 dEs.append(None)
-                rmsds.append(None)
+                strain_rmsds.append(None)
 
-    return labels, rmsds, recs, ligs, dEs, rmsds
+    return labels, rmsds, recs, ligs, dEs, strain_rmsds
 
 
 def get_collate_fn(dim):
