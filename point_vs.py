@@ -103,9 +103,9 @@ if __name__ == '__main__':
         else -1,
         'estimate_bonds': args.estimate_bonds,
         'prune': args.prune,
-        'p_remove_entity': args.p_remove_entity,
         'extended_atom_types': args.extended_atom_types,
         'model_task': args.model_task,
+        'include_strain_info': args.include_strain_info
     }
 
     if args.siamese:
@@ -147,6 +147,7 @@ if __name__ == '__main__':
             types_fname=args.train_types,
             mode='train',
             p_noise=args.p_noise,
+            p_remove_entity=args.p_remove_entity,
             **dl_kwargs
         )
         dim_input = train_dl.dataset.feature_dim
@@ -241,14 +242,10 @@ if __name__ == '__main__':
         'gated_residual': args.gated_residual,
         'rezero': args.rezero,
         'model_task': args.model_task,
+        'include_strain_info': args.include_strain_info
     }
 
     args_to_record.update(model_kwargs)
-
-    #if args.load_weights is not None:
-    #    model_kwargs = load_yaml(Path(Path(
-    #        args.load_weights).parents[1].expanduser(), 'model_kwargs.yaml'))
-    #    model_kwargs['group'] = SE3(0.2)
 
     if args.wandb_dir is None:
         wandb_dir = save_path

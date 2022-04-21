@@ -65,11 +65,19 @@ class PNNGeometricBase(PointNeuralNetworkBase):
     """Base (abstract) class for all pytorch geometric point neural networks."""
 
     def forward(self, graph):
-        feats, edges, coords, edge_attributes, batch = self.unpack_graph(graph)
+        if self.include_strain_info:
+            feats, edges, coords, edge_attributes, batch, dE, rmsd = \
+                self.unpack_graph(
+                    graph)
+        else:
+            feats, edges, coords, edge_attributes, batch = self.unpack_graph(
+                graph)
+            dE, rmsd = None, None
         feats, messages = self.get_embeddings(
             feats, edges, coords, edge_attributes, batch)
         size = feats.size(0)
         row, col = edges
+
         if self.linear_gap:
             if self.feats_linear_layers is not None:
                 feats = self.feats_linear_layers(feats)
@@ -82,6 +90,8 @@ class PNNGeometricBase(PointNeuralNetworkBase):
         else:
             if self.feats_linear_layers is not None:
                 feats = global_mean_pool(feats, batch)  # (total_nodes, k)
+                if self.include_strain_info:
+                    feats = torch.cat((feats, dE, rmsd), dim=1)
                 feats = self.feats_linear_layers(feats)  # (bs, k)
             if self.edges_linear_layers is not None:
                 agg = unsorted_segment_sum(
@@ -112,8 +122,17 @@ class PNNGeometricBase(PointNeuralNetworkBase):
     def prepare_input(self, x):
         return x.cuda()
 
-    @staticmethod
-    def unpack_graph(graph):
-        return (graph.x.float().cuda(), graph.edge_index.cuda(),
+    def unpack_graph(self, graph):
+        objs = [graph.x.float().cuda(), graph.edge_index.cuda(),
                 graph.pos.float().cuda(), graph.edge_attr.cuda(),
-                graph.batch.cuda())
+                graph.batch.cuda()]
+        if self.include_strain_info:
+            objs += [graph.dE.reshape(-1, 1).float().cuda(),
+                     graph.rmsd.reshape(-1, 1).float().cuda()]
+        return tuple(objs)
+
+    @staticmethod
+    def init_weights(m):
+        if isinstance(m, nn.Linear):
+            torch.nn.init.xavier_uniform_(m.weight)
+            m.bias.data.fill_(0.01)

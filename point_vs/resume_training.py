@@ -52,7 +52,9 @@ if __name__ == '__main__':
         estimate_bonds=cmd_line_args.get('estimate_bonds', False),
         prune=cmd_line_args.get('prune', False),
         p_remove_entity=cmd_line_args.get('p_remove_entity', 0),
-        extended_atom_types=cmd_line_args.get('extended_atom_types', False)
+        extended_atom_types=cmd_line_args.get('extended_atom_types', False),
+        p_noise=cmd_line_args.get('p_noise', -1),
+        include_strain_info=cmd_line_args.get('include_strain_info', False)
     )
 
     if cmd_line_args['test_data_root'] is not None:
@@ -69,7 +71,8 @@ if __name__ == '__main__':
             estimate_bonds=cmd_line_args.get('estimate_bonds', False),
             prune=cmd_line_args.get('prune', False),
             rot=False, mode='val', fname_suffix=cmd_line_args['input_suffix'],
-            extended_atom_types=cmd_line_args.get('extended_atom_types', False))
+            extended_atom_types=cmd_line_args.get('extended_atom_types', False),
+            include_strain_info=cmd_line_args.get('include_strain_info', False))
     else:
         test_dl = None
 

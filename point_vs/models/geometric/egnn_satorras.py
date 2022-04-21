@@ -195,6 +195,7 @@ class SartorrasEGNN(PNNGeometricBase):
                   edge_attention_first_only=False,
                   gated_residual=False, rezero=False,
                   model_task='classification',
+                  include_strain_info=False,
                   **kwargs):
         """
         Arguments:
@@ -241,6 +242,7 @@ class SartorrasEGNN(PNNGeometricBase):
         self.gated_residual = gated_residual
         self.rezero = rezero
         self.model_task = model_task
+        self.include_strain_info = include_strain_info
 
         assert classify_on_feats or classify_on_edges, \
             'We must use either or both of classify_on_feats and ' \
@@ -289,8 +291,11 @@ class SartorrasEGNN(PNNGeometricBase):
                                 edge_residual=edge_residual,
                                 gated_residual=gated_residual,
                                 rezero=rezero))
-        if multi_fc:
-            fc_layer_dims = ((k, 128), (64, 128), (dim_output, 64))
+
+        if include_strain_info:
+            k += 2
+        if multi_fc:  # check the order of these..??!
+            fc_layer_dims = ((k, 32), (32, 16), (16, dim_output))
         else:
             fc_layer_dims = ((k, dim_output),)
 
@@ -304,8 +309,10 @@ class SartorrasEGNN(PNNGeometricBase):
                 edges_linear_layers.append(nn.SiLU())
         if classify_on_feats:
             self.feats_linear_layers = nn.Sequential(*feats_linear_layers)
+            self.feats_linear_layers.apply(self.init_weights)
         if classify_on_edges:
             self.edges_linear_layers = nn.Sequential(*edges_linear_layers)
+            self.edges_linear_layers.apply(self.init_weights)
         return nn.Sequential(*layers)
 
     def get_embeddings(self, feats, edges, coords, edge_attributes, batch):

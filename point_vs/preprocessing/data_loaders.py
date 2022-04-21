@@ -31,8 +31,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
             fname_suffix='parquet', model_task='classification',
             types_fname=None, edge_radius=None, estimate_bonds=False,
             prune=False, bp=None, p_remove_entity=0, extended_atom_types=False,
-            p_noise=-1,
-            **kwargs):
+            p_noise=-1, include_strain_info=False, **kwargs):
         """Initialise dataset.
 
         Arguments:
@@ -67,6 +66,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
 
         assert not ((max_active_rms_distance is None) != (
                 min_inactive_rms_distance is None))
+        assert not (include_strain_info and augmented_active_count)
         super().__init__()
         self.radius = radius
         self.estimate_bonds = estimate_bonds
@@ -104,19 +104,22 @@ class PointCloudDataset(torch.utils.data.Dataset):
         aug_recs, aug_ligs = [], []
         confirmed_ligs = []
         confirmed_recs = []
+        confirmed_dEs = []
+        confirmed_rmsds = []
         if self.model_task.endswith('regression'):
             self.pki, self.pkd, self.ic50, self.receptor_fnames, \
             self.ligand_fnames = regression_types_to_lists(
                 self.base_path, types_fname)
         else:
-            _labels, rmsds, receptor_fnames, ligand_fnames = \
-                classifiaction_types_to_lists(types_fname)
+            _labels, rmsds, receptor_fnames, ligand_fnames, dEs, strain_rmsds = \
+                classifiaction_types_to_lists(
+                    types_fname, include_strain_info=include_strain_info)
 
             # Do we use provided labels or do we generate our own using
             # rmsds?
             labels = [] if label_by_rmsd else _labels
-            for path_idx, (receptor_fname, ligand_fname) in enumerate(
-                    zip(receptor_fnames, ligand_fnames)):
+            for path_idx, (receptor_fname, ligand_fname, dE, strain_rmsd) in enumerate(
+                    zip(receptor_fnames, ligand_fnames, dEs, strain_rmsds)):
                 if label_by_rmsd:
                     # Pose selection, filter by max/min active/inactive rmsd
                     # from xtal poses
@@ -141,11 +144,17 @@ class PointCloudDataset(torch.utils.data.Dataset):
                     aug_recs += [receptor_fname] * augmented_active_count
                 confirmed_ligs.append(ligand_fname)
                 confirmed_recs.append(receptor_fname)
+                confirmed_dEs.append(dE)
+                confirmed_rmsds.append(strain_rmsd)
+
             self.receptor_fnames = confirmed_recs + aug_recs
             self.ligand_fnames = ligand_fnames
 
             self.pre_aug_ds_len = len(ligand_fnames)
             self.ligand_fnames = confirmed_ligs + aug_ligs
+
+            self.dEs = confirmed_dEs
+            self.rmsds = confirmed_rmsds
 
             labels += [0] * len(aug_ligs)
             labels = np.array(labels)
@@ -266,13 +275,15 @@ class PointCloudDataset(torch.utils.data.Dataset):
             struct.types = struct['atomic_number'].map(
                 self.atomic_number_to_index) + struct.bp * (
                                self.n_features)
-        force_zero_label = False
+
         if self.p_remove_entity > 0 and random.random() < self.p_remove_entity:
             force_zero_label = True
             if random.random() < 0.5:
                 struct = struct[struct['bp'] == 0]
             else:
                 struct = struct[struct['bp'] == 1]
+        else:
+            force_zero_label = False
 
         p = torch.from_numpy(
             self.transformation(
@@ -322,11 +333,12 @@ class PygPointCloudDataset(PointCloudDataset):
             denoting whether the structure is an active or a decoy.
         """
         lig_fname, rec_fname, label = self.index_to_parquets(item)
+        dE, rmsd = self.dEs[item], self.rmsds[item]
 
         p, v, struct, force_zero_label = self.parquets_to_inputs(
             lig_fname, rec_fname, item=item)
         if force_zero_label:
-            label = 0 if isinstance(label, int) == 1 else (0, 0, 0)
+            label = 0 if isinstance(label, int) == 1 else (0., 0., 0.)
         edge_radius = self.edge_radius if self.edge_radius > 0 else 4
         intra_radius = 2.0 if self.estimate_bonds else edge_radius
 
@@ -354,6 +366,8 @@ class PygPointCloudDataset(PointCloudDataset):
             y=y,
             rec_fname=rec_fname,
             lig_fname=lig_fname,
+            dE=dE,
+            rmsd=rmsd
         )
 
 
@@ -513,7 +527,7 @@ def regression_types_to_lists(data_root, types_fname):
     return pki, pkd, ic50, receptors, ligands
 
 
-def classifiaction_types_to_lists(types_fname):
+def classifiaction_types_to_lists(types_fname, include_strain_info=False):
     """Take a types file and returns four lists containing paths and labels.
 
     Types files should be of the format:
@@ -536,6 +550,7 @@ def classifiaction_types_to_lists(types_fname):
 
     def find_paths(types_line):
         recpath, ligpath = None, None
+        dE, rmsd = None, None
         chunks = types_line.strip().split()
         if not len(chunks):
             return None, None, None, None
@@ -551,19 +566,39 @@ def classifiaction_types_to_lists(types_fname):
                     rmsd = float(chunks[idx - 1])
                 else:
                     ligpath = chunk
-                    break
+            if include_strain_info:
+                if idx == len(chunks) - 2:
+                    dE = float(chunk)
+                elif idx == len(chunks) - 1:
+                    rmsd = float(chunk)
+        if include_strain_info:
+            return label, rmsd, recpath, ligpath, dE, rmsd
         return label, rmsd, recpath, ligpath
 
-    labels, rmsds, recs, ligs = [], [], [], []
+    labels, rmsds, recs, ligs, dEs, rmsds = [], [], [], [], [], []
     with open(types_fname, 'r') as f:
         for line in f.readlines():
-            label, rmsd, rec, lig = find_paths(line)
+            info = find_paths(line)
+            if include_strain_info:
+                label, rmsd, rec, lig, dE, rmsd = info
+            else:
+                label, rmsd, rec, lig = info
             if rec is not None and lig is not None:
                 labels.append(label)
                 rmsds.append(rmsd)
                 recs.append(rec)
                 ligs.append(lig)
-    return labels, rmsds, recs, ligs
+            if include_strain_info:
+                dEs.append(dE)
+                rmsds.append(rmsd)
+            else:
+                dEs.append(None)
+                rmsds.append(None)
+            if not isinstance(dE, float) or not isinstance(rmsd, float):
+                print(line)
+                raise
+
+    return labels, rmsds, recs, ligs, dEs, rmsds
 
 
 def get_collate_fn(dim):

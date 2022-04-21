@@ -240,7 +240,10 @@ def parse_args():
                              'regression is 3-class regression on binding '
                              'affinities.')
     parser.add_argument('--synthpharm', action='store_true', help='For tom')
-    parser.add_argument('--p_noise', type=float,
+    parser.add_argument('--p_noise', type=float, default=-1,
                         help='Probability of label being inverted during '
                              'training')
+    parser.add_argument('--include_strain_info', action='store_true',
+                        help='Include info on strain energy and RMSD from '
+                             'ground state of ligand')
     return parser.parse_args()

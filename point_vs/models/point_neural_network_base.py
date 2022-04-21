@@ -25,7 +25,7 @@ class PointNeuralNetworkBase(nn.Module):
                  only_save_best_models=False, **model_kwargs):
         super().__init__()
         self.model_task = model_kwargs.get('model_task', 'classification')
-
+        self.include_strain_info = False
         self.batch = 0
         self.epoch = 0
         self.losses = []
@@ -74,6 +74,7 @@ class PointNeuralNetworkBase(nn.Module):
         self.warm_restarts = warm_restarts
 
         self.global_iter = 0
+        self.val_iter = 0
         self.decoy_mean_pred, self.active_mean_pred = 0.5, 0.5
         self.log_interval = 10
         self.scheduler = None  # will change this in training preamble
@@ -126,6 +127,7 @@ class PointNeuralNetworkBase(nn.Module):
                 loss_ = self.backprop(y_true, y_pred)
                 if self.scheduler is not None:
                     self.scheduler.step()
+                self.global_iter += 1
                 self.record_and_display_info(
                     start_time=start_time,
                     epochs=epochs,
@@ -151,7 +153,6 @@ class PointNeuralNetworkBase(nn.Module):
             predictions_file:
             top1_on_end:
         """
-        start_time = time.time()
         if predictions_file is None:
             predictions_file = self.predictions_file
         predictions_file = Path(predictions_file).expanduser()
@@ -160,9 +161,12 @@ class PointNeuralNetworkBase(nn.Module):
         predictions = ''
         self.total_iters = len(data_loader)
         self.eval()
+        self.val_iter = 0
+        val_start_time = time.time()
         with torch.no_grad():
             for self.batch, graph in enumerate(
                     data_loader):
+                self.val_iter += 1
                 y_pred, y_true, ligands, receptors = self.process_graph(graph)
 
                 if self.model_task == 'classification':
@@ -185,7 +189,7 @@ class PointNeuralNetworkBase(nn.Module):
 
                 self.get_mean_preds(y_true, y_pred)
                 self.record_and_display_info(
-                    start_time, None, data_loader, None, record_type='test')
+                    val_start_time, None, data_loader, None, record_type='test')
 
                 if self.model_task == 'multi_regression':
                     predictions += '\n'.join(
@@ -271,11 +275,16 @@ class PointNeuralNetworkBase(nn.Module):
         y_true_np = to_numpy(y_true).reshape((-1,))
         y_pred_np = to_numpy(nn.Sigmoid()(y_pred)).reshape((-1,))
 
-        active_idx = (np.where(y_true_np > 0.5),)
-        decoy_idx = (np.where(y_true_np < 0.5),)
-
-        is_actives = bool(sum(y_true_np))
-        is_decoys = not bool(np.product(y_true_np))
+        if self.model_task == 'classification':
+            active_idx = (np.where(y_true_np > 0.5),)
+            decoy_idx = (np.where(y_true_np < 0.5),)
+            is_actives = bool(sum(y_true_np))
+            is_decoys = not bool(np.product(y_true_np))
+        else:
+            active_idx = (np.where(y_true_np > -np.inf),)
+            decoy_idx = (np.where(y_true_np < np.inf),)
+            is_actives = True
+            is_decoys = False
 
         if is_actives:
             self.active_mean_pred = np.mean(y_pred_np[active_idx])
@@ -302,11 +311,12 @@ class PointNeuralNetworkBase(nn.Module):
         if not (self.batch + 1) % self.log_interval or \
                 self.batch == self.total_iters - 1:
             self.save_loss(self.log_interval)
-        self.global_iter += 1
 
-        eta = get_eta(start_time, self.global_iter,
-                      self.total_iters - (len(data_loader) * self.init_epoch)
-                      if record_type == 'train' else len(data_loader))
+        if record_type == 'train':
+            eta = get_eta(start_time, self.global_iter, self.total_iters)
+        else:
+            eta = get_eta(start_time, self.val_iter, len(data_loader))
+
         time_elapsed = format_time(time.time() - start_time)
 
         if record_type == 'train':
