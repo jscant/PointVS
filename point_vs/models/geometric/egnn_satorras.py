@@ -309,10 +309,8 @@ class SartorrasEGNN(PNNGeometricBase):
                 edges_linear_layers.append(nn.SiLU())
         if classify_on_feats:
             self.feats_linear_layers = nn.Sequential(*feats_linear_layers)
-            self.feats_linear_layers.apply(self.init_weights)
         if classify_on_edges:
             self.edges_linear_layers = nn.Sequential(*edges_linear_layers)
-            self.edges_linear_layers.apply(self.init_weights)
         return nn.Sequential(*layers)
 
     def get_embeddings(self, feats, edges, coords, edge_attributes, batch):

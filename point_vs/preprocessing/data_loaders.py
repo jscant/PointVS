@@ -589,7 +589,7 @@ def classifiaction_types_to_lists(types_fname, include_strain_info=False):
                 recs.append(rec)
                 ligs.append(lig)
             if include_strain_info:
-                dEs.append(dE)
+                dEs.append(max(200, dE))
                 strain_rmsds.append(rmsd)
             else:
                 dEs.append(None)
