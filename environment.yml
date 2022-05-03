@@ -1,138 +1,190 @@
 name: pointvs
 channels:
   - pytorch
+  - pyg
   - conda-forge
-  - schrodinger
-  - anaconda
   - defaults
 dependencies:
   - _libgcc_mutex=0.1=main
   - _openmp_mutex=4.5=1_gnu
-  - apbs=1.5=h14c3975_3
   - blas=1.0=mkl
-  - bottleneck=1.3.2=py38heb32a55_1
+  - bottleneck=1.3.4=py38hce1f21e_0
+  - brotli=1.0.9=he6710b0_2
   - brotlipy=0.7.0=py38h27cfd23_1003
-  - bzip2=1.0.8=h7b6447c_0
-  - c-ares=1.17.1=h27cfd23_0
-  - ca-certificates=2021.9.30=h06a4308_1
-  - certifi=2021.10.8=py38h06a4308_0
-  - cffi=1.14.6=py38h400218f_0
-  - charset-normalizer=2.0.7=pyhd8ed1ab_0
-  - cryptography=3.4.8=py38hd23ed53_0
-  - cudatoolkit=10.2.89=hfd86e86_1
-  - curl=7.78.0=h1ccaba5_0
+  - ca-certificates=2021.10.8=ha878542_0
+  - cairo=1.16.0=hf32fb01_1
+  - certifi=2021.10.8=py38h578d9bd_2
+  - cffi=1.15.0=py38hd667e15_1
+  - click=8.1.3=py38h578d9bd_0
+  - cryptography=36.0.0=py38h9ce1e76_0
+  - cudatoolkit=11.3.1=h2bc3f7f_2
+  - cycler=0.11.0=pyhd3eb1b0_0
   - dbus=1.13.18=hb2f20db_0
-  - expat=2.4.1=h2531618_2
-  - fastparquet=0.5.0
-  - ffmpeg=4.2.2=h20bf706_0
+  - docker-pycreds=0.4.0=py_0
+  - expat=2.4.4=h295c915_0
   - fontconfig=2.13.1=h6c09931_0
-  - freemol=1.158=py_2
-  - freetype=2.10.4=h5ab3b9f_0
+  - freetype=2.11.0=h70c0345_0
   - giflib=5.2.1=h7b6447c_0
-  - glew=2.0.0=0
-  - glib=2.69.1=h5202010_0
-  - gmp=6.2.1=h2531618_2
-  - gnutls=3.6.15=he1e5248_0
+  - gitdb=4.0.9=pyhd8ed1ab_0
+  - gitpython=3.1.27=pyhd8ed1ab_0
+  - glew=2.1.0=h295c915_3
+  - glib=2.69.1=h4ff587b_1
+  - glm=0.9.9.4=hc9558a2_0
   - gst-plugins-base=1.14.0=h8213a91_2
   - gstreamer=1.14.0=h28cd5cc_2
-  - hdf4=4.2.13=h3ca952b_2
-  - hdf5=1.10.4=hb1b8bf9_0
   - icu=58.2=he6710b0_3
-  - intel-openmp=2021.3.0=h06a4308_3350
-  - jpeg=9b=h024ee3a_2
-  - krb5=1.19.2=hac12032_0
-  - lame=3.100=h7b6447c_0
+  - idna=3.3=pyhd3eb1b0_0
+  - intel-openmp=2021.4.0=h06a4308_3561
+  - joblib=1.1.0=pyhd3eb1b0_0
+  - jpeg=9e=h7f8727e_0
   - lcms2=2.12=h3be6417_0
   - ld_impl_linux-64=2.35.1=h7274673_9
-  - libcurl=7.78.0=h0b77cf5_0
-  - libedit=3.1.20210714=h7f8727e_0
-  - libev=4.33=h7f8727e_1
   - libffi=3.3=he6710b0_2
   - libgcc-ng=9.3.0=h5101ec6_17
   - libgfortran-ng=7.5.0=ha8ba4b0_17
   - libgfortran4=7.5.0=ha8ba4b0_17
   - libglu=9.0.0=hf484d3e_1
   - libgomp=9.3.0=h5101ec6_17
-  - libholoplaycore=0.1.0_rc4=1
-  - libidn2=2.3.2=h7f8727e_0
-  - libnetcdf=4.7.3=hb80b6cc_0
-  - libnghttp2=1.41.0=hf8bcb03_2
-  - libopenblas=0.3.13=h4367d64_0
-  - libopus=1.3.1=h7b6447c_0
   - libpng=1.6.37=hbc83047_0
-  - libssh2=1.9.0=h1ba5d50_1
+  - libprotobuf=3.15.8=h780b84a_0
   - libstdcxx-ng=9.3.0=hd4cf53a_17
-  - libtasn1=4.16.0=h27cfd23_0
   - libtiff=4.2.0=h85742a9_0
-  - libunistring=0.9.10=h27cfd23_0
   - libuuid=1.0.3=h7f8727e_2
   - libuv=1.40.0=h7b6447c_0
-  - libvpx=1.7.0=h439df22_0
-  - libwebp=1.2.0=h89dd481_0
-  - libwebp-base=1.2.0=h27cfd23_0
+  - libwebp=1.2.2=h55f646e_0
+  - libwebp-base=1.2.2=h7f8727e_0
   - libxcb=1.14=h7b6447c_0
   - libxml2=2.9.12=h03d6c58_0
   - lz4-c=1.9.3=h295c915_1
-  - mengine=1=h14c3975_1
-  - mkl=2021.3.0=h06a4308_520
+  - matplotlib=3.5.1=py38h06a4308_1
+  - matplotlib-base=3.5.1=py38ha18d171_1
+  - mkl=2021.4.0=h06a4308_640
   - mkl-service=2.4.0=py38h7f8727e_0
   - mkl_fft=1.3.1=py38hd3c417c_0
   - mkl_random=1.2.2=py38h51133e4_0
-  - mpeg_encode=1=h14c3975_1
-  - mtz2ccp4_px=1.0=h9ac9557_3
-  - ncurses=6.2=he6710b0_1
-  - nettle=3.7.3=hbbd107a_1
-  - ninja=1.10.2=hff7bd54_1
-  - numexpr=2.7.3=py38h22e1b3c_1
-  - olefile=0.46=pyhd3eb1b0_0
-  - openbabel=3.1.1
-  - openh264=2.1.0=hd408876_0
-  - openssl=1.1.1l=h7f8727e_0
+  - munkres=1.1.4=py_0
+  - ncurses=6.3=h7f8727e_2
+  - numexpr=2.8.1=py38h6abb31d_0
+  - numpy=1.21.5=py38he7a7128_2
+  - numpy-base=1.21.5=py38hf524024_2
+  - openbabel=3.1.1=py38hf4b5c11_1
+  - openssl=1.1.1n=h7f8727e_0
+  - packaging=21.3=pyhd3eb1b0_0
+  - pathtools=0.1.2=py_1
   - pcre=8.45=h295c915_0
-  - pdb2pqr=2.1.2+pymol=py_0
-  - pillow=8.4.0=py38h5aabda8_0
+  - pillow=9.0.1=py38h22f2fdc_0
   - pip=21.2.4=py38h06a4308_0
-  - pyarrow=3.0.0
-  - pmw=2.0.1+3=py_3
-  - pycparser=2.20=py_2
-  - pymol=2.4.1=py38h4463551_0
-  - pyopenssl=20.0.1=pyhd3eb1b0_1
-  - pyparsing=2.4.7
+  - pixman=0.40.0=h36c2ea0_0
+  - promise=2.3=py38h578d9bd_6
+  - psutil=5.8.0=py38h27cfd23_1
+  - pycparser=2.21=pyhd3eb1b0_0
+  - pyg=2.0.4=py38_torch_1.11.0_cu113
+  - pymol-open-source=2.4.0=py38h8341299_3
+  - pyopenssl=22.0.0=pyhd3eb1b0_0
   - pyqt=5.9.2=py38h05f1152_4
   - pysocks=1.7.1=py38h06a4308_0
-  - pytest=6.2.4
-  - python=3.8.12=h12debd9_0
+  - python=3.8.13=h12debd9_0
   - python-dateutil=2.8.2=pyhd3eb1b0_0
+  - python-louvain=0.15=pyhd3eb1b0_0
   - python_abi=3.8=2_cp38
-  - pytorch=1.9.1=py3.8_cuda10.2_cudnn7.6.5_0
-  - pyyaml=5.4.1=py38h27cfd23_1
+  - pytorch=1.11.0=py3.8_cuda11.3_cudnn8.2.0_0
+  - pytorch-cluster=1.6.0=py38_torch_1.11.0_cu113
+  - pytorch-mutex=1.0=cuda
+  - pytorch-scatter=2.0.9=py38_torch_1.11.0_cu113
+  - pytorch-sparse=0.6.13=py38_torch_1.11.0_cu113
+  - pytorch-spline-conv=1.2.1=py38_torch_1.11.0_cu113
+  - pytz=2021.3=pyhd3eb1b0_0
+  - pyyaml=6.0=py38h7f8727e_1
   - qt=5.9.7=h5867ecd_1
-  - readline=8.1=h27cfd23_0
-  - requests=2.26.0=pyhd3eb1b0_0
-  - rigimol=1.3=2
-  - setuptools=58.0.4=py38h06a4308_0
-  - sip=4.19.13=py38he6710b0_0
-  - sqlite=3.36.0=hc218d9a_0
+  - readline=8.1.2=h7f8727e_1
+  - requests=2.27.1=pyhd3eb1b0_0
+  - scikit-learn=1.0.2=py38h51133e4_1
+  - sentry-sdk=1.5.10=pyhd8ed1ab_0
+  - setproctitle=1.2.2=py38h497a2fe_0
+  - setuptools=61.2.0=py38h06a4308_0
+  - shortuuid=1.0.8=py38h578d9bd_0
+  - sip=4.19.13=py38h295c915_0
+  - six=1.16.0=pyhd3eb1b0_1
+  - smmap=3.0.5=pyh44b312d_0
+  - sqlite=3.38.2=hc218d9a_0
   - tk=8.6.11=h1ccaba5_0
-  - torchaudio=0.9.1=py38
-  - torchvision=0.10.1=py38_cu102
-  - typing_extensions=3.10.0.2=pyha770c72_0
-  - wandb=0.12.1
-  - wheel=0.37.0=pyhd3eb1b0_1
-  - x264=1!157.20191217=h7b6447c_0
+  - tornado=6.1=py38h27cfd23_0
+  - tqdm=4.64.0=py38h06a4308_0
+  - typing_extensions=4.1.1=pyh06a4308_0
+  - urllib3=1.26.9=py38h06a4308_0
+  - wandb=0.12.14=pyhd8ed1ab_0
+  - wheel=0.37.1=pyhd3eb1b0_0
   - xz=5.2.5=h7b6447c_0
   - yaml=0.2.5=h7b6447c_0
-  - zlib=1.2.11=h7b6447c_3
+  - zlib=1.2.12=h7f8727e_2
   - zstd=1.4.9=haebb681_0
   - pip:
-      - matplotlib==3.5.1
-      - rdkit-pypi==2021.9.4
-      - egnn-pytorch==0.2.6
-      - "--editable=git+ssh://git@github.com/oxcsml/lie-transformer.git#egg=Equivariant_Attention"
-      - "--editable=git+ssh://git@github.com/jscant/plip.git#egg=plip"
-      - --find-links https://data.pyg.org/whl/torch-1.9.0+cu102.html
-      - torch-cluster==1.5.9
-      - torch-geometric==2.0.1
-      - torch-scatter==2.0.8
-      - torch-sparse==0.6.12
-      - torch-spline-conv==1.2.1
+    - absl-py==1.0.0
+    - astunparse==1.6.3
+    - attrdict==2.0.1
+    - cachetools==5.0.0
+    - charset-normalizer==2.0.12
+    - deepdish==0.3.7
+    - dill==0.3.4
+    - dm-sonnet==2.0.0
+    - dm-tree==0.1.7
+    - egnn-pytorch==0.2.6
+    - einops==0.4.1
+    - flatbuffers==2.0
+    - fonttools==4.33.3
+    - future==0.18.2
+    - gast==0.5.3
+    - google-auth==2.6.6
+    - google-auth-oauthlib==0.4.6
+    - google-pasta==0.2.0
+    - googledrivedownloader==0.4
+    - grpcio==1.44.0
+    - h5py==3.6.0
+    - importlib-metadata==4.11.3
+    - isodate==0.6.1
+    - jinja2==3.1.2
+    - keras==2.8.0
+    - keras-preprocessing==1.1.2
+    - kiwisolver==1.4.2
+    - libclang==14.0.1
+    - llvmlite==0.38.0
+    - lxml==4.8.0
+    - markdown==3.3.6
+    - markupsafe==2.1.1
+    - natsort==8.1.0
+    - networkx==2.8
+    - numba==0.55.1
+    - oauthlib==3.2.0
+    - olive-oil-ml==0.1
+    - opt-einsum==3.3.0
+    - pandas==1.4.2
+    - protobuf==3.20.1
+    - pyasn1==0.4.8
+    - pyasn1-modules==0.2.8
+    - pyparsing==3.0.8
+    - rdflib==6.1.1
+    - rdkit-pypi==2021.9.4
+    - requests-oauthlib==1.3.1
+    - rsa==4.8
+    - scipy==1.8.0
+    - simplejson==3.17.6
+    - sklearn==0.0
+    - tables==3.7.0
+    - tabulate==0.8.9
+    - tensorboard==2.8.0
+    - tensorboard-data-server==0.6.1
+    - tensorboard-plugin-wit==1.8.1
+    - tensorflow==2.8.0
+    - tensorflow-io-gcs-filesystem==0.25.0
+    - termcolor==1.1.0
+    - tf-estimator-nightly==2.8.0.dev2021122109
+    - threadpoolctl==3.1.0
+    - torch-geometric==2.0.1
+    - torchcontrib==0.0.2
+    - torchdiffeq==0.2.3
+    - werkzeug==2.1.2
+    - wrapt==1.14.1
+    - yacs==0.1.8
+    - zipp==3.8.0
+    - "--editable=git+ssh://git@github.com/oxcsml/lie-transformer.git#egg=Equivariant_Attention"
+    - "--editable=git+ssh://git@github.com/jscant/plip.git#egg=plip"
