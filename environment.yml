@@ -186,5 +186,6 @@ dependencies:
     - wrapt==1.14.1
     - yacs==0.1.8
     - zipp==3.8.0
+    - rich==12.3.0
     - "--editable=git+ssh://git@github.com/oxcsml/lie-transformer.git#egg=Equivariant_Attention"
     - "--editable=git+ssh://git@github.com/jscant/plip.git#egg=plip"

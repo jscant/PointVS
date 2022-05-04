@@ -7,9 +7,10 @@ import pandas as pd
 from rdkit import RDLogger
 from rdkit.Chem import AllChem, MolFromMol2File, SDMolSupplier
 from rdkit.DataStructs import TanimotoSimilarity, UIntSparseIntVect
+from rich.progress import Progress
 
 from point_vs.utils import expand_path, py_mollify, get_n_cols, execute_cmd, \
-    mkdir
+    mkdir, Timer
 
 
 def is_similar(mol1, mol2, cutoff):
@@ -27,22 +28,22 @@ def is_similar(mol1, mol2, cutoff):
 
 def get_mol(sdf, directory, pdbids=None, ligs=None):
     if ligs is not None:
-        leaf = str(sdf)[str(sdf).find(directory) + len(str(directory)) + 1:]
+        leaf = str(sdf)[
+               max(0, str(sdf).find(directory) + len(str(directory))):]
+        if leaf.startswith('/'):
+            leaf = leaf[1:]
         if leaf not in ligs:
             raise RuntimeError('leaf not in ligs')
-    elif sdf.parent.name.lower() not in pdbids:
+    elif sdf.parent.name not in pdbids:
         raise RuntimeError('sdf not in pdbids')
 
-    mol = None
-    try:
-        mol = next(SDMolSupplier(str(sdf)))
-    except OSError:
-        pass
+    mol = next(SDMolSupplier(str(sdf)))
     if mol is None:
         pym_sdf = py_mollify(sdf)
         mol = next(SDMolSupplier(str(pym_sdf)))
         if mol is None:
             mol = MolFromMol2File(str(pym_sdf).replace('.sdf', '.mol2'))
+
     if mol is None:
         obabel_mol = str(sdf).replace('.sdf', '_obabel.sdf')
         execute_cmd('obabel {0} -O{1} -d'.format(
@@ -59,9 +60,10 @@ def get_mol(sdf, directory, pdbids=None, ligs=None):
                 mol = next(SDMolSupplier(str(pym_sdf)))
             except OSError:
                 mol = None
+
     if mol is not None:
         return AllChem.GetMorganFingerprint(mol, 3)
-    # print('Error:', sdf)
+
     raise RuntimeError('Molecule could not be read')
 
 
@@ -80,14 +82,17 @@ def get_mols(directory, pdbid_file=None, types_file=None):
         with open(expand_path(pdbid_file), 'r') as f:
             pdbids = set([s.strip() for s in f.readlines()])
 
+    sdfs_not_present = []
     for idx, sdf in enumerate(expand_path(directory).glob('*/*_ligand.sdf')):
         try:
             mol = get_mol(sdf, directory, pdbids=pdbids, ligs=ligs)
         except RuntimeError:
             continue
+        except OSError:
+            sdfs_not_present.append(sdf)
         else:
             mols[str(sdf)] = mol
-    return mols
+    return mols, sdfs_not_present
 
 
 def types_to_sdfs(sdf_base_dir, types_file):
@@ -105,97 +110,145 @@ def types_to_sdfs(sdf_base_dir, types_file):
 if __name__ == '__main__':
 
     def worker_types(return_dict, sdfs, directory, ligs, proc):
-        start_time = time.time()
-        for idx, sdf in enumerate(sdfs):
-            try:
-                mol = get_mol(sdf, directory, ligs=ligs)
-            except:
-                continue
-            else:
-                return_dict[str(sdf)] = mol
-            if not proc and not idx % 1000:
-                elasped = time.time() - start_time
-                print('Time: {0:.3f}'.format(elasped),
-                      idx * n_processes,
-                      'Time remaining: {0:.3f} s'.format(
-                          780000 * (elasped / (
-                                      (idx * n_processes) + 1)) - elasped))
+        lam = Timer if proc else Progress
+        with lam() as progress:
+            if not proc:
+                task = progress.add_task(
+                    '[red]Parsing types...', total=len(sdfs))
+            for idx, sdf in enumerate(sdfs):
+                if not proc:
+                    progress.update(task, advance=1)
+                try:
+                    mol = get_mol(sdf, directory, ligs=ligs)
+                except RuntimeError:
+                    continue
+                except OSError:
+                    return_dict[str(sdf)] = None
+                else:
+                    return_dict[str(sdf)] = mol
 
 
     def worker_tanimoto(return_lines, train_mols, test_mols, line_dict, proc):
         keep = []
         discard = []
-        types_lines = ''
-        start_time = time.time()
-        for idx, (sdf, mol) in enumerate(train_mols.items()):
-            keep_sdf = True
-            if mol is not None:
-                for test_pdbid, test_mol in test_mols.items():
-                    if is_similar(mol, test_mol, cutoff=args.threshold):
-                        discard.append(sdf)
-                        keep_sdf = False
-                        break
-                if keep_sdf:
-                    keep.append(sdf)
-                    types_lines += line_dict[str(sdf)] + '\n'
-            else:
-                discard.append(sdf)
-            if not proc and not idx % 1000:
-                elasped = time.time() - start_time
-                print(elasped,
-                      idx * n_processes,
-                      'Time remaining: {0:.3f} s'.format(
-                          780000 * (elasped / (
-                                  (idx * n_processes) + 1)) - elasped))
-        return_lines.append(types_lines)
+        types_lines = []
+        lam = Timer if proc else Progress
+        with lam() as progress:
+            if not proc:
+                task = progress.add_task(
+                    '[blue]Comparing molecules...', total=len(sdfs))
+            for idx, (sdf, mol) in enumerate(train_mols.items()):
+                if not proc:
+                    progress.update(task, advance=1)
+                keep_sdf = True
+                if mol is not None:
+                    for test_pdbid, test_mol in test_mols.items():
+                        if is_similar(mol, test_mol, cutoff=args.threshold):
+                            discard.append(sdf)
+                            keep_sdf = False
+                            break
+                    if keep_sdf:
+                        keep.append(sdf)
+                        types_lines.append(line_dict[str(sdf)])
+                else:
+                    discard.append(sdf)
+        return_lines += types_lines
 
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('train_structure_dir', type=str,
+    parser.add_argument('--train_structure_dir', '-train', type=str,
                         help='Location of raw train sdf files')
-    parser.add_argument('test_structure_dir', type=str,
+    parser.add_argument('--test_structure_dir', '-test', type=str,
                         help='Location of raw test sdf files')
-    parser.add_argument('test_pdbids', type=str, help='Test set PDBIDs file')
-    parser.add_argument('train_types', type=str, help='Original (baised) set '
-                                                      'types file')
-    parser.add_argument('output_dir', type=str, help='Where to store results')
+    parser.add_argument('--train_types', type=str, help='Original (baised) '
+                                                        'training set types '
+                                                        'file')
+    parser.add_argument('--test_types', type=str,
+                        help='Original test set types '
+                             'file')
+    parser.add_argument('--output_dir', '-o', type=str,
+                        help='Where to store results')
     parser.add_argument('--threshold', '-t', type=float, default=0.9,
                         help='Sequence similarity threshold')
 
     args = parser.parse_args()
     RDLogger.DisableLog('rdApp.*')
 
-    line_to_sdf_map = types_to_sdfs(args.train_structure_dir, args.train_types)
-    test_mols = get_mols(args.test_structure_dir, args.test_pdbids)
-    print('There are', len(test_mols), 'test set molecules')
+    line_to_sdf_map_test = types_to_sdfs(
+        args.test_structure_dir, args.test_types)
 
-    n_cols = get_n_cols(args.train_types)
-    df = pd.read_csv(expand_path(args.train_types), sep='\s+', names=(
-        'x', 'y', 'z', 'rec', 'lig', *[str(i) for i in range(n_cols - 5)]))
-    ligs = [str(s.replace('.parquet', '.sdf')) for s in df['lig']]
+    n_cols_test = get_n_cols(args.test_types)
+    df_test = pd.read_csv(expand_path(args.test_types), sep='\s+', names=(
+        'x', 'y', 'z', 'rec', 'lig', *[str(i) for i in range(
+            n_cols_test - 5)]))
+    ligs_test = [str(s.replace('.parquet', '.sdf')) for s in df_test['lig']]
 
     manager = mp.Manager()
-    train_mols = manager.dict()
+    test_mols = manager.dict()
     jobs = []
     n_processes = mp.cpu_count()
     sdfs = [[] for _ in range(n_processes)]
 
-    for idx, sdf in enumerate(ligs):
+    for idx, sdf in enumerate(ligs_test):
         sdfs[idx % n_processes].append(
-            str(expand_path(args.train_structure_dir) / sdf))
+            str(expand_path(args.test_structure_dir) / sdf))
+        if idx == 10000:
+            break
 
     for i in range(n_processes):
         p = mp.Process(
             target=worker_types, args=(
-                train_mols, sdfs[i], args.train_structure_dir, ligs, i))
+                test_mols, sdfs[i], args.test_structure_dir, ligs_test, i))
         jobs.append(p)
         p.start()
 
     for proc in jobs:
         proc.join()
 
-    train_mols = dict(train_mols)
-    print('There are', len(train_mols), 'training molecules')
+    sdfs_not_present_test = list(
+        {sdf for sdf, mol in test_mols.items() if mol is None})
+    test_mols = {sdf: mol for sdf, mol in test_mols.items() if mol is not None}
+    print('There are', len(test_mols), 'test molecules')
+    print('There are', len(sdfs_not_present_test), 'missing test sdfs')
+    with open(mkdir(args.output_dir) / 'missing_sdfs_test.txt', 'w') as f:
+        f.write('\n'.join(sdfs_not_present_test) + '\n')
+
+    line_to_sdf_map_train = types_to_sdfs(
+        args.train_structure_dir, args.train_types)
+
+    n_cols_train = get_n_cols(args.train_types)
+    df_train = pd.read_csv(expand_path(args.train_types), sep='\s+', names=(
+        'x', 'y', 'z', 'rec', 'lig', *[str(i) for i in range(
+            n_cols_train - 5)]))
+    ligs_train = [str(s.replace('.parquet', '.sdf')) for s in df_train['lig']]
+    train_mols = manager.dict()
+    jobs = []
+    sdfs = [[] for _ in range(n_processes)]
+
+    for idx, sdf in enumerate(ligs_train):
+        sdfs[idx % n_processes].append(
+            str(expand_path(args.train_structure_dir) / sdf))
+        if idx == 10000:
+            break
+
+    for i in range(n_processes):
+        p = mp.Process(
+            target=worker_types, args=(
+                train_mols, sdfs[i], args.train_structure_dir, ligs_train, i))
+        jobs.append(p)
+        p.start()
+
+    for proc in jobs:
+        proc.join()
+
+    sdfs_not_present_train = list(
+        {sdf for sdf, mol in train_mols.items() if mol is None})
+    train_mols = {sdf: mol for sdf, mol in train_mols.items() if
+                  mol is not None}
+    print('There are', len(train_mols), 'train molecules')
+    print('There are', len(sdfs_not_present_train), 'missing train sdfs')
+    with open(mkdir(args.output_dir) / 'missing_sdfs_train.txt', 'w') as f:
+        f.write('\n'.join(sdfs_not_present_train) + '\n')
 
     train_mols_split = [{} for _ in range(n_processes)]
     return_lines = manager.list()
@@ -204,11 +257,10 @@ if __name__ == '__main__':
     for idx, (key, mol) in enumerate(train_mols.items()):
         train_mols_split[idx % n_processes][key] = mol
 
-
     for i in range(n_processes):
-        print(i)
         p = mp.Process(target=worker_tanimoto, args=(
-            return_lines, train_mols_split[i], test_mols, line_to_sdf_map, i))
+            return_lines, train_mols_split[i], test_mols,
+            line_to_sdf_map_train, i))
         jobs.append(p)
         p.start()
 
