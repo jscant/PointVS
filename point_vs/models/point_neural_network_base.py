@@ -12,6 +12,7 @@ from torch import nn
 from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingWarmRestarts
 
 from point_vs.analysis.top_n import top_n
+from point_vs.models.load_model import find_latest_checkpoint
 from point_vs.utils import get_eta, format_time, print_with_overwrite, mkdir, \
     to_numpy, expand_path, load_yaml, get_regression_pearson
 
@@ -455,7 +456,10 @@ class PointNeuralNetworkBase(nn.Module):
 
     def load_weights(self, checkpoint_file, silent=False):
         """All this crap is required because I renamed some things ages ago."""
-        checkpoint = torch.load(str(Path(checkpoint_file).expanduser()))
+        checkpoint_file = expand_path(checkpoint_file)
+        if checkpoint_file.is_dir():
+            checkpoint_file = find_latest_checkpoint(checkpoint_file)
+        checkpoint = torch.load(str(checkpoint_file))
         if self.model_task == load_yaml(
                 expand_path(checkpoint_file).parents[1] /
                 'model_kwargs.yaml').get('model_task', 'classification'):
