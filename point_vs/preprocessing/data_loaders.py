@@ -68,6 +68,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
                 min_inactive_rms_distance is None))
         assert not (include_strain_info and augmented_active_count)
         super().__init__()
+        self.include_strain_info = include_strain_info
         self.radius = radius
         self.estimate_bonds = estimate_bonds
         self.base_path = Path(base_path).expanduser()
@@ -333,7 +334,8 @@ class PygPointCloudDataset(PointCloudDataset):
             denoting whether the structure is an active or a decoy.
         """
         lig_fname, rec_fname, label = self.index_to_parquets(item)
-        dE, rmsd = self.dEs[item], self.rmsds[item]
+        if self.include_strain_info:
+            dE, rmsd = self.dEs[item], self.rmsds[item]
 
         p, v, struct, force_zero_label = self.parquets_to_inputs(
             lig_fname, rec_fname, item=item)
