@@ -143,6 +143,11 @@ if __name__ == '__main__':
         return_lines += types_lines
 
 
+    def remove_index(s):
+        suffix = '.' + s.split('.')[-1]
+        return '_'.join(s.replace(suffix, '').split('_')[:-1]) + suffix
+
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--train_structure_dir', '-train', type=str,
                         help='Location of raw train sdf files')
@@ -169,7 +174,8 @@ if __name__ == '__main__':
     df_test = pd.read_csv(expand_path(args.test_types), sep='\s+', names=(
         'x', 'y', 'z', 'rec', 'lig', *[str(i) for i in range(
             n_cols_test - 5)]))
-    ligs_test = [str(s.replace('.parquet', '.sdf')) for s in df_test['lig']]
+    ligs_test = list(set([str(s.replace('.parquet', '_0.sdf')) for s in
+                          df_test['lig'].apply(remove_index)]))
 
     manager = mp.Manager()
     test_mols = manager.dict()
@@ -183,9 +189,11 @@ if __name__ == '__main__':
 
     A = manager.list()
 
+
     def callback(obj):
         global A
         A.append(1)
+
 
     with Progress(refresh_per_second=1) as progress:
         p = mp.Pool()
