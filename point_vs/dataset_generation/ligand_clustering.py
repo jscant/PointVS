@@ -1,6 +1,5 @@
 import argparse
 import multiprocessing as mp
-import time
 from pathlib import Path
 
 import pandas as pd
@@ -10,7 +9,7 @@ from rdkit.DataStructs import TanimotoSimilarity, UIntSparseIntVect
 from rich.progress import Progress
 
 from point_vs.utils import expand_path, py_mollify, get_n_cols, execute_cmd, \
-    mkdir, Timer
+    mkdir
 
 
 def is_similar(mol1, mol2, cutoff):
@@ -109,49 +108,38 @@ def types_to_sdfs(sdf_base_dir, types_file):
 
 if __name__ == '__main__':
 
-    def worker_types(return_dict, sdfs, directory, ligs, proc):
-        lam = Timer if proc else Progress
-        with lam() as progress:
-            if not proc:
-                task = progress.add_task(
-                    '[red]Parsing types...', total=len(sdfs))
-            for idx, sdf in enumerate(sdfs):
-                if not proc:
-                    progress.update(task, advance=1)
-                try:
-                    mol = get_mol(sdf, directory, ligs=ligs)
-                except RuntimeError:
-                    continue
-                except OSError:
-                    return_dict[str(sdf)] = None
-                else:
-                    return_dict[str(sdf)] = mol
+    def worker_types(_progress, return_dict, sdfs, directory, ligs, proc):
+        for idx, sdf in enumerate(sdfs):
+            _progress[proc] = {'progress': idx + 1, 'total': len(sdfs)}
+            try:
+                mol = get_mol(sdf, directory, ligs=ligs)
+            except RuntimeError:
+                continue
+            except OSError:
+                return_dict[str(sdf)] = None
+            else:
+                return_dict[str(sdf)] = mol
 
 
-    def worker_tanimoto(return_lines, train_mols, test_mols, line_dict, proc):
+    def worker_tanimoto(
+            _progress, return_lines, train_mols, test_mols, line_dict, proc):
         keep = []
         discard = []
         types_lines = []
-        lam = Timer if proc else Progress
-        with lam() as progress:
-            if not proc:
-                task = progress.add_task(
-                    '[blue]Comparing molecules...', total=len(sdfs))
-            for idx, (sdf, mol) in enumerate(train_mols.items()):
-                if not proc:
-                    progress.update(task, advance=1)
-                keep_sdf = True
-                if mol is not None:
-                    for test_pdbid, test_mol in test_mols.items():
-                        if is_similar(mol, test_mol, cutoff=args.threshold):
-                            discard.append(sdf)
-                            keep_sdf = False
-                            break
-                    if keep_sdf:
-                        keep.append(sdf)
-                        types_lines.append(line_dict[str(sdf)])
-                else:
-                    discard.append(sdf)
+        for idx, (sdf, mol) in enumerate(train_mols.items()):
+            _progress[proc] = {'progress': idx + 1, 'total': len(train_mols)}
+            keep_sdf = True
+            if mol is not None:
+                for test_pdbid, test_mol in test_mols.items():
+                    if is_similar(mol, test_mol, cutoff=args.threshold):
+                        discard.append(sdf)
+                        keep_sdf = False
+                        break
+                if keep_sdf:
+                    keep.append(sdf)
+                    types_lines.append(line_dict[str(sdf)])
+            else:
+                discard.append(sdf)
         return_lines += types_lines
 
 
@@ -192,24 +180,38 @@ if __name__ == '__main__':
     for idx, sdf in enumerate(ligs_test):
         sdfs[idx % n_processes].append(
             str(expand_path(args.test_structure_dir) / sdf))
-        if idx == 10000:
-            break
 
-    for i in range(n_processes):
-        p = mp.Process(
-            target=worker_types, args=(
-                test_mols, sdfs[i], args.test_structure_dir, ligs_test, i))
-        jobs.append(p)
-        p.start()
+    A = manager.list()
 
-    for proc in jobs:
-        proc.join()
+    def callback(obj):
+        global A
+        A.append(1)
+
+    with Progress(refresh_per_second=1) as progress:
+        p = mp.Pool()
+        _progress = manager.dict()
+        for i in range(n_processes):
+            task_id = progress.add_task(
+                f'[red]Test types CPU {i}', visible=False)
+            p.apply_async(
+                worker_types, args=(
+                    _progress, test_mols, sdfs[i], args.test_structure_dir,
+                    ligs_test, i), callback=callback)
+        while sum(A) < n_processes:
+            for task_id, update_data in _progress.items():
+                latest = update_data['progress']
+                total = update_data['total']
+                progress.update(task_id, completed=latest, total=total,
+                                visible=True)
+        p.close()
+        p.join()
 
     sdfs_not_present_test = list(
         {sdf for sdf, mol in test_mols.items() if mol is None})
     test_mols = {sdf: mol for sdf, mol in test_mols.items() if mol is not None}
     print('There are', len(test_mols), 'test molecules')
     print('There are', len(sdfs_not_present_test), 'missing test sdfs')
+
     with open(mkdir(args.output_dir) / 'missing_sdfs_test.txt', 'w') as f:
         f.write('\n'.join(sdfs_not_present_test) + '\n')
 
@@ -228,18 +230,27 @@ if __name__ == '__main__':
     for idx, sdf in enumerate(ligs_train):
         sdfs[idx % n_processes].append(
             str(expand_path(args.train_structure_dir) / sdf))
-        if idx == 10000:
-            break
 
-    for i in range(n_processes):
-        p = mp.Process(
-            target=worker_types, args=(
-                train_mols, sdfs[i], args.train_structure_dir, ligs_train, i))
-        jobs.append(p)
-        p.start()
+    A = manager.list()
 
-    for proc in jobs:
-        proc.join()
+    with Progress(refresh_per_second=1) as progress:
+        p = mp.Pool()
+        _progress = manager.dict()
+        for i in range(n_processes):
+            task_id = progress.add_task(
+                f'[blue]Train types CPU {i}', visible=False)
+            p.apply_async(
+                worker_types, args=(
+                    _progress, train_mols, sdfs[i], args.train_structure_dir,
+                    ligs_train, i), callback=callback)
+        while sum(A) < n_processes:
+            for task_id, update_data in _progress.items():
+                latest = update_data['progress']
+                total = update_data['total']
+                progress.update(task_id, completed=latest, total=total,
+                                visible=True)
+        p.close()
+        p.join()
 
     sdfs_not_present_train = list(
         {sdf for sdf, mol in train_mols.items() if mol is None})
@@ -257,12 +268,26 @@ if __name__ == '__main__':
     for idx, (key, mol) in enumerate(train_mols.items()):
         train_mols_split[idx % n_processes][key] = mol
 
-    for i in range(n_processes):
-        p = mp.Process(target=worker_tanimoto, args=(
-            return_lines, train_mols_split[i], test_mols,
-            line_to_sdf_map_train, i))
-        jobs.append(p)
-        p.start()
+    A = manager.list()
+    with Progress(refresh_per_second=1) as progress:
+        p = mp.Pool()
+        _progress = manager.dict()
+        for i in range(n_processes):
+            task_id = progress.add_task(
+                f'[green]Tanimoto CPU {i}', visible=False)
+            p.apply_async(
+                worker_tanimoto, args=(
+                    _progress, return_lines, train_mols_split[i], test_mols,
+                    line_to_sdf_map_train, i), callback=callback)
+
+        while sum(A) < n_processes:
+            for task_id, update_data in _progress.items():
+                latest = update_data['progress']
+                total = update_data['total']
+                progress.update(task_id, completed=latest, total=total,
+                                visible=True)
+        p.close()
+        p.join()
 
     for proc in jobs:
         proc.join()
