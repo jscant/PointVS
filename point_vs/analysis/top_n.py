@@ -3,13 +3,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from point_vs.constants import GNINA_TEST_PDBIDS as VAL_PDBIDS
 from point_vs.utils import expand_path
-
-try:
-    with open('data/val_pdbids.txt', 'r') as f:
-        VAL_PDBIDS = set([line.lower().strip() for line in f.readlines()])
-except FileNotFoundError:  # File is not in repo as it is not ready
-    VAL_PDBIDS = []
 
 
 def _extract_scores(types_file, pdbid_whitelist=False):
