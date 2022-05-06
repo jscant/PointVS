@@ -53,7 +53,7 @@ def _gnn_score(types_file, pdbid_whitelist=False):
     return scores
 
 
-def top_n(types_file, n=1, pdbid_whitelist=True):
+def top_n(types_file, n=1, pdbid_whitelist=False):
     scores = _gnn_score(types_file, pdbid_whitelist=pdbid_whitelist)
     s = [[j[1] for j in i] for i in scores.values()]
     return sum([1 for i in s if sum(i[:n])]) / len(scores)
