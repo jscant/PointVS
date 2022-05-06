@@ -6,17 +6,7 @@ from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
 from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
 from point_vs.models.vanilla.lie_conv import LieResNet
 from point_vs.models.vanilla.lie_transformer import EquivariantTransformer
-from point_vs.utils import load_yaml, expand_path
-
-
-def find_latest_checkpoint(root):
-    max_epoch = -1
-    for fname in expand_path(root, 'checkpoints').glob('*.pt'):
-        max_epoch = max(
-            max_epoch, int(fname.with_suffix('').name.split('_')[-1]))
-    if max_epoch > -1:
-        return Path(root, 'checkpoints', 'ckpt_epoch_{}.pt'.format(max_epoch))
-    raise RuntimeError('Could not find saved model in', root)
+from point_vs.utils import load_yaml, find_latest_checkpoint
 
 
 def load_model(

@@ -11,18 +11,20 @@ from plip.exchange.webservices import fetch_pdb
 from sklearn.metrics import average_precision_score, \
     precision_recall_curve
 
-from point_vs.attribution.attribution_fns import masking, cam, \
-    edge_embedding_attribution, edge_attention, node_attention
+from point_vs.attribution.attribution_fns import atom_masking, cam, \
+    edge_embedding_attribution, edge_attention, node_attention, \
+    replace_coords, track_position_changes, track_bond_lengths, cam_wrapper, \
+    attention_wrapper, bond_masking, masking_wrapper
 from point_vs.attribution.process_pdb import score_and_colour_pdb
 from point_vs.models.load_model import load_model
-from point_vs.utils import ensure_writable, expand_path
-from point_vs.utils import mkdir
+from point_vs.utils import ensure_writable, expand_path, mkdir, rename_lig, \
+    find_latest_checkpoint
 
 matplotlib.use('agg')
 
 from matplotlib import pyplot as plt
 
-ALLOWED_METHODS = ('masking', 'cam')
+ALLOWED_METHODS = ('atom_masking', 'cam')
 
 
 def download_pdb_file(pdbid, output_dir):
@@ -127,36 +129,59 @@ def attribute(attribution_type, model_file, output_dir, pdbid=None,
               gnn_layer=None, bonding_strs=None, write_pse=True,
               override_attribution_name=None, atom_blind=False,
               inverse_colour=False, pdb_file=None, loaded_model=None,
-              quiet=False):
+              quiet=False, track_atom_positions=False, check_multiconf=True,
+              rename=False, only_first=False, split_by_mol=True):
     if pdbid is None:
         leaf_dir = Path(Path(input_file).name).stem
-        output_dir = mkdir(
-            Path(output_dir, leaf_dir))
+        output_dir = mkdir(Path(output_dir, leaf_dir, attribution_type))
         pdbpath = Path(input_file).expanduser()
     else:
-        output_dir = mkdir(Path(output_dir, attribution_type, pdbid))
+        output_dir = mkdir(Path(output_dir, pdbid, attribution_type))
         pdbpath = download_pdb_file(pdbid, output_dir)
 
-    conf_lines = has_multiple_conformations(pdbpath)
-    if len(conf_lines):
-        print()
-        print('WARNING:', pdbpath, 'contains multiple conformations!',
-              'Multiconf line indices:')
-        print(*conf_lines)
-        print()
+    if check_multiconf:
+        conf_lines = has_multiple_conformations(pdbpath)
+        if len(conf_lines):
+            print()
+            print('WARNING:', pdbpath, 'contains multiple conformations!',
+                  'Multiconf line indices:')
+            print(*conf_lines)
+            print()
+
+    if rename:
+        only_process = 'LIG'
+        new_pdb_path = Path(
+            output_dir, pdbpath.with_suffix('').name + '_fixed.pdb')
+        rename_lig(pdbpath, new_pdb_path.parent, handle_conformers='discard',
+                   atom_count_threshold=6)
+        pdbpath = new_pdb_path
+
     coords_to_identifier = pdb_coords_to_identifier(pdbpath)
-    attribution_fn = {'masking': masking,
+    attribution_fn = {'atom_masking': atom_masking,
                       'cam': cam,
                       'node_attention': node_attention,
                       'edge_attention': edge_attention,
-                      'edges': edge_embedding_attribution
+                      'edges': edge_embedding_attribution,
+                      'displacement': track_position_changes,
+                      'bond_lengths': track_bond_lengths,
+                      'attention': attention_wrapper,
+                      'class_activation': cam_wrapper,
+                      'bond_masking': bond_masking,
+                      'masking': masking_wrapper
                       }.get(attribution_type, None)
 
-    model, model_kwargs, cmd_line_args = load_model(
-        model_file,
+    if expand_path(model_file).is_dir():
+        model_file = find_latest_checkpoint(model_file)
+
+    _, model, model_kwargs, cmd_line_args = load_model(
+        model_file, silent=False,
         fetch_args_only=attribution_fn is None or loaded_model is not None)
     if loaded_model is not None:
         model = loaded_model
+
+    if attribution_type.find('attention') != -1:
+        output_dir = Path(
+            output_dir.parent, output_dir.name + '_' + str(gnn_layer))
 
     dfs = score_and_colour_pdb(
         model=model, attribution_fn=attribution_fn,
@@ -167,31 +192,50 @@ def attribute(attribution_type, model_file, output_dir, pdbid=None,
         override_attribution_name=override_attribution_name,
         atom_blind=atom_blind, inverse_colour=inverse_colour,
         pdb_file=pdb_file, coords_to_identifier=coords_to_identifier,
-        quiet=quiet)
-    precision_str = 'pdbid,lig:chain:res,rnd_avg_precision,' \
-                    'model_avg_precision,score\n'
+        split_by_mol=split_by_mol,
+        quiet=quiet, only_first=only_first, extended=cmd_line_args.get(
+            'extended_atom_types', False))
+
+    if track_atom_positions:
+        positions_path = mkdir(output_dir / 'atom_positions')
+        original_coords = model.layers[0].intermediate_coords
+        for layer in range(1, cmd_line_args['layers'] + 1):
+            imc = model.layers[layer].intermediate_coords
+            replace_coords(
+                pdbpath, Path(positions_path, 'layer_{}.pdb'.format(layer)),
+                original_coords, imc)
+
+    precision_str = 'pdbid,lig:chain:res,rnd_avg_precision_lig,rnd_agv_precision_rec' \
+                    'model_avg_precision_lig,model_avg_precision_rec,score\n'
     if write_stats:
-        if attribution_type != 'edge_attention':
+        if attribution_type in ('edge_attention', 'bond_masking', 'masking'):
+            for lig_id, (score, df, edge_indices, edge_scores) in dfs.items():
+                df.to_csv(output_dir / '{}_results.csv'.format(
+                    lig_id.replace(':', '_').replace(
+                        ' ', '').replace('__', '_')
+                ))
+        else:
             try:
                 for lig_id, (
                         score, df, edge_indices, edge_scores) in dfs.items():
-                    r_ap, ap = precision_recall(
-                        df,
-                        save_path=Path(output_dir,
-                                       'precision_recall_{}.png'.format(
-                                           lig_id.replace(':', '_'))))
-                    precision_str += '{0},{1},{2:.4f},{3:.4f},{4:.4f}\n'.format(
-                        pdbid, lig_id, r_ap, ap, score)
+                    r_aps, aps = [], []
+                    for bp in (0, 1):
+                        r_ap, ap = precision_recall(
+                            df[df['bp'] == bp],
+                            save_path=Path(
+                                output_dir, 'precision_recall_{}.png'.format(
+                                    lig_id.replace(':', '_').replace(
+                                        ' ', '').replace('__', '_'))))
+                        r_aps.append(r_ap)
+                        aps.append(ap)
+                    precision_str += '{0},{1},{2:.4f},{3:.4f},{4:.4f},{5:.4f},{6:.4f}\n'.format(
+                        pdbid, lig_id, r_aps[0], r_aps[1], aps[0], aps[1], score)
                     print()
                 with open(output_dir / 'average_precisions.txt', 'w') as f:
                     f.write(precision_str)
-            except KeyError:
+            except (KeyError, ValueError):
                 pass
-        else:
-            for lig_id, (score, df, edge_indices, edge_scores) in dfs.items():
-                df.to_csv(output_dir / '{}_edge_attributions.csv'.format(
-                    lig_id.replace(':', '-')
-                ))
+
     return dfs
 
 
@@ -211,13 +255,43 @@ if __name__ == '__main__':
                         help='Only process ligands with the given 3 letter '
                              'residue codes (UNK, for example)')
     parser.add_argument('--gnn_layer', '-l', type=int, default=1)
+    parser.add_argument('--track_atom_positions', '-t', action='store_true',
+                        help='Record atom positions as information flows '
+                             'through GNN, in PDB format')
+    parser.add_argument('--rename', '-r', action='store_true',
+                        help='Rename ligands to LIG, and only attribute to '
+                             'the first one found')
+    parser.add_argument('--only_first', '-f', action='store_true',
+                        help='Only process first instance of ligand in PDB '
+                             'file')
+    parser.add_argument('--split_by_mol', '-s', action='store_true',
+                        help='Treat receptor and ligand as separate when '
+                             'colouring and calculating precision-recall')
     args = parser.parse_args()
     config.NOFIX = True
     if isinstance(args.pdbid, str) + isinstance(args.input_file, str) != 1:
         raise RuntimeError(
             'Specify exactly one of either --pdbid or --input_file.')
     pd.set_option('display.float_format', lambda x: '%.3f' % x)
-    print(*[item[1][:10] for item in attribute(
-        args.attribution_type, args.model, args.output_dir, pdbid=args.pdbid,
-        input_file=args.input_file, only_process=args.only_process,
-        atom_blind=True, gnn_layer=args.gnn_layer).values()], sep='\n\n')
+
+    if not args.only_first or not args.split_by_mol:
+        print(*[item[1][:10] for item in attribute(
+            args.attribution_type, args.model, args.output_dir, pdbid=args.pdbid,
+            input_file=args.input_file, only_process=args.only_process,
+            atom_blind=True, gnn_layer=args.gnn_layer,
+            track_atom_positions=args.track_atom_positions,
+            split_by_mol=args.split_by_mol, rename=args.rename,
+            only_first=args.only_first).values()], sep='\n\n')
+    else:
+        df = list(attribute(
+            args.attribution_type, args.model, args.output_dir, pdbid=args.pdbid,
+            input_file=args.input_file, only_process=args.only_process,
+            atom_blind=True, gnn_layer=args.gnn_layer,
+            track_atom_positions=args.track_atom_positions,
+            split_by_mol=args.split_by_mol, rename=args.rename,
+            only_first=args.only_first).values())[0][1]
+        print('Ligand:')
+        print(df[df['bp'] == 0][:10])
+        print()
+        print('Receptor:')
+        print(df[df['bp'] == 1][:10])

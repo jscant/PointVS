@@ -19,12 +19,27 @@ import yaml
 from matplotlib import pyplot as plt
 from pymol import cmd
 from rdkit import Chem
-from rdkit.Chem import AllChem, SDMolSupplier, MolFromMol2File, MolToSmiles, \
-    Kekulize
-from rdkit.Chem.rdMolAlign import AlignMol, CalcRMS
+from rdkit.Chem import AllChem, SDMolSupplier, MolFromMol2File
+from rdkit.Chem.rdMolAlign import CalcRMS
 from scipy.stats import pearsonr
 
 from point_vs.constants import AA_TRIPLET_CODES
+
+
+def find_latest_checkpoint(root):
+    max_epoch = -1
+    for fname in expand_path(root, 'checkpoints').glob('*.pt'):
+        max_epoch = max(
+            max_epoch, int(fname.with_suffix('').name.split('_')[-1]))
+    if max_epoch > -1:
+        return Path(root, 'checkpoints', 'ckpt_epoch_{}.pt'.format(max_epoch))
+    raise RuntimeError('Could not find saved model in', root)
+
+
+def get_n_cols(text_file):
+    with open(expand_path(text_file), 'r') as f:
+        line = f.readline()
+    return len(line.strip().split())
 
 
 def split_sdfs(sdf, output_dir):
@@ -365,6 +380,7 @@ def execute_cmd(cmd, raise_exceptions=True, silent=True):
         shell=True,
         capture_output=True)
     if proc_result.stderr and raise_exceptions:
+        print(proc_result.stderr)
         raise subprocess.CalledProcessError(
             returncode=proc_result.returncode,
             cmd=proc_result.args,

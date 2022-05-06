@@ -12,9 +12,9 @@ from torch import nn
 from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingWarmRestarts
 
 from point_vs.analysis.top_n import top_n
-from point_vs.models.load_model import find_latest_checkpoint
 from point_vs.utils import get_eta, format_time, print_with_overwrite, mkdir, \
-    to_numpy, expand_path, load_yaml, get_regression_pearson
+    to_numpy, expand_path, load_yaml, get_regression_pearson, \
+    find_latest_checkpoint
 
 
 class PointNeuralNetworkBase(nn.Module):

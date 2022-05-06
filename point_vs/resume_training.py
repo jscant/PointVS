@@ -5,10 +5,10 @@ from pathlib import Path
 
 import wandb
 
-from point_vs.models.load_model import load_model, find_latest_checkpoint
+from point_vs.models.load_model import load_model
 from point_vs.preprocessing.data_loaders import PygPointCloudDataset, \
     PointCloudDataset, get_data_loader
-from point_vs.utils import expand_path
+from point_vs.utils import expand_path, find_latest_checkpoint
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
