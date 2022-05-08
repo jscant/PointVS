@@ -336,6 +336,8 @@ class PygPointCloudDataset(PointCloudDataset):
         lig_fname, rec_fname, label = self.index_to_parquets(item)
         if self.include_strain_info:
             dE, rmsd = self.dEs[item], self.rmsds[item]
+        else:
+            dE, rmsd = None, None
 
         p, v, struct, force_zero_label = self.parquets_to_inputs(
             lig_fname, rec_fname, item=item)
