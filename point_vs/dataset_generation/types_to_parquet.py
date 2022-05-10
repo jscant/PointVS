@@ -834,6 +834,7 @@ def parse_types_file(types_file):
                 else:
                     ligpath = chunk
                     break
+
         return recpath, ligpath
 
     recs, ligs = set(), set()
@@ -863,8 +864,6 @@ def parse_single_types_entry(inp, outp, structure_type, extended=False,
                 rec = Path(Path(rec).parent,
                            Path(rec).with_suffix('').name[:-2] + rec.suffix)
             except ValueError:
-                print(rec)
-                exit(1)
                 raise
         return str(rec).replace(
             '.parquet', '.pdb').replace(
@@ -877,7 +876,6 @@ def parse_single_types_entry(inp, outp, structure_type, extended=False,
         sdf_idx = None
     else:
         inp, sdf_idx = get_sdf_and_index(inp)
-    print(inp)
     parser.file_to_parquets(inp, outp.parent,
                             outp.name.replace('.gninatypes', '.parquet'),
                             add_polar_hydrogens=False, sdf_idx=sdf_idx)
@@ -888,7 +886,6 @@ def parse_types_mp(types_file, input_base_path, output_base_path, extended,
     output_dir = mkdir(output_base_path)
     input_base_path = expand_path(input_base_path)
     recs, ligs = parse_types_file(types_file)
-    recs = []
     inputs = recs + ligs
     structure_types = ['receptor' for _ in recs] + ['ligand' for _ in ligs]
     outputs = [Path(output_dir, input) for input in inputs]
