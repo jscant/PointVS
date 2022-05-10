@@ -24,9 +24,10 @@ def _extract_scores(types_file, pdbid_whitelist=False):
     df = pd.read_csv(expand_path(types_file), sep=' ',
                      names=['y_true', '|', 'y_pred', 'rec', 'lig'])
     df['vina_rank'] = df['lig'].map(extract_vina_rank)
-    df['remove'] = df.rec.map(drop_record)
-    df.drop(df[df.remove].index, inplace=True)
-    del df['remove']
+    if pdbid_whitelist:
+        df['remove'] = df.rec.map(drop_record)
+        df.drop(df[df.remove].index, inplace=True)
+        del df['remove']
     del df['|']
     df.reset_index(inplace=True, drop=True)
     df['lig_sdf'] = df['lig'].map(extract_dock_sdf_name)
@@ -40,9 +41,9 @@ def _gnn_score(types_file, pdbid_whitelist=False):
     df = _extract_scores(types_file, pdbid_whitelist)
     y_trues = df['y_true'].to_numpy()
     y_preds = df['y_pred'].to_numpy()
-    recligs = df['reclig'].to_numpy()
+    recligs = df['rec'].to_numpy()
     for reclig, y_true, y_pred in zip(recligs, y_trues, y_preds):
-        scores[reclig].append((y_pred, y_true))
+        scores[reclig].append((y_pred, int(y_true)))
     for reclig, values in scores.items():
         scores[reclig] = sorted(values, key=lambda x: x[0], reverse=True)
     return scores
