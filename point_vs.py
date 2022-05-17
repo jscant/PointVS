@@ -242,7 +242,8 @@ if __name__ == '__main__':
         'gated_residual': args.gated_residual,
         'rezero': args.rezero,
         'model_task': args.model_task,
-        'include_strain_info': args.include_strain_info
+        'include_strain_info': args.include_strain_info,
+        'final_softplus': args.final_softplus
     }
 
     args_to_record.update(model_kwargs)

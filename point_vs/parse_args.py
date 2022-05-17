@@ -246,4 +246,7 @@ def parse_args():
     parser.add_argument('--include_strain_info', action='store_true',
                         help='Include info on strain energy and RMSD from '
                              'ground state of ligand')
+    parser.add_argument('--final_softplus', action='store_true',
+                        help='Final layer in regression has softplus '
+                             'nonlinearity')
     return parser.parse_args()

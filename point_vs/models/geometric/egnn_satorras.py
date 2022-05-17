@@ -196,6 +196,7 @@ class SartorrasEGNN(PNNGeometricBase):
                   gated_residual=False, rezero=False,
                   model_task='classification',
                   include_strain_info=False,
+                  final_softplus=False,
                   **kwargs):
         """
         Arguments:
@@ -307,6 +308,8 @@ class SartorrasEGNN(PNNGeometricBase):
             if idx < len(fc_layer_dims) - 1:
                 feats_linear_layers.append(nn.SiLU())
                 edges_linear_layers.append(nn.SiLU())
+        if final_softplus:
+            feats_linear_layers.append(nn.Softplus())
         if classify_on_feats:
             self.feats_linear_layers = nn.Sequential(*feats_linear_layers)
         if classify_on_edges:
