@@ -159,6 +159,7 @@ dependencies:
     - opt-einsum==3.3.0
     - pandas==1.4.2
     - protobuf==3.20.1
+    - pyarrow==8.0.0
     - pyasn1==0.4.8
     - pyasn1-modules==0.2.8
     - pyparsing==3.0.8
