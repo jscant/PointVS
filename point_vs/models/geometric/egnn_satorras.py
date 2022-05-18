@@ -309,7 +309,7 @@ class SartorrasEGNN(PNNGeometricBase):
                 feats_linear_layers.append(nn.SiLU())
                 edges_linear_layers.append(nn.SiLU())
         if final_softplus:
-            feats_linear_layers.append(nn.Softplus())
+            feats_linear_layers.append(nn.ReLU())
         if classify_on_feats:
             self.feats_linear_layers = nn.Sequential(*feats_linear_layers)
         if classify_on_edges:
