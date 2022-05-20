@@ -54,7 +54,8 @@ if __name__ == '__main__':
         p_remove_entity=cmd_line_args.get('p_remove_entity', 0),
         extended_atom_types=cmd_line_args.get('extended_atom_types', False),
         p_noise=cmd_line_args.get('p_noise', -1),
-        include_strain_info=cmd_line_args.get('include_strain_info', False)
+        include_strain_info=cmd_line_args.get('include_strain_info', False),
+        model_task=cmd_line_args.get('model_task', 'classification')
     )
 
     if cmd_line_args['test_data_root'] is not None:
@@ -72,7 +73,8 @@ if __name__ == '__main__':
             prune=cmd_line_args.get('prune', False),
             rot=False, mode='val', fname_suffix=cmd_line_args['input_suffix'],
             extended_atom_types=cmd_line_args.get('extended_atom_types', False),
-            include_strain_info=cmd_line_args.get('include_strain_info', False))
+            include_strain_info=cmd_line_args.get('include_strain_info', False),
+            model_task=cmd_line_args.get('model_task', 'classification'))
     else:
         test_dl = None
 
