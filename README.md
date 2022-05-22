@@ -27,7 +27,7 @@ pip install -e .
 
 To run tests for invariance under SE(3) transformations:
 ```
-pytest -vvv
+python3 -m pytest -vvv
 ```
 
 If you would like to use wandb for logging information on loss, performance and

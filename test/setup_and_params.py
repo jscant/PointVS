@@ -50,7 +50,7 @@ DATALOADER_KWARGS = {
     'compact': True, 'receptors': None,
     'augmented_active_count': 0,
     'augmented_active_min_angle': 0,
-    'polar_hydrogens': True,
+    'polar_hydrogens': False,
     'max_active_rms_distance': None,
     'min_inactive_rms_distance': None,
     'use_atomic_numbers': False,
@@ -109,7 +109,9 @@ MODEL_KWARGS = {
     'pooling_only': True,
     'linear_gap': True,
     'graphnorm': True,
-    'update_coords': True
+    'update_coords': True,
+    'node_attention': True,
+    'residual': True
 }
 
 N_SAMPLES = 10
