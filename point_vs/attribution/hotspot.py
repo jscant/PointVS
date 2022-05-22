@@ -6,29 +6,10 @@ import pandas as pd
 from rdkit import Chem
 
 from point_vs.attribution.attribution import attribute, pdb_coords_to_identifier
+from point_vs.constants import AA_TRIPLET_CODES, VDW_RADII
 from point_vs.dataset_generation.types_to_parquet import StructuralFileParser
 from point_vs.models.load_model import load_model
 from point_vs.utils import expand_path, mkdir
-
-AA_TRIPLET_CODES = {'ILE', 'GLU', 'CYS', 'TRP', 'ALA', 'PRO', 'PHE', 'ASN',
-                    'GLY', 'THR', 'ARG', 'MET', 'HIS', 'VAL', 'GLN', 'TYR',
-                    'LYS', 'LEU', 'SER', 'ASP'}
-
-VDW_RADII = {1: 1.1, 2: 1.4, 3: 1.82, 4: 1.53, 5: 1.92, 6: 1.7, 7: 1.55,
-             8: 1.52, 9: 1.47, 10: 1.54, 11: 2.27, 12: 1.73, 13: 1.84, 14: 2.1,
-             15: 1.8, 16: 1.8, 17: 1.75, 18: 1.88, 19: 2.75, 20: 2.31, 21: 2.15,
-             22: 2.11, 23: 2.07, 24: 2.06, 25: 2.05, 26: 2.04, 27: 2.0,
-             28: 1.97, 29: 1.96, 30: 2.01, 31: 1.87, 32: 2.11, 33: 1.85,
-             34: 1.9, 35: 1.85, 36: 2.02, 37: 3.03, 38: 2.49, 39: 2.32,
-             40: 2.23, 41: 2.18, 42: 2.17, 43: 2.16, 44: 2.13, 45: 2.1, 46: 2.1,
-             47: 2.11, 48: 2.18, 49: 1.93, 50: 2.17, 51: 2.06, 52: 2.06,
-             53: 1.98, 54: 2.16, 55: 3.43, 56: 2.68, 57: 2.43, 58: 2.42,
-             59: 2.4, 60: 2.39, 61: 2.38, 62: 2.36, 63: 2.35, 64: 2.34,
-             65: 2.33, 66: 2.31, 67: 2.3, 68: 2.29, 69: 2.27, 70: 2.26,
-             71: 2.24, 72: 2.23, 73: 2.22, 74: 2.18, 75: 2.16, 76: 2.16,
-             77: 2.13, 78: 2.13, 79: 2.14, 80: 2.23, 81: 1.96, 82: 2.02,
-             83: 2.07, 84: 1.97, 85: 2.02, 86: 2.2, 87: 3.48, 88: 2.83,
-             89: 2.47, 90: 2.45, 91: 2.43, 92: 2.41, 93: 2.39, 94: 2.4}
 
 
 def get_ligand_to_hbond_map(pdb, lig_name='LIG'):
@@ -93,10 +74,11 @@ def find_identifier(coords_to_identifier, coords):
 
 
 def binding_events_to_ranked_protein_atoms(
-        input_fnames, model_path, output_dir, ligand_name, layer=1):
+        input_fnames, model_path, output_dir, ligand_name, layer=1,
+        use_rank=False):
     """Use multiple protein-ligand structures to score protein atoms.
 
-    The importance of each protein atom is assumed to be related to its median
+    The importance of each protein atom is assumed to be related to its mean
     importance across multiple binding events with different ligands. Each
     atom's importance per structure is taken to the maximum GNN attention
     score across all its connected edges in that structure.
@@ -113,14 +95,15 @@ def binding_events_to_ranked_protein_atoms(
         ligand_name: residue name of the ligand (same across all inputs)
         layer: which layer from the GNN to take attention weights from for
             scoring
+        use_rank: use ranked order of bond scores in place of raw bond scores
 
     Returns:
         pd.DataFrame with columns:
             atom_name: name of protein atom, with format
                 CHAIN:RESIDUE_NUMBER:RESIDUE_NAME:ATOM_NAME, for example
                 A:1021:PHE:O
-            median_score: median GNN score of protein atom across all structures
-            gnn_rank: rank from 0 to n of atom importance according to median
+            mean_score: mean GNN score of protein atom across all structures
+            gnn_rank: rank from 0 to n of atom importance according to mean
                 GNN attention score.
     """
 
@@ -150,7 +133,7 @@ def binding_events_to_ranked_protein_atoms(
     with open(expand_path(input_fnames), 'r') as f:
         fnames = [expand_path(fname.strip()) for fname in
                   f.readlines() if len(fname.strip())]
-    model, _, _ = load_model(expand_path(model_path))
+    _, model, _, _ = load_model(expand_path(model_path))
 
     processed_dfs = []
     prot_atom_to_max_lig_atom = defaultdict(list)
@@ -165,6 +148,8 @@ def binding_events_to_ranked_protein_atoms(
         )
         scores = []
         for site_code, (score, df, _, _) in dfs.items():
+            if site_code.split(':')[1] != 'A':
+                continue
             scores.append(score)
             df['protein_atom'] = df['bond_identifier'].apply(find_protein_atom)
             protein_atom_dfs = []
@@ -189,6 +174,8 @@ def binding_events_to_ranked_protein_atoms(
 
             df = pd.concat(protein_atom_dfs)
             df.sort_values(by='bond_score', inplace=True, ascending=False)
+            if use_rank:
+                df['bond_score'] = range(len(df))
             df.rename(
                 columns={'bond_score': 'bond_score_' + str(fname)},
                 inplace=True
@@ -209,21 +196,22 @@ def binding_events_to_ranked_protein_atoms(
         lig_pharm_scores.append(np.sum(np.array(scores)))
     concat_df['lig_pharm'] = lig_pharm_scores
     concat_df['lig_pharm'] = concat_df['lig_pharm'].apply(find_lig_pharm)
-    concat_df['median'] = concat_df.median(axis=1, numeric_only=True)
+
+    concat_df['mean'] = concat_df.mean(axis=1, numeric_only=True)
     result_df = pd.DataFrame({
         'protein_atom': concat_df.index,
-        'median_score': concat_df['median'],
+        'mean_score': concat_df['mean'],
         'lig_pharm': concat_df['lig_pharm']
     })
     result_df.sort_values(
-        by='median_score', ascending=False, inplace=True)
+        by='mean_score', ascending=use_rank, inplace=True)
     result_df['gnn_rank'] = range(len(result_df))
     result_df.reset_index(drop=True, inplace=True)
     return result_df
 
 
-def scores_to_pharmacophore_df(reference_pdb, atom_scores):
-    """Map median GNN atom scores to coordinates in reference structure.
+def scores_to_pharmacophore_df(reference_pdb, atom_scores, use_rank=False):
+    """Map mean GNN atom scores to coordinates in reference structure.
 
     GNN scores are assigned to atoms in reference protein structure, which are
     then assigned a pharmacophore type depending on their identity and
@@ -233,9 +221,10 @@ def scores_to_pharmacophore_df(reference_pdb, atom_scores):
     Arguments:
         reference_pdb: name of the PDB file containing the reference protein
             structure
-        atom_scores: pd.DataFrame with the fields protein_aton, median_score,
+        atom_scores: pd.DataFrame with the fields protein_aton, mean_score,
             and gnn_rank (result of binding_events_to_ranked_protein_atoms
             function)
+        use_rank: use ranked order of bond scores in place of raw bond scores
 
     Returns:
         pd.DataFrame containing the columns x, y, z, pharmacophore, smina_type
@@ -265,7 +254,7 @@ def scores_to_pharmacophore_df(reference_pdb, atom_scores):
         return smina_type, 'none'
 
     id_to_score_map = {atom: score for atom, score in zip(
-        atom_scores['protein_atom'], atom_scores['median_score'])}
+        atom_scores['protein_atom'], atom_scores['mean_score'])}
     id_to_lig_pharm_map = {atom: lig_pharm for atom, lig_pharm in zip(
         atom_scores['protein_atom'], atom_scores['lig_pharm']
     )}
@@ -286,7 +275,7 @@ def scores_to_pharmacophore_df(reference_pdb, atom_scores):
         identifier = find_identifier(coords_to_atom_id, atom.coords)
 
         # A:XXXX:YYY:NAME -> score
-        score = id_to_score_map.get(identifier, 0)
+        score = id_to_score_map.get(identifier, (-1) ** use_rank * np.inf)
 
         # A:XXXX:YYY:NAME -> lig pharm
         lig_pharm = id_to_lig_pharm_map.get(identifier, 'none')
@@ -309,7 +298,8 @@ def scores_to_pharmacophore_df(reference_pdb, atom_scores):
         'smina_type': smina_types,
         'pharmacophore': pharmacophores,
         'score': scores
-    }).sort_values('score', ascending=False)
+    }).sort_values('score', ascending=use_rank)
+    df.reset_index(inplace=True, drop=True)
     return df
 
 
@@ -318,7 +308,7 @@ def pharmacophore_df_to_mols(df, cutoff=0, include_donor_acceptors=False):
 
     Arguments:
         df: pd.DataFrame containing the field x, y, z, pharmacophore and score
-        cutoff: minimum median GNN attention score for an atom to be considered
+        cutoff: minimum mean GNN attention score for an atom to be considered
             a pharmacophore
         include_donor_acceptors: include donor-acceptor atoms as both donors and
             acceptors
@@ -334,16 +324,21 @@ def pharmacophore_df_to_mols(df, cutoff=0, include_donor_acceptors=False):
         included_pharmacophores[1].append('hbda')
     for atom_type, pharmacophore_type in zip(
             ('P', 'I'), included_pharmacophores):
-        filtered_df = df.copy().loc[df['score'] > cutoff]
-        filtered_df = filtered_df[
-            filtered_df['pharmacophore'].isin(pharmacophore_type)].reset_index(
-            drop=True)
+        filtered_df = df.copy()[
+            df['pharmacophore'].isin(pharmacophore_type)].reset_index(drop=True)
+        filtered_df.sort_values(
+            by='score', ascending=False, inplace=True)
+        filtered_df = filtered_df[:cutoff]
+        filtered_df = filtered_df[filtered_df['score'] != np.inf]
+        filtered_df = filtered_df[filtered_df['score'] != -np.inf]
+        print(filtered_df)
+
         smiles = atom_type * len(filtered_df)
         mol = Chem.MolFromSmiles(smiles)
         conf = Chem.Conformer(mol.GetNumAtoms())
 
         vdw_str = []
-        for idx, row in filtered_df.iterrows():
+        for idx, (_, row) in enumerate(filtered_df.iterrows()):
             conf.SetAtomPosition(idx, list(row[['x', 'y', 'z']]))
             vdw_str.append(str(row['vdw_radius']))
 
@@ -368,24 +363,26 @@ if __name__ == '__main__':
                         help='PDB residue triplet code for ligand')
     parser.add_argument('output_dir', type=str,
                         help='Location in which to store results')
-    parser.add_argument('--cutoff', '-c', type=float, default=0.0,
-                        help='Threshold for median attention score for atom '
-                             'to be considered a pharacophore (between 0 and '
-                             '1)')
+    parser.add_argument('--cutoff', '-c', type=int, default=7,
+                        help='Take top-N scoring atoms as pharmacophores')
     parser.add_argument('--include_donor_acceptors', '-i', action='store_true',
                         help='Include donor-acceptors as both donors and '
                              'acceptors')
     parser.add_argument('--layer', '-l', type=int, default=1,
                         help='Which GNN layer to take attention weights from')
+    parser.add_argument('--use_rank', '-r', action='store_true',
+                        help='Use rank of bond score rather than raw bond score'
+                             '.')
 
     args = parser.parse_args()
     rank_df = binding_events_to_ranked_protein_atoms(
         args.filenames, args.model, args.output_dir,
-        args.ligand_residue_code.upper(), layer=args.layer)
-    print(rank_df[:10])
-    df = scores_to_pharmacophore_df(args.apo_protein, rank_df)
+        args.ligand_residue_code.upper(), layer=args.layer,
+        use_rank=args.use_rank)
+    df = scores_to_pharmacophore_df(
+        args.apo_protein, rank_df, use_rank=args.use_rank)
     print(df[:10])
-    hba_mol, hbd_mol = pharmacophore_df_to_mols(df)
+    hba_mol, hbd_mol = pharmacophore_df_to_mols(df, cutoff=args.cutoff)
     output_dir = mkdir(args.output_dir)
     with Chem.SDWriter(str(output_dir / 'hba.sdf')) as w:
         w.write(hba_mol)
