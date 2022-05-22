@@ -74,8 +74,8 @@ def find_identifier(coords_to_identifier, coords):
 
 
 def binding_events_to_ranked_protein_atoms(
-        input_fnames, model_path, output_dir, ligand_name, layer=1,
-        use_rank=False):
+        input_fnames, model_path, output_dir, ligand_name,
+        attribution='edge_attention', layer=1, use_rank=False):
     """Use multiple protein-ligand structures to score protein atoms.
 
     The importance of each protein atom is assumed to be related to its mean
@@ -140,7 +140,7 @@ def binding_events_to_ranked_protein_atoms(
     for fname in fnames:
         lig_to_hbond_map = get_ligand_to_hbond_map(fname, lig_name=ligand_name)
         dfs = attribute(
-            'edge_attention', model_path, expand_path(output_dir),
+            attribution, model_path, expand_path(output_dir),
             input_file=fname, only_process=ligand_name, write_stats=False,
             gnn_layer=layer, write_pse=False, atom_blind=True,
             loaded_model=model,
@@ -151,38 +151,57 @@ def binding_events_to_ranked_protein_atoms(
             if site_code.split(':')[1] != 'A':
                 continue
             scores.append(score)
-            df['protein_atom'] = df['bond_identifier'].apply(find_protein_atom)
-            protein_atom_dfs = []
-            for protein_atom in list(set(df['protein_atom'])):
-                sub_df = df[df['protein_atom'] == protein_atom].reset_index(
-                    drop=True)
-                max_idx = np.argmax(sub_df['protein_atom'].to_numpy())
-                max_row = sub_df.iloc[[max_idx]]
-                max_score = max_row['bond_score'].to_numpy()[0]
-                lig_pharm = lig_to_hbond_map[find_ligand_atom(
-                    list(max_row['bond_identifier'])[0])]
-                if lig_pharm == 'hba':
-                    lig_pharm = max_score
-                elif lig_pharm == 'hbd':
-                    lig_pharm = -max_score
+            if attribution == 'edge_attention':
+                df['protein_atom'] = df['bond_identifier'].apply(find_protein_atom)
+                protein_atom_dfs = []
+                for protein_atom in list(set(df['protein_atom'])):
+                    sub_df = df[df['protein_atom'] == protein_atom].reset_index(
+                        drop=True)
+                    max_idx = np.argmax(sub_df['protein_atom'].to_numpy())
+                    max_row = sub_df.iloc[[max_idx]]
+                    max_score = max_row['bond_score'].to_numpy()[0]
+                    lig_pharm = lig_to_hbond_map[find_ligand_atom(
+                        list(max_row['bond_identifier'])[0])]
+                    if lig_pharm == 'hba':
+                        lig_pharm = max_score
+                    elif lig_pharm == 'hbd':
+                        lig_pharm = -max_score
+                    else:
+                        lig_pharm = 0
+                    sub_df = sub_df.groupby('protein_atom', as_index=False).max()
+                    sub_df['bond_score'] = max_score
+                    prot_atom_to_max_lig_atom[protein_atom].append(lig_pharm)
+                    protein_atom_dfs.append(sub_df)
+                df = pd.concat(protein_atom_dfs)
+                df = df.sort_values(by='bond_score', ascending=False)
+                if use_rank:
+                    df['bond_score'] = range(len(df))
+            elif attribution in ('cam', 'atom_masking'):
+                df = df.sort_values(by='attribution', ascending=False)
+                if use_rank:
+                    df['bond_score'] = range(len(df))
                 else:
-                    lig_pharm = 0
-                sub_df = sub_df.groupby('protein_atom', as_index=False).max()
-                sub_df['bond_score'] = max_score
-                prot_atom_to_max_lig_atom[protein_atom].append(lig_pharm)
-                protein_atom_dfs.append(sub_df)
+                    df['bond_score'] = df['attribution']
+                df = df[df['bp'] == 1]
+                df['protein_atom'] = df['atom_id']
+                for col in ('x', 'y', 'z', 'atomic_number', 'types', 'bp',
+                            'resi', 'attribution', 'atom_id'):
+                    del df[col]
+            else:
+                raise NotImplementedError(
+                    'attribution must be cam, atom_masking or edge_attention')
 
-            df = pd.concat(protein_atom_dfs)
-            df.sort_values(by='bond_score', inplace=True, ascending=False)
-            if use_rank:
-                df['bond_score'] = range(len(df))
             df.rename(
                 columns={'bond_score': 'bond_score_' + str(fname)},
                 inplace=True
             )
             for col in ('xtal_distance', 'bond_length_rank', 'bond_identifier',
-                        'identifier_0', 'identifier_1', 'gnn_rank'):
-                del df[col]
+                        'identifier_0', 'identifier_1', 'gnn_rank',
+                        'pistacking', 'hba', 'hbd', 'any_interaction'):
+                try:
+                    del df[col]
+                except KeyError:
+                    pass
             df.reset_index(drop=True, inplace=True)
             processed_dfs.append(df)
         print('Completed file ', fname.name, ', with scores: ', ', '.join(
@@ -374,15 +393,18 @@ if __name__ == '__main__':
     parser.add_argument('--use_rank', '-r', action='store_true',
                         help='Use rank of bond score rather than raw bond score'
                              '.')
+    parser.add_argument('--scoring_method', '-s', type=str,
+                        help='One of atom_masking, cam, edge_attention')
 
     args = parser.parse_args()
     rank_df = binding_events_to_ranked_protein_atoms(
         args.filenames, args.model, args.output_dir,
-        args.ligand_residue_code.upper(), layer=args.layer,
-        use_rank=args.use_rank)
+        args.ligand_residue_code.upper(), attribution=args.scoring_method,
+        layer=args.layer, use_rank=args.use_rank)
     df = scores_to_pharmacophore_df(
         args.apo_protein, rank_df, use_rank=args.use_rank)
     print(df[:10])
+    print()
     hba_mol, hbd_mol = pharmacophore_df_to_mols(
         df, use_rank=args.use_rank, cutoff=args.cutoff)
     output_dir = mkdir(args.output_dir)
