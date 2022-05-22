@@ -8,21 +8,25 @@ from plip.plipcmd import logger
 from plip.structure.preparation import PDBComplex
 from pymol import cmd
 
-from point_vs.attribution.attribution_fns import masking, cam, \
-    edge_attention, edge_embedding_attribution, node_attention
+from point_vs.attribution.attribution_fns import atom_masking, cam, \
+    edge_attention, edge_embedding_attribution, node_attention, \
+    track_position_changes, track_bond_lengths, cam_wrapper, \
+    attention_wrapper, \
+    bond_masking, masking_wrapper
 from point_vs.attribution.interaction_parser import \
     StructuralInteractionParser, \
     StructuralInteractionParserFast
 from point_vs.attribution.plip_subclasses import \
     PyMOLVisualizerWithBFactorColouring, VisualizerDataWithMolecularInfo
-from point_vs.utils import mkdir
+from point_vs.utils import mkdir, expand_path
 
 
 def visualize_in_pymol(
         model, attribution_fn, plcomplex, output_dir, model_args,
         gnn_layer=None, only_process=None, bonding_strs=None, write_pse=True,
         override_attribution_name=None, atom_blind=False, inverse_colour=False,
-        pdb_file=None, coords_to_identifier=None, quiet=False):
+        pdb_file=None, coords_to_identifier=None, quiet=False, extended=False,
+        split_by_mol=False):
     """Visualizes the given Protein-Ligand complex at one site in PyMOL.
 
     This function is based on the origina plip.visualization.vizualise_in_pymol
@@ -107,28 +111,33 @@ def visualize_in_pymol(
 
     vis.make_initial_selections()
 
-    results_fname = Path(output_dir, '{0}_{1}_results.txt'.format(
-        pdbid.upper(), '_'.join(
-            [hetid, plcomplex.chain, plcomplex.position]))).expanduser()
+    naming_items = [item for item in
+                    [hetid, plcomplex.chain, plcomplex.position] if
+                    len(item.strip())]
+    results_fname = Path(output_dir, '{0}_{1}_results.csv'.format(
+        pdbid.upper(), '_'.join(naming_items))).expanduser()
 
     if pdb_file is not None:
-        parser = StructuralInteractionParserFast(pdb_file)
+        parser = StructuralInteractionParserFast(pdb_file, extended=extended)
     else:
-        parser = StructuralInteractionParser()
+        parser = StructuralInteractionParser(extended=extended)
 
     score, df, edge_indices, edge_scores = vis.colour_b_factors_pdb(
         model, attribution_fn=attribution_fn, parser=parser,
         gnn_layer=gnn_layer, results_fname=results_fname,
         model_args=model_args,
-        only_process=only_process, pdb_file=pdb_file,
+        only_process=only_process, pdb_file=pdb_file, split_by_mol=split_by_mol,
         coords_to_identifier=coords_to_identifier, quiet=quiet)
+
     if not write_pse:
         if not isinstance(df, DataFrame):
             return None, None, None, None
 
         return score, df, edge_indices, edge_scores
 
-    if attribution_fn == edge_attention:
+    if attribution_fn in (
+            edge_attention, track_bond_lengths, attention_wrapper, cam_wrapper,
+            bond_masking, masking_wrapper):
         if not len(bonding_strs):
             keep_df = df.copy()
             keep_df.sort_values(by='bond_score', inplace=True, ascending=False)
@@ -140,16 +149,18 @@ def visualize_in_pymol(
             bonding_strs = {b_id: score for b_id, score in zip(
                 keep_df.bond_identifier, keep_df.bond_score)}
 
-    # vis.show_hydrophobic()  # Hydrophobic Contacts
+    vis.show_hydrophobic()  # Hydrophobic Contacts
+    resis = None
     resis = vis.show_hbonds(
         bonding_strs, atom_blind=atom_blind,
         inverse_colour=inverse_colour)  # Hydrogen Bonds
-    # vis.show_halogen()  # Halogen Bonds
-    # vis.show_stacking()  # pi-Stacking Interactions
-    # vis.show_cationpi()  # pi-Cation Interactions
-    # vis.show_sbridges()  # Salt Bridges
-    # vis.show_wbridges()  # Water Bridges
-    # vis.show_metal()  # Metal Coordination
+    vis.show_halogen()  # Halogen Bonds
+    vis.show_hbonds_original()
+    vis.show_stacking()  # pi-Stacking Interactions
+    vis.show_cationpi()  # pi-Cation Interactions
+    vis.show_sbridges()  # Salt Bridges
+    vis.show_wbridges()  # Water Bridges
+    vis.show_metal()  # Metal Coordination
 
     vis.refinements()
     if resis is not None and len(resis):
@@ -179,19 +190,31 @@ def visualize_in_pymol(
     elif write_pse:
         if override_attribution_name is None:
             attribution_fn_name = {
-                masking: 'masking',
+                atom_masking: 'atom_masking',
                 cam: 'cam',
                 node_attention: 'node_attention',
                 edge_attention: 'edge_attention',
                 edge_embedding_attribution: 'edges',
+                track_position_changes: 'displacement',
+                track_bond_lengths: 'bond_lengths',
+                attention_wrapper: 'attention',
+                cam_wrapper: 'class_activation',
+                bond_masking: 'bond_masking',
+                masking_wrapper: 'masking'
             }.get(attribution_fn, 'MD_distances')
         else:
             attribution_fn_name = override_attribution_name
-        filename = "_".join(
-            [attribution_fn_name, hetid, plcomplex.chain, plcomplex.position])
+        naming_items = [item for item in [attribution_fn_name,
+                                          hetid,
+                                          plcomplex.chain,
+                                          plcomplex.position] if
+                        len(item.strip())]
+        filename = "_".join(naming_items)
         vis.save_session(plcomplex.mol.output_path, override=filename)
-    if config.PICS:
-        vis.save_picture(config.OUTPATH, filename)
+        print('Saved session as', expand_path(
+            plcomplex.mol.output_path, filename + '.pse'))
+        if config.PICS:
+            vis.save_picture(config.OUTPATH, filename)
 
     cmd.reinitialize()
     if not isinstance(df, DataFrame):
@@ -235,9 +258,8 @@ def score_pdb(
         if config.INTRA is not None:
             vis.ligname = 'Intra%s' % plcomplex.chain
 
-        parser = StructuralInteractionParser()
         score, df = vis.score_atoms(
-            parser, only_process, model, attribution_fn, model_args=model_args,
+            only_process, model, model_args, attribution_fn,
             quiet=quiet)
         return df
 
@@ -253,7 +275,8 @@ def score_and_colour_pdb(
         model, attribution_fn, pdbfile, outpath, model_args, only_process=None,
         gnn_layer=None, bonding_strs=None, write_pse=True, atom_blind=False,
         override_attribution_name=None, inverse_colour=False, pdb_file=None,
-        coords_to_identifier=None, quiet=False):
+        coords_to_identifier=None, quiet=False, only_first=False,
+        split_by_mol=False, extended=False):
     mol = PDBComplex()
     outpath = str(Path(outpath).expanduser())
     pdbfile = str(Path(pdbfile).expanduser())
@@ -269,6 +292,8 @@ def score_and_colour_pdb(
         mol.interaction_sets)
                  if not len(mol.interaction_sets[site].interacting_res) == 0]
 
+    if only_first:
+        complexes = complexes[:1]
     dfs = {
         plcomplex.uid: visualize_in_pymol(
             model,
@@ -285,7 +310,9 @@ def score_and_colour_pdb(
             inverse_colour=inverse_colour,
             pdb_file=pdb_file,
             coords_to_identifier=coords_to_identifier,
-            quiet=quiet
+            quiet=quiet,
+            extended=extended,
+            split_by_mol=split_by_mol,
         )
         for plcomplex in complexes
     }
