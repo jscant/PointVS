@@ -275,7 +275,7 @@ def scores_to_pharmacophore_df(reference_pdb, atom_scores, use_rank=False):
         identifier = find_identifier(coords_to_atom_id, atom.coords)
 
         # A:XXXX:YYY:NAME -> score
-        score = id_to_score_map.get(identifier, (-1) ** use_rank * np.inf)
+        score = id_to_score_map.get(identifier, (-1) ** (1-use_rank) * np.inf)
 
         # A:XXXX:YYY:NAME -> lig pharm
         lig_pharm = id_to_lig_pharm_map.get(identifier, 'none')
@@ -303,7 +303,8 @@ def scores_to_pharmacophore_df(reference_pdb, atom_scores, use_rank=False):
     return df
 
 
-def pharmacophore_df_to_mols(df, cutoff=0, include_donor_acceptors=False):
+def pharmacophore_df_to_mols(
+        df, use_rank=False, cutoff=0, include_donor_acceptors=False):
     """Convert pharmacophore DataFrame to RDKit pharmacophore mols.
 
     Arguments:
@@ -327,7 +328,7 @@ def pharmacophore_df_to_mols(df, cutoff=0, include_donor_acceptors=False):
         filtered_df = df.copy()[
             df['pharmacophore'].isin(pharmacophore_type)].reset_index(drop=True)
         filtered_df.sort_values(
-            by='score', ascending=False, inplace=True)
+            by='score', ascending=use_rank, inplace=True)
         filtered_df = filtered_df[:cutoff]
         filtered_df = filtered_df[filtered_df['score'] != np.inf]
         filtered_df = filtered_df[filtered_df['score'] != -np.inf]
@@ -382,7 +383,8 @@ if __name__ == '__main__':
     df = scores_to_pharmacophore_df(
         args.apo_protein, rank_df, use_rank=args.use_rank)
     print(df[:10])
-    hba_mol, hbd_mol = pharmacophore_df_to_mols(df, cutoff=args.cutoff)
+    hba_mol, hbd_mol = pharmacophore_df_to_mols(
+        df, use_rank=args.use_rank, cutoff=args.cutoff)
     output_dir = mkdir(args.output_dir)
     with Chem.SDWriter(str(output_dir / 'hba.sdf')) as w:
         w.write(hba_mol)
