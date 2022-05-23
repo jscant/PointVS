@@ -711,6 +711,7 @@ class StructuralFileParser:
     def get_coords_and_types_info(
             self, mol, all_ligand_coords=None, add_polar_hydrogens=True):
         xs, ys, zs, atomic_nums, types, bp = [], [], [], [], [], []
+        resis = []
         n_features = len(set(self.type_map.values())) + 1
         for atom in mol:
             if (self.mol_type == 'receptor' and
@@ -735,19 +736,26 @@ class StructuralFileParser:
             if isinstance(all_ligand_coords, PositionSet):
                 if coords_to_string(atom.coords) in all_ligand_coords:
                     bp.append(0)
+                    resi = -1
                 else:
                     type_int += n_features
                     bp.append(1)
+                    resi = atom.OBAtom.GetResidue().GetIdx()
+                resis.append(resi)
+
             x, y, z = atom.coords
             xs.append(x)
             ys.append(y)
             zs.append(z)
             types.append(type_int)
             atomic_nums.append(atomic_num)
-        return xs, ys, zs, types, atomic_nums, bp
+
+        if not isinstance(all_ligand_coords, PositionSet):
+            resis = None
+        return xs, ys, zs, types, atomic_nums, bp, resis
 
     def obmol_to_parquet(self, mol, add_polar_hydrogens):
-        xs, ys, zs, types, atomic_nums, _ = self.get_coords_and_types_info(
+        xs, ys, zs, types, atomic_nums, _, _ = self.get_coords_and_types_info(
             mol, add_polar_hydrogens=add_polar_hydrogens)
         df = pd.DataFrame()
         df['x'], df['y'], df['z'] = xs, ys, zs
