@@ -140,7 +140,8 @@ class StructuralInteractionParser(StructuralFileParser):
             df['pistacking'] = pistacking
             df['hba'] = hba
             df['hbd'] = hbd
-        df['resi'] = resis
+        if resis is not None:
+            df['resi'] = resis
 
         return df
 
