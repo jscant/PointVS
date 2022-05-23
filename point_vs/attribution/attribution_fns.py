@@ -7,13 +7,11 @@ from torch_geometric.data import Data
 from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase
 from point_vs.models.point_neural_network_base import to_numpy
-from point_vs.preprocessing.data_loaders import SynthPharmDataset
 from point_vs.preprocessing.pyg_single_item_dataset import \
     get_pyg_single_graph_for_inference
 from point_vs.utils import expand_path
 
 SIGMOID = False
-
 
 def attention_wrapper(**kwargs):
     """Dummy fn."""
@@ -31,6 +29,16 @@ def masking_wrapper(**kwargs):
 
 def bond_masking(model, p, v, m=None, bs=32, edge_indices=None, edge_attrs=None,
                  **kwargs):
+
+    def extract_score(graph):
+        if SIGMOID:
+            original_score = to_numpy(torch.sigmoid(model(graph)).squeeze())
+        else:
+            original_score = to_numpy(model(graph)).squeeze()
+        if len(original_score) > 1:
+            return float(original_score[1])
+        return float(original_score)
+
     global SIGMOID
     graph = get_pyg_single_graph_for_inference(Data(
         x=v.squeeze(),
@@ -40,10 +48,7 @@ def bond_masking(model, p, v, m=None, bs=32, edge_indices=None, edge_attrs=None,
     ))
 
     scores = []
-    if SIGMOID:
-        original_score = float(to_numpy(torch.sigmoid(model(graph))))
-    else:
-        original_score = float(to_numpy(model(graph)))
+    original_score = extract_score(graph)
 
     for i in range(edge_indices.shape[1]):
 
@@ -91,12 +96,8 @@ def bond_masking(model, p, v, m=None, bs=32, edge_indices=None, edge_attrs=None,
             pos=p_input_matrix.squeeze(),
         ))
 
-        x = model(graph)
-        if SIGMOID:
-            scores.append(
-                original_score - float(to_numpy(torch.sigmoid(model(graph)))))
-        else:
-            scores.append(original_score - float(to_numpy(x)))
+        scores.append(
+            original_score - extract_score(graph))
         if not i % 500:
             print('{0}/{1}'.format(i, edge_indices.shape[1]), scores[-1],
                   max(scores))
@@ -281,7 +282,7 @@ def node_attention(
 
     # put the graph through the model before extracting stored weights
     model(graph)
-    if SIGMOID:
+    if not SIGMOID:
         return model.layers[gnn_layer].node_att_val.reshape((-1,))
     return inverse_sigmoid(model.layers[gnn_layer].node_att_val.reshape((-1,)))
 
@@ -379,7 +380,7 @@ def cam(model, p, v, m=None, edge_indices=None, edge_attrs=None, **kwargs):
 
 def atom_masking(
         model, p, v, m=None, bs=32, edge_indices=None, edge_attrs=None,
-        **kwargs):
+        resis=None, **kwargs):
     """Perform masking on each point in the input.
 
     Scores are calculated by taking the difference between the original
