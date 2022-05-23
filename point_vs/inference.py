@@ -103,7 +103,7 @@ if __name__ == '__main__':
 
     save_path = cmd_line_args['save_path']
     if wandb_project is not None and wandb_run is not None:
-        save_path = save_path / wandb_project / wandb_run
+        save_path = Path(save_path, wandb_project, wandb_run)
 
     wandb_init_kwargs = {
         'project': wandb_project, 'allow_val_change': True,
