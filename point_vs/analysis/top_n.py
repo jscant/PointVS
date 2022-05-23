@@ -3,14 +3,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from point_vs.constants import GNINA_TEST_PDBIDS as VAL_PDBIDS
 from point_vs.utils import expand_path
 
 
-def _extract_scores(types_file, pdbid_whitelist=False):
-    def drop_record(rec):
-        pdbid = rec.split('/')[-1].split('_')[0].lower()
-        return False if not pdbid_whitelist else pdbid not in VAL_PDBIDS
+def _extract_scores(types_file, exclude_lig_substr=None):
 
     def extract_dock_sdf_name(pth):
         return '_'.join(str(Path(pth).with_suffix('')).split('_')[:-1]) + '.sdf'
@@ -24,11 +20,9 @@ def _extract_scores(types_file, pdbid_whitelist=False):
     df = pd.read_csv(expand_path(types_file), sep=' ',
                      names=['y_true', '|', 'y_pred', 'rec', 'lig'])
     df['vina_rank'] = df['lig'].map(extract_vina_rank)
-    if pdbid_whitelist:
-        df['remove'] = df.rec.map(drop_record)
-        df.drop(df[df.remove].index, inplace=True)
-        del df['remove']
     del df['|']
+    if exclude_lig_substr is not None:
+        df = df[~df['lig'].str.contains(exclude_lig_substr)]
     df.reset_index(inplace=True, drop=True)
     df['lig_sdf'] = df['lig'].map(extract_dock_sdf_name)
     df['rec_pdb'] = df['rec'].map(extract_dock_pdb_name)
@@ -36,9 +30,9 @@ def _extract_scores(types_file, pdbid_whitelist=False):
     return df
 
 
-def _gnn_score(types_file, pdbid_whitelist=False):
+def _gnn_score(types_file, exclude_lig_substr=None):
     scores = defaultdict(list)
-    df = _extract_scores(types_file, pdbid_whitelist)
+    df = _extract_scores(types_file, exclude_lig_substr=exclude_lig_substr)
     y_trues = df['y_true'].to_numpy()
     y_preds = df['y_pred'].to_numpy()
     recligs = df['rec'].to_numpy()
@@ -49,7 +43,7 @@ def _gnn_score(types_file, pdbid_whitelist=False):
     return scores
 
 
-def top_n(types_file, n=1, pdbid_whitelist=False):
-    scores = _gnn_score(types_file, pdbid_whitelist=pdbid_whitelist)
+def top_n(types_file, n=1, exclude_lig_substr=None):
+    scores = _gnn_score(types_file, exclude_lig_substr=exclude_lig_substr   )
     s = [[j[1] for j in i] for i in scores.values()]
     return sum([1 for i in s if sum(i[:n])]) / len(scores)
