@@ -131,12 +131,17 @@ def attribute(attribution_type, model_file, output_dir, pdbid=None,
               inverse_colour=False, pdb_file=None, loaded_model=None,
               quiet=False, track_atom_positions=False, check_multiconf=True,
               rename=False, only_first=False, split_by_mol=True):
+    config.NOFIX = True
+    if attribution_type in ('edge_attention', 'node_attention'):
+        dir_name = '{0}_{1}'.format(attribution_type, gnn_layer)
+    else:
+        dir_name = attribution_type
     if pdbid is None:
         leaf_dir = Path(Path(input_file).name).stem
-        output_dir = mkdir(Path(output_dir, leaf_dir, attribution_type))
+        output_dir = mkdir(Path(output_dir, leaf_dir, dir_name))
         pdbpath = Path(input_file).expanduser()
     else:
-        output_dir = mkdir(Path(output_dir, pdbid, attribution_type))
+        output_dir = mkdir(Path(output_dir, pdbid, dir_name))
         pdbpath = download_pdb_file(pdbid, output_dir)
 
     if check_multiconf:
@@ -178,10 +183,6 @@ def attribute(attribution_type, model_file, output_dir, pdbid=None,
         fetch_args_only=attribution_fn is None or loaded_model is not None)
     if loaded_model is not None:
         model = loaded_model
-
-    if attribution_type.find('attention') != -1:
-        output_dir = Path(
-            output_dir.parent, output_dir.name + '_' + str(gnn_layer))
 
     dfs = score_and_colour_pdb(
         model=model, attribution_fn=attribution_fn,
@@ -290,8 +291,11 @@ if __name__ == '__main__':
             track_atom_positions=args.track_atom_positions,
             split_by_mol=args.split_by_mol, rename=args.rename,
             only_first=args.only_first).values())[0][1]
-        print('Ligand:')
-        print(df[df['bp'] == 0][:10])
-        print()
-        print('Receptor:')
-        print(df[df['bp'] == 1][:10])
+        try:
+            print('Ligand:')
+            print(df[df['bp'] == 0][:10])
+            print()
+            print('Receptor:')
+            print(df[df['bp'] == 1][:10])
+        except KeyError:
+            print(df[:10])
