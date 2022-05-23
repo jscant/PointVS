@@ -351,6 +351,8 @@ def pharmacophore_df_to_mols(
         filtered_df = filtered_df[:cutoff]
         filtered_df = filtered_df[filtered_df['score'] != np.inf]
         filtered_df = filtered_df[filtered_df['score'] != -np.inf]
+        if not use_rank:
+            filtered_df = filtered_df[filtered_df['score'] > 0]
         print(filtered_df)
 
         smiles = atom_type * len(filtered_df)
