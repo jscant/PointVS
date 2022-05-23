@@ -361,12 +361,15 @@ def pharmacophore_df_to_mols(
         conf = Chem.Conformer(mol.GetNumAtoms())
 
         vdw_str = []
+        score_str = []
         for idx, (_, row) in enumerate(filtered_df.iterrows()):
             conf.SetAtomPosition(idx, list(row[['x', 'y', 'z']]))
             vdw_str.append(str(row['vdw_radius']))
+            score_str.append(str(row['score']))
 
         conf.SetId(0)
         mol.AddConformer(conf)
+        mol.SetProp('score', '\n'.join(score_str))
         mol.SetProp('vdw', '\n'.join(vdw_str))
         res.append(mol)
     return tuple(res)
