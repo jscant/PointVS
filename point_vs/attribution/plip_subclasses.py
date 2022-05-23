@@ -13,7 +13,9 @@ from torch.nn.functional import one_hot
 from torch_geometric.data import Data
 
 from point_vs.attribution.attribution_fns import edge_attention, \
-    edge_embedding_attribution
+    edge_embedding_attribution, track_bond_lengths, node_attention, \
+    attention_wrapper, cam_wrapper, atom_masking, bond_masking, masking_wrapper
+from point_vs.attribution.interaction_parser import StructuralInteractionParser
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase
 from point_vs.models.point_neural_network_base import to_numpy
 from point_vs.preprocessing.preprocessing import make_bit_vector, make_box, \
@@ -36,6 +38,28 @@ class VisualizerDataWithMolecularInfo(VisualizerData):
 
 
 class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
+
+    def show_hbonds_original(self):
+        """Visualizes hydrogen bonds."""
+        hbonds = self.plcomplex.hbonds
+        for group in [['HBondDonor-P', hbonds.prot_don_id],
+                      ['HBondAccept-P', hbonds.prot_acc_id]]:
+            if not len(group[1]) == 0:
+                self.select_by_ids(group[0], group[1], restrict=self.protname)
+        for group in [['HBondDonor-L', hbonds.lig_don_id],
+                      ['HBondAccept-L', hbonds.lig_acc_id]]:
+            if not len(group[1]) == 0:
+                self.select_by_ids(group[0], group[1], restrict=self.ligname)
+        for i in hbonds.ldon_id:
+            cmd.select('tmp_bs', 'id %i & %s' % (i[0], self.protname))
+            cmd.select('tmp_lig', 'id %i & %s' % (i[1], self.ligname))
+            cmd.distance('HBonds', 'tmp_bs', 'tmp_lig')
+        for i in hbonds.pdon_id:
+            cmd.select('tmp_bs', 'id %i & %s' % (i[1], self.protname))
+            cmd.select('tmp_lig', 'id %i & %s' % (i[0], self.ligname))
+            cmd.distance('HBonds', 'tmp_bs', 'tmp_lig')
+        if self.object_exists('HBonds'):
+            cmd.set('dash_color', 'blue', 'HBonds')
 
     def show_hbonds(
             self, bonding_strs=None, atom_blind=False, inverse_colour=False):
@@ -268,7 +292,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
         return None
 
     def score_atoms(
-            self, parser, only_process, model, attribution_fn, model_args,
+            self, only_process, model, model_args, attribution_fn,
             quiet=False, gnn_layer=None, pdb_file=None,
             coords_to_identifier=None):
 
@@ -316,107 +340,249 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
         compact = model_args['compact']
         use_atomic_numbers = model_args['use_atomic_numbers']
         prune = model_args.get('prune', False)
+        extended = model_args.get('extended_atom_types', False)
 
         triplet_code = self.plcomplex.uid.split(':')[0]
         if len(only_process) and triplet_code not in only_process:
             return None, None, None, None
 
+        edge_radius = model_args.get('edge_radius', 4)
+        if model_args.get('estimate_bonds', False):
+            intra_radius = 2.0
+        else:
+            intra_radius = edge_radius
+
+        parser = StructuralInteractionParser()
+
         df = parser.mol_calculate_interactions(
             self.plcomplex.mol, self.plcomplex.pli)
+
+        if not polar_hydrogens:
+            df = df[df['atomic_number'] > 1]
+
+        # CHANGE RELATIVE_TO_LIGAND TO CORRECT ARGUMENT
+        df = make_box(df, radius=radius, relative_to_ligand=True)
+
+        if attribution_fn == 1:
+            df_, edge_indices, edge_attrs = generate_edges(
+                df, inter_radius=edge_radius, intra_radius=intra_radius,
+                prune=prune)
+            dfs, edge_indices_, edge_attrs_, resis = [df], [edge_indices], [edge_attrs], [-2]
+            for resi in set(df['resi']):
+                if resi < 0:
+                    continue
+                df_ = df[df['resi'] != resi].copy()
+                df_, edge_indices, edge_attrs = generate_edges(
+                    df_, inter_radius=edge_radius, intra_radius=intra_radius,
+                    prune=prune)
+                dfs.append(df_)
+                edge_indices_.append(edge_indices)
+                edge_attrs_.append(edge_attrs)
+                resis.append(resi)
+
 
         if not quiet:
             print('Attributing scores to site:', self.plcomplex.uid)
 
-        # CHANGE RELATIVE_TO_LIGAND TO CORRECT ARGUMENT
-        df = make_box(df, radius=radius, relative_to_ligand=True)
         if not polar_hydrogens:
             df = df[df['atomic_number'] > 1]
 
-        if isinstance(model, PNNGeometricBase):
-            edge_radius = model_args.get('edge_radius', 4)
-            if model_args.get('estimate_bonds', False):
-                intra_radius = 2.0
+        if attribution_fn != 1:
+            # CHANGE RELATIVE_TO_LIGAND TO CORRECT ARGUMENT
+            df = make_box(df, radius=radius, relative_to_ligand=True)
+
+            if isinstance(model, PNNGeometricBase):
+                df, edge_indices, edge_attrs = generate_edges(
+                    df, inter_radius=edge_radius, intra_radius=intra_radius,
+                    prune=prune)
             else:
-                intra_radius = edge_radius
-            df, edge_indices, edge_attrs = generate_edges(
-                df, inter_radius=edge_radius, intra_radius=intra_radius,
-                prune=prune)
+                edge_indices, edge_attrs = None, None
+
+            if model is None:
+                return -1, df, edge_indices, None
+
+            if use_atomic_numbers:
+                # H C N O F P S Cl
+                recognised_atomic_numbers = (6, 7, 8, 9, 15, 16, 17)
+                # various metal ions/halogens which share valence properties
+                other_groupings = ((35, 53), (3, 11, 19), (4, 12, 20), (26, 29, 30))
+                atomic_number_to_index = {
+                    num: idx for idx, num in enumerate(recognised_atomic_numbers)
+                }
+                for grouping in other_groupings:
+                    atomic_number_to_index.update({elem: max(
+                        atomic_number_to_index.values()) + 1 for elem in grouping})
+                if polar_hydrogens:
+                    atomic_number_to_index.update({
+                        1: max(atomic_number_to_index.values()) + 1
+                    })
+
+                # +1 to accommodate for unmapped elements
+                max_feature_id = max(atomic_number_to_index.values()) + 1
+
+                # Any other elements not accounted for given a category of their own
+                atomic_number_to_index = defaultdict(lambda: max_feature_id)
+                atomic_number_to_index.update(atomic_number_to_index)
+                df.types = df['atomic_number'].map(
+                    atomic_number_to_index) + df.bp * (max_feature_id + 1)
+
+            elif polar_hydrogens:
+                raise NotImplementedError('Hydrogens temporarily disabled.')
+            else:
+                max_feature_id = 10 + 8 * extended
+
+            coords = np.vstack([df.x, df.y, df.z]).T
+
+            p = torch.from_numpy(coords).float()
+            p = repeat(p, 'n d -> b n d', b=1)
+
+            m = torch.from_numpy(np.ones((len(df),))).bool()
+            m = repeat(m, 'n -> b n', b=1)
+
+            v = make_bit_vector(
+                df.types.to_numpy(), max_feature_id + 1, compact).float()
+
+            v = repeat(v, 'n d -> b n d', b=1)
+
+            model = model.eval().cuda()
+
+            if isinstance(model, PNNGeometricBase):
+
+                edge_indices = torch.from_numpy(np.vstack(edge_indices)).long()
+                edge_attrs = one_hot(torch.from_numpy(edge_attrs).long(), 3)
+
+                pre_activation = model(get_pyg_single_graph_for_inference(Data(
+                    x=v.squeeze(),
+                    edge_index=edge_indices,
+                    edge_attr=edge_attrs,
+                    pos=p.squeeze()
+                )))
+
+            else:
+                pre_activation = model((p.cuda(), v.cuda(), m.cuda()))[0, ...]
+                edge_indices = None
+
+            if model.model_task == 'classification':
+                score = float(to_numpy(torch.sigmoid(pre_activation)))
+                if not quiet:
+                    print('Original score: {:.4f}'.format(score))
+            elif model.model_task == 'multi_regression':
+                score = to_numpy(pre_activation).squeeze()
+                if not quiet:
+                    print('Original scores: pKi={0:.4f} ({3:.1f} nm), pKd={1:.4f} '
+                          '({4:.1f} nm), pIC50={2:.4f} ({5:.1f} nm)'.format(
+                        *score, *[10 ** (-x) * 10 ** 9 for x in score]))
+                score = score[0]
+            else:
+                score = float(to_numpy(pre_activation))
+                if not quiet:
+                    print('Original score: {:.4f}'.format(score))
+
+            model_labels = attribution_fn(
+                model, p.cuda(), v.cuda(), edge_attrs=edge_attrs,
+                edge_indices=edge_indices, bs=bs, gnn_layer=gnn_layer,
+                resis=df['resi'].to_numpy())
+
         else:
-            edge_indices, edge_attrs = None, None
+            residue_scores = {}
+            for idx, (df_, edge_indices, edge_attrs, resi) in enumerate(zip(
+                    dfs, edge_indices_, edge_attrs_, resis)):
+                if use_atomic_numbers:
+                    # H C N O F P S Cl
+                    recognised_atomic_numbers = (6, 7, 8, 9, 15, 16, 17)
+                    # various metal ions/halogens which share valence properties
+                    other_groupings = (
+                    (35, 53), (3, 11, 19), (4, 12, 20), (26, 29, 30))
+                    atomic_number_to_index = {
+                        num: idx for idx, num in
+                        enumerate(recognised_atomic_numbers)
+                    }
+                    for grouping in other_groupings:
+                        atomic_number_to_index.update({elem: max(
+                            atomic_number_to_index.values()) + 1 for elem in
+                                                       grouping})
+                    if polar_hydrogens:
+                        atomic_number_to_index.update({
+                            1: max(atomic_number_to_index.values()) + 1
+                        })
 
-        if model is None:
-            return -1, df, edge_indices, None
+                    # +1 to accommodate for unmapped elements
+                    max_feature_id = max(atomic_number_to_index.values()) + 1
 
-        if use_atomic_numbers:
-            # H C N O F P S Cl
-            recognised_atomic_numbers = (6, 7, 8, 9, 15, 16, 17)
-            # various metal ions/halogens which share valence properties
-            other_groupings = ((35, 53), (3, 11, 19), (4, 12, 20), (26, 29, 30))
-            atomic_number_to_index = {
-                num: idx for idx, num in enumerate(recognised_atomic_numbers)
-            }
-            for grouping in other_groupings:
-                atomic_number_to_index.update({elem: max(
-                    atomic_number_to_index.values()) + 1 for elem in grouping})
-            if polar_hydrogens:
-                atomic_number_to_index.update({
-                    1: max(atomic_number_to_index.values()) + 1
-                })
+                    # Any other elements not accounted for given a category of
+                    # their own
+                    atomic_number_to_index = defaultdict(lambda: max_feature_id)
+                    atomic_number_to_index.update(atomic_number_to_index)
+                    df_.types = df_['atomic_number'].map(
+                        atomic_number_to_index) + df_.bp * (max_feature_id + 1)
 
-            # +1 to accommodate for unmapped elements
-            max_feature_id = max(atomic_number_to_index.values()) + 1
+                elif polar_hydrogens:
+                    raise NotImplementedError('Hydrogens temporarily disabled.')
+                else:
+                    max_feature_id = 10 + 8 * extended
 
-            # Any other elements not accounted for given a category of their own
-            atomic_number_to_index = defaultdict(lambda: max_feature_id)
-            atomic_number_to_index.update(atomic_number_to_index)
-            df.types = df['atomic_number'].map(
-                atomic_number_to_index) + df.bp * (max_feature_id + 1)
+                coords = np.vstack([df_.x, df_.y, df_.z]).T
 
-        elif polar_hydrogens:
-            max_feature_id = 11
-        else:
-            max_feature_id = 10
+                p = torch.from_numpy(coords).float()
+                p = repeat(p, 'n d -> b n d', b=1)
 
-        coords = np.vstack([df.x, df.y, df.z]).T
+                m = torch.from_numpy(np.ones((len(df_),))).bool()
+                m = repeat(m, 'n -> b n', b=1)
 
-        p = torch.from_numpy(coords).float()
-        p = repeat(p, 'n d -> b n d', b=1)
+                v = make_bit_vector(
+                    df_.types.to_numpy(), max_feature_id + 1, compact).float()
 
-        m = torch.from_numpy(np.ones((len(df),))).bool()
-        m = repeat(m, 'n -> b n', b=1)
+                v = repeat(v, 'n d -> b n d', b=1)
 
-        v = make_bit_vector(
-            df.types.to_numpy(), max_feature_id + 1, compact).float()
-        v = repeat(v, 'n d -> b n d', b=1)
+                model = model.eval().cuda()
 
-        model = model.eval().cuda()
-        if isinstance(model, PNNGeometricBase):
+                edge_indices = torch.from_numpy(np.vstack(edge_indices)).long()
+                edge_attrs = one_hot(torch.from_numpy(edge_attrs).long(), 3)
 
-            edge_indices = torch.from_numpy(np.vstack(edge_indices)).long()
-            edge_attrs = one_hot(torch.from_numpy(edge_attrs).long(), 3)
+                pre_activation = model(get_pyg_single_graph_for_inference(Data(
+                    x=v.squeeze(),
+                    edge_index=edge_indices,
+                    edge_attr=edge_attrs,
+                    pos=p.squeeze()
+                )))
 
-            pre_activation = model(get_pyg_single_graph_for_inference(Data(
-                x=v.squeeze(),
-                edge_index=edge_indices,
-                edge_attr=edge_attrs,
-                pos=p.squeeze()
-            )))
+                if model.model_task == 'classification':
+                    score = float(to_numpy(torch.sigmoid(pre_activation)))
+                    if not quiet:
+                        print('Original score: {:.4f}'.format(score))
+                elif model.model_task == 'multi_regression':
+                    score = to_numpy(pre_activation).squeeze()
+                    if not quiet:
+                        print(
+                            'Original scores: pKi={0:.4f} ({3:.1f} nm), '
+                            'pKd={1:.4f} '
+                            '({4:.1f} nm), pIC50={2:.4f} ({5:.1f} nm)'.format(
+                                *score, *[10 ** (-x) * 10 ** 9 for x in score]))
+                    score = score[0]
+                else:
+                    score = float(to_numpy(pre_activation))
+                    if not quiet:
+                        print('Original score: {:.4f}'.format(score))
 
-        else:
-            pre_activation = model((p.cuda(), v.cuda(), m.cuda()))[0, ...]
-            edge_indices = None
+                if not idx:
+                    original_score = score
+                    atomic_model_labels = attribution_fn(
+                        model, p.cuda(), v.cuda(), edge_attrs=edge_attrs,
+                        edge_indices=edge_indices, bs=bs, gnn_layer=gnn_layer)
+                else:
+                    residue_scores[resi] = original_score - score
 
-        score = float(to_numpy(torch.sigmoid(pre_activation)))
+            model_labels = []
+            for resi, ml in zip(df['resi'], atomic_model_labels):
+                if resi < 0:
+                    model_labels.append(ml)
+                else:
+                    model_labels.append(ml / 2 + residue_scores[resi] / 2)
 
-        if not quiet:
-            print('Original score: {:.4}'.format(score))
-
-        model_labels = attribution_fn(
-            model, p.cuda(), v.cuda(), edge_attrs=edge_attrs,
-            edge_indices=edge_indices, bs=bs, gnn_layer=gnn_layer)
 
         df['any_interaction'] = df['hba'] | df['hbd'] | df['pistacking']
-        if attribution_fn in (edge_attention, edge_embedding_attribution):
+        if attribution_fn in (edge_attention, edge_embedding_attribution,
+                              track_bond_lengths, bond_masking):
             edge_scores = model_labels
         else:
             df['attribution'] = model_labels
@@ -465,7 +631,9 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
 
                 for col in ['coords_0', 'coords_1', 'both_coords', 'edge_idx_0',
                             'edge_idx_1']:
+                    # if col in ('edge_idx_0', 'edge_idx_1', 'both_coords'):
                     del df[col]
+
                 df.sort_values(
                     by='xtal_distance', ascending=True, inplace=True)
                 df['bond_length_rank'] = np.arange(len(df))
@@ -477,6 +645,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                     str) + ':' + df['z'].apply(str)
                 df['atom_id'] = df['coords'].apply(find_identifier)
                 del df['coords']
+                print(df)
                 df.sort_values(by='attribution', ascending=False, inplace=True)
                 df['gnn_rank'] = np.arange(len(df))
 
@@ -485,7 +654,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
     def colour_b_factors_pdb(
             self, model, parser, attribution_fn, results_fname, model_args,
             gnn_layer=None, only_process=None, pdb_file=None,
-            coords_to_identifier=None, quiet=False):
+            coords_to_identifier=None, quiet=False, split_by_mol=True):
 
         def change_bfactors(bfactors):
             """Modify bfactors based on spatial location.
@@ -514,44 +683,160 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                 0, '(all)', 'b=modify_bfactor(x, y, z)', space=space,
                 quiet=True)
 
-        score, df, edge_indices, edge_scores = self.score_atoms(
-            parser, only_process, model, attribution_fn, model_args,
-            gnn_layer=gnn_layer, pdb_file=pdb_file,
-            coords_to_identifier=coords_to_identifier, quiet=quiet)
+        scoring_args = (only_process, model, model_args)
+        scoring_kwargs = {
+            'gnn_layer': gnn_layer,
+            'pdb_file': pdb_file,
+            'coords_to_identifier': coords_to_identifier,
+            'quiet': quiet,
+        }
 
-        if edge_scores is not None:
-            return score, df, edge_indices, edge_scores
-        elif not isinstance(df, DataFrame):
-            return None, None, None, None
-        if model is None:
-            return score, df, None, None
+        if attribution_fn == attention_wrapper:
+            score, edge_df, edge_edge_indices, edge_edge_scores = \
+                self.score_atoms(
+                    *scoring_args, **scoring_kwargs,
+                    attribution_fn=edge_attention)
+            score, df, node_edge_indices, node_edge_scores = \
+                self.score_atoms(
+                    *scoring_args, **scoring_kwargs,
+                    attribution_fn=node_attention)
+        elif attribution_fn == cam_wrapper:
+            score, edge_df, edge_edge_indices, edge_edge_scores = \
+                self.score_atoms(
+                    *scoring_args, **scoring_kwargs,
+                    attribution_fn=edge_attention)
+            score, df, node_edge_indices, node_edge_scores = \
+                self.score_atoms(
+                    *scoring_args, **scoring_kwargs,
+                    attribution_fn=atom_masking)
+        elif attribution_fn == masking_wrapper:
+
+            _, atom_mask_df, _, _ = self.score_atoms(
+                *scoring_args, **scoring_kwargs,
+                attribution_fn=atom_masking)
+            score, edge_df, edge_indices, edge_scores = \
+                self.score_atoms(
+                    *scoring_args, **scoring_kwargs,
+                    attribution_fn=bond_masking)
+
+            print(atom_mask_df.sort_values(by='attribution'))
+            print(edge_df.sort_values(by='bond_score', ascending=False))
+            print()
+
+            atom_id_to_score = {aid: score for aid, score in zip(
+                atom_mask_df['atom_id'], atom_mask_df['attribution'])}
+
+            edge_df['atom_1_bs'] = edge_df['identifier_0'].map(
+                atom_id_to_score)
+            edge_df['atom_2_bs'] = edge_df['identifier_1'].map(
+                atom_id_to_score)
+            edge_df[
+                'bond_score'] -= (edge_df['atom_1_bs'] + edge_df['atom_2_bs'])
+            del edge_df['atom_1_bs'], edge_df['atom_2_bs']
+            edge_df = edge_df.sort_values(by='bond_score', ascending=False)
+            edge_df['gnn_rank'] = range(len(edge_df))
+
+            return score, edge_df, edge_indices, edge_scores
+        else:
+            edge_df = None
+            score, df, edge_indices, edge_scores = self.score_atoms(
+                *scoring_args, **scoring_kwargs,
+                attribution_fn=attribution_fn)
+
+            if edge_scores is not None:
+                return score, df, edge_indices, edge_scores
+            if not isinstance(df, DataFrame):
+                return None, None, None, None
+            if model is None:
+                return score, df, None, None
 
         model_labels = df['attribution'].to_numpy()
+        bps = df['bp'].to_numpy()
         x, y, z = df['x'].to_numpy(), df['y'].to_numpy(), df['z'].to_numpy()
 
         atom_to_bfactor_map = PositionDict(eps=0.01)
         all_bfactors = []
+        lig_bfactors = []
+        rec_bfactors = []
         for i in range(len(df)):
             bfactor = float(model_labels[i])
             all_bfactors.append(bfactor)
+            if bps[i]:
+                rec_bfactors.append(bfactor)
+            else:
+                lig_bfactors.append(bfactor)
             atom_to_bfactor_map[coords_to_string((x[i], y[i], z[i]))] = bfactor
 
-        min_bfactor = min(min(all_bfactors), 0)
-        max_bfactor = max(max(all_bfactors), 0)
-        max_absolute_bfactor = max(abs(max_bfactor), abs(min_bfactor))
-        if isinstance(max_absolute_bfactor, (list, np.ndarray)):
-            max_absolute_bfactor = max_absolute_bfactor[0]
-        print('Colouring b-factors in range ({0:0.3f}, {1:0.3f})'.format(
-            -max_absolute_bfactor, max_absolute_bfactor))
+        if attribution_fn in (attention_wrapper, node_attention):
+            left_bfactor_limit = min(all_bfactors)
+            right_bfactor_limit = max(all_bfactors)
+            left_bfactor_limit_lig = min(lig_bfactors)
+            right_bfactor_limit_lig = max(lig_bfactors)
+            left_bfactor_limit_rec = min(rec_bfactors)
+            right_bfactor_limit_rec = max(rec_bfactors)
+            # left_bfactor_limit = 0
+            # right_bfactor_limit = 1
+            # colour_scheme = 'red_white_green'
+            colour_scheme = 'white_green'
+        else:
+            min_bfactor = min(min(all_bfactors), 0)
+            max_bfactor = max(max(all_bfactors), 0)
+            min_bfactor_lig = min(min(lig_bfactors), 0)
+            max_bfactor_lig = max(max(lig_bfactors), 0)
+            min_bfactor_rec = min(min(rec_bfactors), 0)
+            max_bfactor_rec = max(max(rec_bfactors), 0)
+            colour_scheme = 'red_white_green'
+            max_absolute_bfactor = max(abs(max_bfactor), abs(min_bfactor))
+            max_absolute_bfactor_lig = max(
+                abs(max_bfactor_lig), abs(min_bfactor_lig))
+            max_absolute_bfactor_rec = max(
+                abs(max_bfactor_rec), abs(min_bfactor_rec))
+
+            if isinstance(max_absolute_bfactor, (list, np.ndarray)):
+                max_absolute_bfactor = max_absolute_bfactor[0]
+                max_absolute_bfactor_lig = max_absolute_bfactor_lig[0]
+                max_absolute_bfactor_rec = max_absolute_bfactor_rec[0]
+
+            left_bfactor_limit = -max_absolute_bfactor
+            right_bfactor_limit = max_absolute_bfactor
+            left_bfactor_limit_lig = -max_absolute_bfactor_lig
+            right_bfactor_limit_lig = max_absolute_bfactor_lig
+            left_bfactor_limit_rec = -max_absolute_bfactor_rec
+            right_bfactor_limit_rec = max_absolute_bfactor_rec
+
+        if not quiet:
+            if split_by_mol:
+                print('Colouring ligand b-factors in range ({0:0.3f}, '
+                      '{1:0.3f})'.format(
+                    left_bfactor_limit_lig, right_bfactor_limit_lig))
+                print('Colouring receptor b-factors in range ({0:0.3f}, '
+                      '{1:0.3f})'.format(
+                    left_bfactor_limit_rec, right_bfactor_limit_rec))
+            else:
+                print(
+                    'Colouring b-factors in range ({0:0.3f}, {1:0.3f})'.format(
+                        left_bfactor_limit, right_bfactor_limit))
 
         df.to_csv(results_fname, index=False, float_format='%.3f')
 
         cmd.alter('all', "b=0")
-        print('Changing bfactors...')
+        if not quiet:
+            print('Changing bfactors...')
         change_bfactors(atom_to_bfactor_map)
-        print('Done!')
-        cmd.spectrum(
-            'b', 'red_white_green', minimum=-max_absolute_bfactor,
-            maximum=max_absolute_bfactor)
+        if not quiet:
+            print('Done!')
+        if split_by_mol:
+            cmd.spectrum('b', colour_scheme, selection='name is LIG',
+                         minimum=left_bfactor_limit_lig,
+                         maximum=right_bfactor_limit_lig)
+            cmd.spectrum('b', colour_scheme, selection='name is not LIG',
+                         minimum=left_bfactor_limit_rec,
+                         maximum=right_bfactor_limit_rec)
+        else:
+            cmd.spectrum(
+                'b', colour_scheme, minimum=left_bfactor_limit,
+                maximum=right_bfactor_limit)
         cmd.rebuild()
+        if edge_df is not None:
+            df = edge_df
         return score, df, None, None
