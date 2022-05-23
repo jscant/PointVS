@@ -188,8 +188,8 @@ def make_box(struct, radius=4, relative_to_ligand=True):
         distances = cdist(ligand_np, receptor_np, 'euclidean')
         mask = distances < radius
         keep = np.where(np.sum(mask, axis=0))[0]
-        result = result.append(rec_struct[rec_struct.index.isin(keep)],
-                               ignore_index=True)
+        result = pd.concat([result, rec_struct[rec_struct.index.isin(keep)]],
+                           ignore_index=True)
         result.reset_index(drop=True, inplace=True)
         del result['index']
         return result
@@ -287,7 +287,8 @@ def concat_structs(rec, lig, n_features, min_lig_rotation=0, parsers=None,
             lig_struct.y = candidate_coords[:, 1]
             lig_struct.z = candidate_coords[:, 2]
 
-        concatted_structs = lig_struct.append(rec_struct, ignore_index=True)
+        concatted_structs = pd.concat(
+            [lig_struct, rec_struct], ignore_index=True)
     else:
         atomic_nums = (6, 7, 8, 9, 15, 16, 17, 35, 53)
         lig_struct['atom_id'] = lig_struct['type'].map({

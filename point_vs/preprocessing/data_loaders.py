@@ -12,7 +12,8 @@ import psutil
 import torch
 from torch.nn.functional import one_hot
 from torch.utils.data import DataLoader
-from torch_geometric.data import DataLoader as GeoDataLoader, Data
+from torch_geometric.loader import DataLoader as GeoDataLoader
+from torch_geometric.data import Data
 
 from point_vs.preprocessing.preprocessing import make_box, \
     concat_structs, make_bit_vector, uniform_random_rotation, generate_edges
@@ -112,14 +113,16 @@ class PointCloudDataset(torch.utils.data.Dataset):
             self.ligand_fnames = regression_types_to_lists(
                 self.base_path, types_fname)
         else:
-            _labels, rmsds, receptor_fnames, ligand_fnames, dEs, strain_rmsds = \
+            _labels, rmsds, receptor_fnames, ligand_fnames, dEs, strain_rmsds\
+                = \
                 classifiaction_types_to_lists(
                     types_fname, include_strain_info=include_strain_info)
 
             # Do we use provided labels or do we generate our own using
             # rmsds?
             labels = [] if label_by_rmsd else _labels
-            for path_idx, (receptor_fname, ligand_fname, dE, strain_rmsd) in enumerate(
+            for path_idx, (
+            receptor_fname, ligand_fname, dE, strain_rmsd) in enumerate(
                     zip(receptor_fnames, ligand_fnames, dEs, strain_rmsds)):
                 if label_by_rmsd:
                     # Pose selection, filter by max/min active/inactive rmsd
