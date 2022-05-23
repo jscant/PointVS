@@ -75,7 +75,8 @@ def find_identifier(coords_to_identifier, coords):
 
 def binding_events_to_ranked_protein_atoms(
         input_fnames, model_path, output_dir, ligand_name,
-        attribution='edge_attention', layer=1, use_rank=False):
+        attribution='edge_attention', layer=1, use_rank=False,
+        ligand_chain='A'):
     """Use multiple protein-ligand structures to score protein atoms.
 
     The importance of each protein atom is assumed to be related to its mean
@@ -148,7 +149,7 @@ def binding_events_to_ranked_protein_atoms(
         )
         scores = []
         for site_code, (score, df, _, _) in dfs.items():
-            if site_code.split(':')[1] != 'A':
+            if site_code.split(':')[1] != ligand_chain:
                 continue
             scores.append(score)
             if attribution == 'edge_attention':
@@ -397,12 +398,16 @@ if __name__ == '__main__':
                              '.')
     parser.add_argument('--scoring_method', '-s', type=str,
                         help='One of atom_masking, cam, edge_attention')
+    parser.add_argument('--ligand_chain', '-chain', type=str, default='A',
+                        help='What chain will the ligand be labeled as? Either '
+                             'any letter A-Z or " "')
 
     args = parser.parse_args()
     rank_df = binding_events_to_ranked_protein_atoms(
         args.filenames, args.model, args.output_dir,
         args.ligand_residue_code.upper(), attribution=args.scoring_method,
-        layer=args.layer, use_rank=args.use_rank)
+        layer=args.layer, use_rank=args.use_rank,
+        ligand_chain=args.ligand_chain)
     df = scores_to_pharmacophore_df(
         args.apo_protein, rank_df, use_rank=args.use_rank)
     print(df[:10])
