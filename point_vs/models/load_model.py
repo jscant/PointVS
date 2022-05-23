@@ -29,7 +29,7 @@ def load_model(
         model_kwargs['edge_attention'] = cmd_line_args['edge_attention']
 
     if fetch_args_only:
-        return None, model_kwargs, cmd_line_args
+        return None, None, model_kwargs, cmd_line_args
 
     model_type = cmd_line_args['model']
 
