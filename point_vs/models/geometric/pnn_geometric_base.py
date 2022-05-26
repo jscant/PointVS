@@ -91,7 +91,7 @@ class PNNGeometricBase(PointNeuralNetworkBase):
             if self.feats_linear_layers is not None:
                 feats = global_mean_pool(feats, batch)  # (total_nodes, k)
                 if self.include_strain_info:
-                    feats = torch.cat((feats, dE, rmsd), dim=1)
+                    feats = torch.cat((feats, dE), dim=1)
                 feats = self.feats_linear_layers(feats)  # (bs, k)
             if self.edges_linear_layers is not None:
                 agg = unsorted_segment_sum(

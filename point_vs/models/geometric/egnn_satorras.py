@@ -294,7 +294,7 @@ class SartorrasEGNN(PNNGeometricBase):
                                 rezero=rezero))
 
         if include_strain_info:
-            k += 2
+            k += 1
         if multi_fc:  # check the order of these..??!
             fc_layer_dims = ((k, 32), (32, 16), (16, dim_output))
         else:
