@@ -108,7 +108,11 @@ class PNNGeometricBase(PointNeuralNetworkBase):
         raise RuntimeError('We must either classify on feats, edges or both.')
 
     def process_graph(self, graph):
-        y_true = graph.y.float()
+        y_true = graph.y
+        try:
+            y_true = y_true.float()
+        except (AttributeError, TypeError):
+            pass
         y_pred = self(graph).reshape(-1, )
         ligands = graph.lig_fname
         receptors = graph.rec_fname

@@ -31,6 +31,38 @@ from point_vs.preprocessing.data_loaders import get_data_loader, \
     PygPointCloudDataset, PointCloudDataset
 from point_vs.utils import expand_path
 
+
+def get_model_and_test_dl(checkpoint_path, test_types, test_data_root):
+
+    checkpoint_path, model, model_kwargs, cmd_line_args = load_model(
+        checkpoint_path, silent=False)
+
+    # Is a validation set specified?
+    if cmd_line_args['model'] in ('lucid', 'egnn'):
+        dataset_class = PygPointCloudDataset
+    else:
+        dataset_class = PointCloudDataset
+
+    test_dl = get_data_loader(
+        test_data_root, receptors=None,
+        compact=cmd_line_args['compact'],
+        dataset_class=dataset_class,
+        use_atomic_numbers=cmd_line_args['use_atomic_numbers'],
+        radius=cmd_line_args['radius'],
+        polar_hydrogens=cmd_line_args['hydrogens'],
+        batch_size=cmd_line_args['batch_size'],
+        types_fname=test_types,
+        edge_radius=cmd_line_args['edge_radius'],
+        estimate_bonds=cmd_line_args.get('estimate_bonds', False),
+        prune=cmd_line_args.get('prune', False),
+        rot=False, mode='val', fname_suffix=cmd_line_args['input_suffix'],
+        extended_atom_types=cmd_line_args.get('extended_atom_types', False),
+        model_task=cmd_line_args.get('model_task', 'classification'),
+    )
+
+    return checkpoint_path, model, model_kwargs, cmd_line_args, test_dl
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('model_checkpoint', type=str,
@@ -52,39 +84,16 @@ if __name__ == '__main__':
                              'the same run name with _VAL-<test_types> appended'
                              ' will be used.')
     args = parser.parse_args()
-
     checkpoint_path = expand_path(args.model_checkpoint)
-    checkpoint_path, model, model_kwargs, cmd_line_args = load_model(
-        checkpoint_path, silent=False)
+    checkpoint_path, model, model_kwargs, cmd_line_args, test_dl = \
+        get_model_and_test_dl(
+            checkpoint_path, args.test_types, args.test_data_root)
 
     results_fname = expand_path(Path(
         checkpoint_path.parents[1],
         'predictions_{0}-{1}.txt'.format(
             Path(args.test_types).with_suffix('').name,
             checkpoint_path.with_suffix('').name)))
-
-    # Is a validation set specified?
-    if cmd_line_args['model'] in ('lucid', 'egnn'):
-        dataset_class = PygPointCloudDataset
-    else:
-        dataset_class = PointCloudDataset
-
-    test_dl = get_data_loader(
-        args.test_data_root, receptors=None,
-        compact=cmd_line_args['compact'],
-        dataset_class=dataset_class,
-        use_atomic_numbers=cmd_line_args['use_atomic_numbers'],
-        radius=cmd_line_args['radius'],
-        polar_hydrogens=cmd_line_args['hydrogens'],
-        batch_size=cmd_line_args['batch_size'],
-        types_fname=args.test_types,
-        edge_radius=cmd_line_args['edge_radius'],
-        estimate_bonds=cmd_line_args.get('estimate_bonds', False),
-        prune=cmd_line_args.get('prune', False),
-        rot=False, mode='val', fname_suffix=cmd_line_args['input_suffix'],
-        extended_atom_types=cmd_line_args.get('extended_atom_types', False),
-        model_task=cmd_line_args.get('model_task', 'classification'),
-    )
 
     args_to_record = vars(args)
 

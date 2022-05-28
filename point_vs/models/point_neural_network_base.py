@@ -164,49 +164,77 @@ class PointNeuralNetworkBase(nn.Module):
         self.eval()
         self.val_iter = 0
         val_start_time = time.time()
+
         with torch.no_grad():
             for self.batch, graph in enumerate(
                     data_loader):
+
                 self.val_iter += 1
                 y_pred, y_true, ligands, receptors = self.process_graph(graph)
 
+
                 if self.model_task == 'classification':
-                    y_true_np = to_numpy(y_true).reshape((-1,))
+                    is_label = y_true is not None
+                    if is_label:
+                        y_true_np = to_numpy(y_true).reshape((-1,))
                     y_pred_np = to_numpy(nn.Sigmoid()(y_pred)).reshape((-1,))
                     num_type = int
                 elif self.model_task == 'multi_regression':
-                    y_true_np = to_numpy(y_true).reshape((-1, 3))
+                    is_label = y_true[0][0] is not None
                     y_pred_np = to_numpy(y_pred).reshape((-1, 3))
-                    metrics = np.array(
-                        [['pki', 'pkd', 'ic50'] for _ in range(len(ligands))])
-                    metrics = list(metrics[np.where(y_true_np > -0.5)])
-                    y_pred_np = y_pred_np[np.where(y_true_np > -0.5)]
-                    y_true_np = y_true_np[np.where(y_true_np > -0.5)]
+                    if is_label:
+                        y_true_np = to_numpy(y_true).reshape((-1, 3))
+                        metrics = np.array(
+                            [['pki', 'pkd', 'ic50'] for _ in
+                             range(len(ligands))])
+                        metrics = list(metrics[np.where(y_true_np > -0.5)])
+                        y_pred_np = y_pred_np[np.where(y_true_np > -0.5)]
+                        y_true_np = y_true_np[np.where(y_true_np > -0.5)]
                     num_type = float
                 else:
-                    y_true_np = to_numpy(y_true).reshape((-1,))
+                    is_label = y_true is not None
+                    if is_label:
+                        y_true_np = to_numpy(y_true).reshape((-1,))
                     y_pred_np = to_numpy(y_pred).reshape((-1,))
                     num_type = float
 
-                self.get_mean_preds(y_true, y_pred)
+                self.get_mean_preds(y_true, y_pred, is_label=is_label)
                 self.record_and_display_info(
                     val_start_time, None, data_loader, None, record_type='test')
 
                 if self.model_task == 'multi_regression':
-                    predictions += '\n'.join(
-                        ['{0:.3f} | {1:.3f} {2} {3} | {4}'.format(
-                            num_type(y_true_np[i]),
-                            y_pred_np[i],
-                            receptors[i],
-                            ligands[i],
-                            metrics[i]) for i in range(len(receptors))]) + '\n'
+                    if is_label:
+                        predictions += '\n'.join(
+                            ['{0:.3f} | {1:.3f} {2} {3} | {4}'.format(
+                                num_type(y_true_np[i]),
+                                y_pred_np[i],
+                                receptors[i],
+                                ligands[i],
+                                metrics[i]) for i in range(len(receptors))]
+                        ) + '\n'
+                    else:
+                        predictions += '\n'.join(
+                            ['{0:.3f} {1:.3f} {2:.3f} | {3} {4}'.format(
+                                *y_pred_np[i],
+                                receptors[i],
+                                ligands[i]) for i in range(len(receptors))]
+                        ) + '\n'
                 else:
-                    predictions += '\n'.join(
-                        ['{0:.3f} | {1:.3f} {2} {3}'.format(
-                            num_type(y_true_np[i]),
-                            y_pred_np[i],
-                            receptors[i],
-                            ligands[i]) for i in range(len(receptors))]) + '\n'
+                    if is_label:
+                        predictions += '\n'.join(
+                            ['{0:.3f} | {1:.3f} {2} {3}'.format(
+                                num_type(y_true_np[i]),
+                                y_pred_np[i],
+                                receptors[i],
+                                ligands[i]) for i in range(len(receptors))]
+                        ) + '\n'
+                    else:
+                        predictions += '\n'.join(
+                            ['{0:.3f} | {1} {2}'.format(
+                                y_pred_np[i],
+                                receptors[i],
+                                ligands[i]) for i in range(len(receptors))]
+                        ) + '\n'
 
                 predictions = self.write_predictions(
                     predictions,
@@ -272,9 +300,13 @@ class PointNeuralNetworkBase(nn.Module):
         self.total_iters = epochs * len(data_loader)
         return start_time
 
-    def get_mean_preds(self, y_true, y_pred):
-        y_true_np = to_numpy(y_true).reshape((-1,))
+    def get_mean_preds(self, y_true, y_pred, is_label=True):
         y_pred_np = to_numpy(nn.Sigmoid()(y_pred)).reshape((-1,))
+        if is_label:
+            y_true_np = to_numpy(y_true).reshape((-1,))
+        else:
+            self.active_mean_pred = np.mean(y_pred_np)
+            return
 
         if self.model_task == 'classification':
             active_idx = (np.where(y_true_np > 0.5),)

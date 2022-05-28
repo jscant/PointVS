@@ -17,7 +17,7 @@ from torch_geometric.data import Data
 
 from point_vs.preprocessing.preprocessing import make_box, \
     concat_structs, make_bit_vector, uniform_random_rotation, generate_edges
-from point_vs.utils import expand_path, shorten_home
+from point_vs.utils import expand_path, shorten_home, get_n_cols
 
 
 class PointCloudDataset(torch.utils.data.Dataset):
@@ -162,18 +162,19 @@ class PointCloudDataset(torch.utils.data.Dataset):
 
             labels += [0] * len(aug_ligs)
             labels = np.array(labels)
-            active_count = np.sum(labels)
-            class_sample_count = np.array(
-                [len(labels) - active_count, active_count])
-            if np.sum(labels) == len(labels) or np.sum(labels) == 0:
-                self.sampler = None
-            else:
-                weights = 1. / class_sample_count
-                self.sample_weights = torch.from_numpy(
-                    np.array([weights[i] for i in labels]))
-                self.sampler = torch.utils.data.WeightedRandomSampler(
-                    self.sample_weights, len(self.sample_weights)
-                )
+            if labels[0] is not None:
+                active_count = np.sum(labels)
+                class_sample_count = np.array(
+                    [len(labels) - active_count, active_count])
+                if np.sum(labels) == len(labels) or np.sum(labels) == 0:
+                    self.sampler = None
+                else:
+                    weights = 1. / class_sample_count
+                    self.sample_weights = torch.from_numpy(
+                        np.array([weights[i] for i in labels]))
+                    self.sampler = torch.utils.data.WeightedRandomSampler(
+                        self.sample_weights, len(self.sample_weights)
+                    )
         self.labels = labels
         print('There are', len(self.ligand_fnames), 'training points in',
               shorten_home(base_path))
@@ -362,8 +363,11 @@ class PygPointCloudDataset(PointCloudDataset):
         else:
             edge_indices, edge_attrs = torch.ones(1), torch.ones(1)
 
-        y = torch.from_numpy(np.array(label))
-        y = y.long() if self.model_task == 'classification' else y.float()
+        if label is not None and label[0] is not None:
+            y = torch.from_numpy(np.array(label))
+            y = y.long() if self.model_task == 'classification' else y.float()
+        else:
+            y = label
 
         return Data(
             x=v,
@@ -508,16 +512,25 @@ def get_data_loader(
 
 
 def regression_types_to_lists(data_root, types_fname):
+    n_cols = get_n_cols(types_fname)
+    if n_cols >= 5:
+        names = ('pki', 'pkd', 'ic50', 'receptor', 'ligand')
+    else:
+        names = ('receptor', 'ligand')
     df = pd.read_csv(
         expand_path(types_fname),
-        names=('pki', 'pkd', 'ic50', 'receptor', 'ligand'), sep='\s+')
+        names=names, sep='\s+')
     lists = [list(df[col]) for col in df.columns]
+
+    if len(lists) < 5:
+        lists = [[None for _ in range(len(lists[0]))]
+                 for n in range(5-n_cols)] + lists
+
     pki, pkd, ic50, receptors, ligands = [], [], [], [], []
     missing = []
     for i in range(len(df)):
-        if Path(data_root, lists[-2][i]).is_file() and Path(data_root,
-                                                            lists[-1][
-                                                                i]).is_file():
+        if Path(data_root, lists[-2][i]).is_file() and Path(
+                data_root, lists[-1][i]).is_file():
             pki.append(lists[0][i])
             pkd.append(lists[1][i])
             ic50.append(lists[2][i])
@@ -559,9 +572,16 @@ def classifiaction_types_to_lists(types_fname, include_strain_info=False):
         recpath, ligpath = None, None
         dE, rmsd = None, None
         chunks = types_line.strip().split()
+        if len(chunks) == 2:
+            if include_strain_info:
+                return None, rmsd, chunks[0], chunks[1], dE, None
+            return None, rmsd, chunks[0], chunks[1]
         if not len(chunks):
             return None, None, None, None
-        label = int(chunks[0])
+        try:
+            label = int(chunks[0])
+        except ValueError:
+            label = None
         for idx, chunk in enumerate(chunks):
             if chunk.startswith('#'):
                 continue
