@@ -363,10 +363,10 @@ class PygPointCloudDataset(PointCloudDataset):
         else:
             edge_indices, edge_attrs = torch.ones(1), torch.ones(1)
 
-        if label is not None and label[0] is not None:
+        try:
             y = torch.from_numpy(np.array(label))
             y = y.long() if self.model_task == 'classification' else y.float()
-        else:
+        except (TypeError, AttributeError):
             y = label
 
         return Data(
