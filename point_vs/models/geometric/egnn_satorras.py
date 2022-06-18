@@ -197,6 +197,7 @@ class SartorrasEGNN(PNNGeometricBase):
                   model_task='classification',
                   include_strain_info=False,
                   final_softplus=False,
+                  transformer_encoder=False,
                   **kwargs):
         """
         Arguments:
@@ -300,20 +301,32 @@ class SartorrasEGNN(PNNGeometricBase):
         else:
             fc_layer_dims = ((k, dim_output),)
 
-        feats_linear_layers = []
-        edges_linear_layers = []
-        for idx, (in_dim, out_dim) in enumerate(fc_layer_dims):
-            feats_linear_layers.append(nn.Linear(in_dim, out_dim))
-            edges_linear_layers.append(nn.Linear(in_dim, out_dim))
-            if idx < len(fc_layer_dims) - 1:
-                feats_linear_layers.append(nn.SiLU())
-                edges_linear_layers.append(nn.SiLU())
-        if final_softplus:
-            feats_linear_layers.append(nn.ReLU())
-        if classify_on_feats:
-            self.feats_linear_layers = nn.Sequential(*feats_linear_layers)
-        if classify_on_edges:
-            self.edges_linear_layers = nn.Sequential(*edges_linear_layers)
+        if transformer_encoder:
+            d_model = 512
+            transformer_encoder_layer = torch.nn.TransformerEncoderLayer(
+                d_model=d_model, nhead=4, dim_feedforward=2048, dropout=0)
+            transformer_encoder_block = torch.nn.TransformerEncoder(
+                transformer_encoder_layer, 6)
+            self.feats_linear_layers = nn.Sequential(
+                nn.Linear(k, d_model),
+                transformer_encoder_block,
+                nn.Linear(d_model, dim_output)
+            )
+        else:
+            feats_linear_layers = []
+            edges_linear_layers = []
+            for idx, (in_dim, out_dim) in enumerate(fc_layer_dims):
+                feats_linear_layers.append(nn.Linear(in_dim, out_dim))
+                edges_linear_layers.append(nn.Linear(in_dim, out_dim))
+                if idx < len(fc_layer_dims) - 1:
+                    feats_linear_layers.append(nn.SiLU())
+                    edges_linear_layers.append(nn.SiLU())
+            if final_softplus:
+                feats_linear_layers.append(nn.ReLU())
+            if classify_on_feats:
+                self.feats_linear_layers = nn.Sequential(*feats_linear_layers)
+            if classify_on_edges:
+                self.edges_linear_layers = nn.Sequential(*edges_linear_layers)
         return nn.Sequential(*layers)
 
     def get_embeddings(self, feats, edges, coords, edge_attributes, batch):

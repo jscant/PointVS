@@ -249,4 +249,7 @@ def parse_args():
     parser.add_argument('--final_softplus', action='store_true',
                         help='Final layer in regression has softplus '
                              'nonlinearity')
+    parser.add_argument('--transformer_encoder', action='store_true',
+                        help='Put node embeddings through the encoder part '
+                             'of a transformer')
     return parser.parse_args()

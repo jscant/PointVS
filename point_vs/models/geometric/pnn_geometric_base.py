@@ -77,7 +77,6 @@ class PNNGeometricBase(PointNeuralNetworkBase):
             feats, edges, coords, edge_attributes, batch)
         size = feats.size(0)
         row, col = edges
-
         if self.linear_gap:
             if self.feats_linear_layers is not None:
                 feats = self.feats_linear_layers(feats)
