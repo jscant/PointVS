@@ -23,14 +23,14 @@ class PointNeuralNetworkBase(nn.Module):
     def __init__(self, save_path, learning_rate, weight_decay=None,
                  wandb_project=None, wandb_run=None, silent=False,
                  use_1cycle=False, warm_restarts=False,
-                 only_save_best_models=False, **model_kwargs):
+                 only_save_best_models=False, optimiser='adam',
+                 **model_kwargs):
         super().__init__()
         self.model_task = model_kwargs.get('model_task', 'classification')
         self.include_strain_info = False
         self.batch = 0
         self.epoch = 0
         self.losses = []
-        # self.final_activation = nn.CrossEntropyLoss()
         self.feats_linear_layers = None
         self.edges_linear_layers = None
         self.save_path = Path(save_path).expanduser()
@@ -65,8 +65,19 @@ class PointNeuralNetworkBase(nn.Module):
 
         self.n_layers = model_kwargs.get('num_layers', 12)
         self.layers = self.build_net(**model_kwargs)
-        self.optimiser = torch.optim.Adam(
-            self.parameters(), lr=self.lr, weight_decay=weight_decay)
+        if optimiser == 'adam':
+            self.optimiser = torch.optim.Adam(
+                self.parameters(), lr=self.lr, weight_decay=weight_decay)
+        elif optimiser == 'sgd':
+            self.optimiser = torch.optim.SGD(
+                self.parameters(),
+                lr=self.lr,
+                momentum=0.9,
+                weight_decay=weight_decay,
+                nesterov=True)
+        else:
+            raise NotImplementedError('{} not recognised optimiser.'.format(
+                optimiser))
 
         assert not (use_1cycle and warm_restarts), '1cycle nad warm restarts ' \
                                                    'are mutually exclusive'

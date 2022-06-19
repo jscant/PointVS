@@ -243,7 +243,8 @@ if __name__ == '__main__':
         'rezero': args.rezero,
         'model_task': args.model_task,
         'include_strain_info': args.include_strain_info,
-        'final_softplus': args.final_softplus
+        'final_softplus': args.final_softplus,
+        'transformer_encoder': args.transformer_encoder
     }
 
     args_to_record.update(model_kwargs)
@@ -271,14 +272,15 @@ if __name__ == '__main__':
         model = SiameseNeuralNetwork(
             model_class, save_path, args.learning_rate, args.weight_decay,
             wandb_project=args.wandb_project, use_1cycle=args.use_1cycle,
-            warm_restarts=args.warm_restarts,
+            warm_restarts=args.warm_restarts, optimiser=args.optimiser,
             only_save_best_models=args.only_save_best_models, **model_kwargs)
     else:
         model = model_class(
             save_path, args.learning_rate, args.weight_decay,
             wandb_project=args.wandb_project, use_1cycle=args.use_1cycle,
             warm_restarts=args.warm_restarts,
-            only_save_best_models=args.only_save_best_models, **model_kwargs)
+            only_save_best_models=args.only_save_best_models,
+            optimiser=args.optimiser, **model_kwargs)
 
     if args.load_weights is not None:
         model.load_weights(args.load_weights)

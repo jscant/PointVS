@@ -252,4 +252,6 @@ def parse_args():
     parser.add_argument('--transformer_encoder', action='store_true',
                         help='Put node embeddings through the encoder part '
                              'of a transformer')
+    parser.add_argument('--optimiser', '-o', type=str, default='adam',
+                        help='Optimiser (either adam or sgd)')
     return parser.parse_args()
