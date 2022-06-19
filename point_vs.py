@@ -244,7 +244,10 @@ if __name__ == '__main__':
         'model_task': args.model_task,
         'include_strain_info': args.include_strain_info,
         'final_softplus': args.final_softplus,
-        'transformer_encoder': args.transformer_encoder
+        'transformer_encoder': args.transformer_encoder,
+        'd_model': args.d_model,
+        'dim_feedforward': args.dim_feedforward,
+        'n_heads': args.n_heads
     }
 
     args_to_record.update(model_kwargs)

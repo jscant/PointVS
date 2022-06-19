@@ -254,4 +254,7 @@ def parse_args():
                              'of a transformer')
     parser.add_argument('--optimiser', '-o', type=str, default='adam',
                         help='Optimiser (either adam or sgd)')
+    parser.add_argument('--d_model', type=int, default=512)
+    parser.add_argument('--dim_feedforward', type=int, default=2048)
+    parser.add_argument('--n_heads', type=int, default=4)
     return parser.parse_args()

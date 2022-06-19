@@ -198,6 +198,9 @@ class SartorrasEGNN(PNNGeometricBase):
                   include_strain_info=False,
                   final_softplus=False,
                   transformer_encoder=False,
+                  d_model=512,
+                  dim_feedforward=2048,
+                  n_heads=8,
                   **kwargs):
         """
         Arguments:
@@ -302,9 +305,9 @@ class SartorrasEGNN(PNNGeometricBase):
             fc_layer_dims = ((k, dim_output),)
 
         if transformer_encoder:
-            d_model = 512
             transformer_encoder_layer = torch.nn.TransformerEncoderLayer(
-                d_model=d_model, nhead=4, dim_feedforward=2048, dropout=0)
+                d_model=d_model, nhead=n_heads, dim_feedforward=dim_feedforward,
+                dropout=0.1)
             transformer_encoder_block = torch.nn.TransformerEncoder(
                 transformer_encoder_layer, 6)
             self.feats_linear_layers = nn.Sequential(
