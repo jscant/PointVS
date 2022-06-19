@@ -61,6 +61,22 @@ class PygLinearPass(nn.Module):
         return res
 
 
+class GlobalAveragePooling(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x, graph_sizes=None):
+        assert len(
+            x.shape) == 3, 'input to GAP should be shape (bs, max_len, k)'
+        if graph_sizes is None:
+            return torch.mean(x, dim=2)
+        output = torch.zeros(x.shape[0], x.shape[2]).cuda()
+        for i in range(x.size(0)):
+            output[i] = torch.mean(x[i, :graph_sizes[i], :], dim=0)
+        return output
+
+
 class PNNGeometricBase(PointNeuralNetworkBase):
     """Base (abstract) class for all pytorch geometric point neural networks."""
 
@@ -75,36 +91,58 @@ class PNNGeometricBase(PointNeuralNetworkBase):
             dE, rmsd = None, None
         feats, messages = self.get_embeddings(
             feats, edges, coords, edge_attributes, batch)
-        size = feats.size(0)
+        total_nodes, k = feats.shape
         row, col = edges
-        if self.linear_gap:
-            if self.feats_linear_layers is not None:
-                feats = self.feats_linear_layers(feats)
-                feats = global_mean_pool(feats, batch)
-            if self.edges_linear_layers is not None:
-                agg = unsorted_segment_sum(
-                    messages, row, num_segments=size)
-                messages = self.edges_linear_layers(agg)
-                messages = global_mean_pool(messages, batch)
-        else:
-            if self.feats_linear_layers is not None:
-                feats = global_mean_pool(feats, batch)  # (total_nodes, k)
-                if self.include_strain_info:
-                    feats = torch.cat((feats, dE), dim=1)
-                feats = self.feats_linear_layers(feats)  # (bs, k)
-            if self.edges_linear_layers is not None:
-                agg = unsorted_segment_sum(
-                    messages, row, num_segments=size)
-                messages = global_mean_pool(agg, batch)
-                messages = self.edges_linear_layers(messages)
-        if self.feats_linear_layers is not None and \
-                self.edges_linear_layers is not None:
-            return torch.add(feats.squeeze(), messages.squeeze())
-        elif self.feats_linear_layers is not None:
+        if self.transformer_encoder:
+            max_nodes = 256
+            bs = int(torch.max(batch)) + 1
+            feats_ = torch.zeros(bs, max_nodes, k)
+            graph_sizes = torch.zeros(bs, dtype=torch.int32)
+            mask = torch.zeros(bs, max_nodes, dtype=torch.int32)
+            for i in range(bs):
+                node_values = feats[torch.where(batch == i)]
+                graph_size = min(node_values.size(0), max_nodes)
+                feats_[i, :graph_size, :] = node_values
+                graph_sizes[i] = graph_size
+                mask[i, :graph_size] = 1
+            feats = feats_.cuda()
+            graph_sizes.cuda()
+            feats = self.project_to_d_model(feats)
+            feats = self.attention_block(
+                feats, src_key_padding_mask=mask.T.cuda())
+            feats = GlobalAveragePooling()(feats, graph_sizes)
+            feats = self.feats_linear_layers(feats)
             return feats
-        elif self.edges_linear_layers is not None:
-            return messages
-        raise RuntimeError('We must either classify on feats, edges or both.')
+        else:
+            if self.linear_gap:
+                if self.feats_linear_layers is not None:
+                    feats = self.feats_linear_layers(feats)
+                    feats = global_mean_pool(feats, batch)
+                if self.edges_linear_layers is not None:
+                    agg = unsorted_segment_sum(
+                        messages, row, num_segments=total_nodes)
+                    messages = self.edges_linear_layers(agg)
+                    messages = global_mean_pool(messages, batch)
+            else:
+                if self.feats_linear_layers is not None:
+                    feats = global_mean_pool(feats, batch)  # (total_nodes, k)
+                    if self.include_strain_info:
+                        feats = torch.cat((feats, dE), dim=1)
+                    feats = self.feats_linear_layers(feats)  # (bs, k)
+                if self.edges_linear_layers is not None:
+                    agg = unsorted_segment_sum(
+                        messages, row, num_segments=total_nodes)
+                    messages = global_mean_pool(agg, batch)
+                    messages = self.edges_linear_layers(messages)
+            if self.feats_linear_layers is not None and \
+                    self.edges_linear_layers is not None:
+                return torch.add(feats.squeeze(), messages.squeeze())
+            elif self.feats_linear_layers is not None:
+                return feats
+            elif self.edges_linear_layers is not None:
+                return messages
+            raise RuntimeError(
+                'We must either classify on feats, edges or both.')
 
     def process_graph(self, graph):
         y_true = graph.y

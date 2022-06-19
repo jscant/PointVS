@@ -248,6 +248,7 @@ class SartorrasEGNN(PNNGeometricBase):
         self.rezero = rezero
         self.model_task = model_task
         self.include_strain_info = include_strain_info
+        self.transformer_encoder = transformer_encoder
 
         assert classify_on_feats or classify_on_edges, \
             'We must use either or both of classify_on_feats and ' \
@@ -310,11 +311,9 @@ class SartorrasEGNN(PNNGeometricBase):
                 dropout=0.1)
             transformer_encoder_block = torch.nn.TransformerEncoder(
                 transformer_encoder_layer, 6)
-            self.feats_linear_layers = nn.Sequential(
-                nn.Linear(k, d_model),
-                transformer_encoder_block,
-                nn.Linear(d_model, dim_output)
-            )
+            self.project_to_d_model = nn.Linear(k, d_model)
+            self.attention_block = transformer_encoder_block
+            self.feats_linear_layers = nn.Linear(d_model, dim_output)
         else:
             feats_linear_layers = []
             edges_linear_layers = []
