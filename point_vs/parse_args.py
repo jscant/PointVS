@@ -257,4 +257,5 @@ def parse_args():
     parser.add_argument('--d_model', type=int, default=512)
     parser.add_argument('--dim_feedforward', type=int, default=2048)
     parser.add_argument('--n_heads', type=int, default=4)
+    parser.add_argument('--transformer_at_end', action='store_true')
     return parser.parse_args()

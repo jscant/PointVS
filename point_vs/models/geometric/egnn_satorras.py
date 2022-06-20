@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from torch.nn import functional as F
+from torch.nn import functional as F, TransformerEncoder
 from torch_geometric.nn.norm import GraphNorm
 from torch_geometric.utils import dropout_adj
 
@@ -180,6 +180,11 @@ class E_GCL(nn.Module):
 
         return h, coord, edge_attr, edge_feat
 
+def init_weights(m):
+    if isinstance(m, nn.Linear):
+        torch.nn.init.xavier_uniform_(m.weight)
+        m.bias.data.fill_(0.01)
+
 
 class SartorrasEGNN(PNNGeometricBase):
     def build_net(self, dim_input, k, dim_output,
@@ -201,6 +206,7 @@ class SartorrasEGNN(PNNGeometricBase):
                   d_model=512,
                   dim_feedforward=2048,
                   n_heads=8,
+                  transformer_at_end=True,
                   **kwargs):
         """
         Arguments:
@@ -238,8 +244,21 @@ class SartorrasEGNN(PNNGeometricBase):
             rezero:
             model_task:
         """
-        layers = [PygLinearPass(nn.Linear(dim_input, k),
-                                return_coords_and_edges=True)]
+        if transformer_encoder and not transformer_at_end:
+            layers = [PygLinearPass(nn.Linear(dim_input, d_model),
+                                    return_coords_and_edges=True)]
+            transformer_encoder_layer = torch.nn.TransformerEncoderLayer(
+                d_model=d_model, nhead=n_heads, dim_feedforward=dim_feedforward,
+                dropout=0.0)
+            transformer_encoder_block = torch.nn.TransformerEncoder(
+                transformer_encoder_layer, 6)
+            layers.append(transformer_encoder_block)
+            layers.append(nn.Linear(d_model, k))
+            layers = nn.Sequential(*layers)
+            layers.apply(init_weights)
+        else:
+            layers = [PygLinearPass(nn.Linear(dim_input, k),
+                                    return_coords_and_edges=True)]
         self.n_layers = num_layers
         self.dropout_p = dropout
         self.residual = residual
@@ -249,6 +268,7 @@ class SartorrasEGNN(PNNGeometricBase):
         self.model_task = model_task
         self.include_strain_info = include_strain_info
         self.transformer_encoder = transformer_encoder
+        self.transformer_at_end = transformer_at_end
 
         assert classify_on_feats or classify_on_edges, \
             'We must use either or both of classify_on_feats and ' \
@@ -305,7 +325,7 @@ class SartorrasEGNN(PNNGeometricBase):
         else:
             fc_layer_dims = ((k, dim_output),)
 
-        if transformer_encoder:
+        if transformer_encoder and False:
             transformer_encoder_layer = torch.nn.TransformerEncoderLayer(
                 d_model=d_model, nhead=n_heads, dim_feedforward=dim_feedforward,
                 dropout=0.1)
@@ -314,6 +334,18 @@ class SartorrasEGNN(PNNGeometricBase):
             self.project_to_d_model = nn.Linear(k, d_model)
             self.attention_block = transformer_encoder_block
             self.feats_linear_layers = nn.Linear(d_model, dim_output)
+        elif transformer_encoder and transformer_at_end:
+            transformer_encoder_layer = torch.nn.TransformerEncoderLayer(
+                d_model=d_model, nhead=n_heads, dim_feedforward=dim_feedforward,
+                dropout=0.0)
+            transformer_encoder_block = torch.nn.TransformerEncoder(
+                transformer_encoder_layer, 6)
+            transformer_encoder_block.apply(init_weights)
+            self.feats_linear_layers = nn.Sequential(
+                nn.Linear(k, d_model),
+                transformer_encoder_block,
+                nn.Linear(d_model, dim_output)
+            )
         else:
             feats_linear_layers = []
             edges_linear_layers = []
@@ -337,8 +369,19 @@ class SartorrasEGNN(PNNGeometricBase):
                 edges, edge_attributes, self.dropout_p, force_undirected=True,
                 training=self.training)
         edge_messages = None
+        next_linear = False
         for i in self.layers:
-            feats, coords, edge_attributes, edge_messages = i(
-                h=feats, edge_index=edges, coord=coords,
-                edge_attr=edge_attributes, edge_messages=edge_messages)
+            if not self.transformer_at_end and (
+                    isinstance(i, torch.nn.TransformerEncoder) or next_linear):
+                feats = i(feats)
+                next_linear = True
+                if not isinstance(i, torch.nn.TransformerEncoder):
+                    next_linear = False
+            else:
+                x = i(
+                    h=feats, edge_index=edges, coord=coords,
+                    edge_attr=edge_attributes, edge_messages=edge_messages)
+                feats, coords, edge_attributes, edge_messages = i(
+                    h=feats, edge_index=edges, coord=coords,
+                    edge_attr=edge_attributes, edge_messages=edge_messages)
         return feats, edge_messages

@@ -247,7 +247,8 @@ if __name__ == '__main__':
         'transformer_encoder': args.transformer_encoder,
         'd_model': args.d_model,
         'dim_feedforward': args.dim_feedforward,
-        'n_heads': args.n_heads
+        'n_heads': args.n_heads,
+        'transformer_at_end': args.transformer_at_end
     }
 
     args_to_record.update(model_kwargs)
