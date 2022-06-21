@@ -254,8 +254,8 @@ class SartorrasEGNN(PNNGeometricBase):
                 transformer_encoder_layer, 6)
             layers.append(transformer_encoder_block)
             layers.append(nn.Linear(d_model, k))
-            layers = nn.Sequential(*layers)
-            layers.apply(init_weights)
+            for layer in layers:
+                layer.apply(init_weights)
         else:
             layers = [PygLinearPass(nn.Linear(dim_input, k),
                                     return_coords_and_edges=True)]
