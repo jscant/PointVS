@@ -1,11 +1,11 @@
 from pathlib import Path
 
-from lie_conv.lieGroups import SE3
+#from lie_conv.lieGroups import SE3
 
 from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
 from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
-from point_vs.models.vanilla.lie_conv import LieResNet
-from point_vs.models.vanilla.lie_transformer import EquivariantTransformer
+#from point_vs.models.vanilla.lie_conv import LieResNet
+#from point_vs.models.vanilla.lie_transformer import EquivariantTransformer
 from point_vs.utils import load_yaml, find_latest_checkpoint
 
 
@@ -19,7 +19,7 @@ def load_model(
         print('Found checkpoint at', '/'.join(str(model_path).split('/')[-3:]))
 
     model_kwargs = load_yaml(model_path.parents[1] / 'model_kwargs.yaml')
-    model_kwargs['group'] = SE3(0.2)
+    #model_kwargs['group'] = SE3(0.2)
     cmd_line_args = load_yaml(model_path.parents[1] / 'cmd_args.yaml')
     if 'node_attention' not in cmd_line_args.keys():
         cmd_line_args['node_attention'] = False

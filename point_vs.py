@@ -15,14 +15,14 @@ from pathlib import Path
 
 import torch
 import yaml
-from lie_conv.lieGroups import SE3
+#from lie_conv.lieGroups import SE3
 
 from point_vs import utils
 from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
 from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
-from point_vs.models.geometric.lie_transformer import EquivariantTransformer
+#from point_vs.models.geometric.lie_transformer import EquivariantTransformer
 from point_vs.models.siamese import SiameseNeuralNetwork
-from point_vs.models.vanilla.lie_conv import LieResNet
+#from point_vs.models.vanilla.lie_conv import LieResNet
 from point_vs.parse_args import parse_args
 from point_vs.preprocessing.data_loaders import get_data_loader, \
     PointCloudDataset, PygPointCloudDataset, SynthPharmDataset
@@ -73,10 +73,10 @@ if __name__ == '__main__':
         yaml.dump(vars(args), f)
 
     model_classes = {
-        'lieconv': LieResNet,
+        #'lieconv': LieResNet,
         'egnn': SartorrasEGNN,
         'lucid': PygLucidEGNN,
-        'lietransformer': EquivariantTransformer
+        #'lietransformer': EquivariantTransformer
     }
 
     if args.model not in model_classes.keys():
@@ -187,7 +187,7 @@ if __name__ == '__main__':
         'cache': False,
         'ds_frac': 1.0,
         'fill': args.fill,
-        'group': SE3(0.2),
+        #'group': SE3(0.2),
         'k': args.channels,
         'knn': False,
         'liftsamples': args.liftsamples,
