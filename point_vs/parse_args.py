@@ -7,7 +7,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('model', type=str,
                         help='Type of point cloud network to use: '
-                             'lietransformer, lieconv, lucid or egnn')
+                             'lucid or egnn')
     parser.add_argument('train_data_root', type=str,
                         help='Location of structure training *.parquets files. '
                              'Receptors should be in a directory named '
@@ -54,42 +54,20 @@ def parse_args():
                         help='Name of run for wandb logging.')
     parser.add_argument('--layers', type=int, default=6,
                         help='Number of layers in LieResNet')
-    parser.add_argument('--liftsamples', type=int, default=1,
-                        help='liftsamples parameter in LieConv')
     parser.add_argument('--radius', type=int, default=10,
                         help='Maximum distance from a ligand atom for a '
                              'receptor atom to be included in input')
-    parser.add_argument('--nbhd', type=int, default=32,
-                        help='Number of monte carlo samples for integral')
     parser.add_argument('--load_args', type=str,
                         help='Load yaml file with command line args. Any args '
                              'specified in the file will overwrite other args '
                              'specified on the command line.')
     parser.add_argument('--double', action='store_true',
                         help='Use 64-bit floating point precision')
-    parser.add_argument('--kernel_type', type=str, default='mlp',
-                        help='One of 2232, mlp, overrides attention_fn '
-                             '(see original repo) (LieTransformer)')
-    parser.add_argument('--attention_fn', type=str, default='dot_product',
-                        help='One of norm_exp, softmax, dot_product: '
-                             'activation for attention (overridden by '
-                             'kernel_type) (LieTransformer)')
     parser.add_argument('--activation', type=str, default='relu',
                         help='Activation function')
-    parser.add_argument('--kernel_dim', type=int, default=16,
-                        help='Size of linear layers in attention kernel '
-                             '(LieTransformer)')
-    parser.add_argument('--feature_embed_dim', type=int, default=None,
-                        help='Feature embedding dimension for attention; '
-                             'paper had dv=848 for QM9 (LieTransformer)')
-    parser.add_argument('--mc_samples', type=int, default=0,
-                        help='Monte carlo samples for attention '
-                             '(LieTransformer)')
     parser.add_argument('--dropout', type=float, default=0.0,
                         help='Chance for nodes to be inactivated on each '
                              'trainin batch (EGNN)')
-    parser.add_argument('--fill', type=float, default=0.75,
-                        help='LieTransformer fill parameter')
     parser.add_argument('--use_1cycle', action='store_true',
                         help='Use 1cycle learning rate scheduling')
     parser.add_argument('--warm_restarts', action='store_true',
@@ -176,15 +154,6 @@ def parse_args():
                         help='A poorly kept secret ;)')
     parser.add_argument('--graphnorm', action='store_true',
                         help='(EGNN) add GraphNorm layers to each node MLP')
-    parser.add_argument('--siamese', action='store_true',
-                        help='(EGNN) Split networks for receptor and ligand '
-                             'inputs')
-    parser.add_argument('--egnn_classify_on_edges', action='store_true',
-                        help='(EGNN) Classify on message embeddings (perhaps '
-                             'in conjunction with node embeddings)')
-    parser.add_argument('--egnn_classify_on_feats', action='store_true',
-                        help='(EGNN) Classify on node embeddings (perhaps '
-                             'in conjunction with message embeddings)')
     parser.add_argument('--multi_fc', action='store_true',
                         help='Three fully connected layers rather than just '
                              'one to summarise the graph at the end of '
@@ -249,13 +218,6 @@ def parse_args():
     parser.add_argument('--final_softplus', action='store_true',
                         help='Final layer in regression has softplus '
                              'nonlinearity')
-    parser.add_argument('--transformer_encoder', action='store_true',
-                        help='Put node embeddings through the encoder part '
-                             'of a transformer')
     parser.add_argument('--optimiser', '-o', type=str, default='adam',
                         help='Optimiser (either adam or sgd)')
-    parser.add_argument('--d_model', type=int, default=512)
-    parser.add_argument('--dim_feedforward', type=int, default=2048)
-    parser.add_argument('--n_heads', type=int, default=4)
-    parser.add_argument('--transformer_at_end', action='store_true')
     return parser.parse_args()

@@ -93,27 +93,7 @@ class PNNGeometricBase(PointNeuralNetworkBase):
             feats, edges, coords, edge_attributes, batch)
         total_nodes, k = feats.shape
         row, col = edges
-        if self.transformer_encoder and False:
-            max_nodes = 300
-            bs = int(torch.max(batch)) + 1
-            feats_ = torch.zeros(bs, max_nodes, k)
-            graph_sizes = torch.zeros(bs, dtype=torch.int32)
-            mask = torch.zeros(bs, max_nodes, dtype=torch.int32)
-            for i in range(bs):
-                node_values = feats[torch.where(batch == i)]
-                graph_size = min(node_values.size(0), max_nodes)
-                feats_[i, :graph_size, :] = node_values[:max_nodes]
-                graph_sizes[i] = graph_size
-                mask[i, :graph_size] = 1
-            feats = feats_.cuda()
-            graph_sizes.cuda()
-            feats = self.project_to_d_model(feats)
-            feats = self.attention_block(
-                feats, src_key_padding_mask=mask.T.cuda())
-            feats = GlobalAveragePooling()(feats, graph_sizes)
-            feats = self.feats_linear_layers(feats)
-            return feats
-        elif self.linear_gap:
+        if self.linear_gap:
             if self.feats_linear_layers is not None:
                 feats = self.feats_linear_layers(feats)
                 feats = global_mean_pool(feats, batch)

@@ -15,14 +15,11 @@ from pathlib import Path
 
 import torch
 import yaml
-#from lie_conv.lieGroups import SE3
 
 from point_vs import utils
 from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
 from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
-#from point_vs.models.geometric.lie_transformer import EquivariantTransformer
 from point_vs.models.siamese import SiameseNeuralNetwork
-#from point_vs.models.vanilla.lie_conv import LieResNet
 from point_vs.parse_args import parse_args
 from point_vs.preprocessing.data_loaders import get_data_loader, \
     PointCloudDataset, PygPointCloudDataset, SynthPharmDataset
@@ -69,27 +66,20 @@ if __name__ == '__main__':
     args.hostname = socket.gethostname()
     args.slurm_jobid = os.getenv('SLURM_JOBID')
 
-    with open(save_path / 'cmd_args.yaml', 'w') as f:
+    with open(save_path / 'cmd_args.yaml', 'w', encoding='utf-8') as f:
         yaml.dump(vars(args), f)
 
-    model_classes = {
-        #'lieconv': LieResNet,
-        'egnn': SartorrasEGNN,
-        'lucid': PygLucidEGNN,
-        #'lietransformer': EquivariantTransformer
-    }
-
-    if args.model not in model_classes.keys():
-        raise NotImplementedError(
-            'model must be one of ' + ', '.join(model_classes.keys()))
-
-    if args.model in ('lucid', 'egnn', 'lietransformer'):
-        if args.synthpharm:
-            dataset_class = SynthPharmDataset
-        else:
-            dataset_class = PygPointCloudDataset
+    if args.model == 'egnn':
+        model_class = SartorrasEGNN
+    elif args.model == 'lucid':
+        model_class = PygLucidEGNN
     else:
-        dataset_class = PointCloudDataset
+        raise NotImplementedError('model must be one of egnn or lucid')
+
+    if args.synthpharm:
+        dataset_class = SynthPharmDataset
+    else:
+        dataset_class = PygPointCloudDataset
 
     dl_kwargs = {
         'batch_size': args.batch_size,
@@ -99,8 +89,7 @@ if __name__ == '__main__':
         'rot': False,
         'polar_hydrogens': args.hydrogens,
         'fname_suffix': args.input_suffix,
-        'edge_radius': args.edge_radius if args.model != 'lietransformer'
-        else -1,
+        'edge_radius': args.edge_radius,
         'estimate_bonds': args.estimate_bonds,
         'prune': args.prune,
         'extended_atom_types': args.extended_atom_types,
@@ -108,76 +97,31 @@ if __name__ == '__main__':
         'include_strain_info': args.include_strain_info
     }
 
-    if args.siamese:
-        rec_train_dl = get_data_loader(
-            args.train_data_root,
-            dataset_class,
-            augmented_actives=args.augmented_actives,
-            min_aug_angle=args.min_aug_angle,
-            max_active_rms_distance=args.max_active_rmsd,
-            min_inactive_rms_distance=args.min_inactive_rmsd,
-            max_inactive_rms_distance=args.max_inactive_rmsd,
-            types_fname=args.train_types,
-            mode='train', bp=1,
-            **dl_kwargs
-        )
-        lig_train_dl = get_data_loader(
-            args.train_data_root,
-            dataset_class,
-            augmented_actives=args.augmented_actives,
-            min_aug_angle=args.min_aug_angle,
-            max_active_rms_distance=args.max_active_rmsd,
-            min_inactive_rms_distance=args.min_inactive_rmsd,
-            max_inactive_rms_distance=args.max_inactive_rmsd,
-            types_fname=args.train_types,
-            mode='train', bp=0,
-            **dl_kwargs
-        )
-        dim_input = lig_train_dl.dataset.feature_dim
-        train_dl = (rec_train_dl, lig_train_dl)
-    else:
-        train_dl = get_data_loader(
-            args.train_data_root,
-            dataset_class,
-            augmented_actives=args.augmented_actives,
-            min_aug_angle=args.min_aug_angle,
-            max_active_rms_distance=args.max_active_rmsd,
-            min_inactive_rms_distance=args.min_inactive_rmsd,
-            max_inactive_rms_distance=args.max_inactive_rmsd,
-            types_fname=args.train_types,
-            mode='train',
-            p_noise=args.p_noise,
-            p_remove_entity=args.p_remove_entity,
-            **dl_kwargs
-        )
-        dim_input = train_dl.dataset.feature_dim
+    train_dl = get_data_loader(
+        args.train_data_root,
+        dataset_class,
+        augmented_actives=args.augmented_actives,
+        min_aug_angle=args.min_aug_angle,
+        max_active_rms_distance=args.max_active_rmsd,
+        min_inactive_rms_distance=args.min_inactive_rmsd,
+        max_inactive_rms_distance=args.max_inactive_rmsd,
+        types_fname=args.train_types,
+        mode='train',
+        p_noise=args.p_noise,
+        p_remove_entity=args.p_remove_entity,
+        **dl_kwargs
+    )
+    dim_input = train_dl.dataset.feature_dim
 
     # Is a validation set specified?
     test_dl = None
     if args.test_data_root is not None:
-        if args.siamese:
-            rec_test_dl = get_data_loader(
-                args.test_data_root,
-                dataset_class,
-                types_fname=args.test_types,
-                bp=1, mode='val',
-                **dl_kwargs
-            )
-            lig_test_dl = get_data_loader(
-                args.test_data_root,
-                dataset_class,
-                types_fname=args.test_types,
-                bp=0, mode='val',
-                **dl_kwargs
-            )
-            test_dl = (rec_test_dl, lig_test_dl)
-        else:
-            test_dl = get_data_loader(
-                args.test_data_root,
-                dataset_class,
-                types_fname=args.test_types,
-                mode='val',
-                **dl_kwargs)
+        test_dl = get_data_loader(
+            args.test_data_root,
+            dataset_class,
+            types_fname=args.test_types,
+            mode='val',
+            **dl_kwargs)
 
     args_to_record = vars(args)
 
@@ -186,34 +130,11 @@ if __name__ == '__main__':
         'bn': True,
         'cache': False,
         'ds_frac': 1.0,
-        'fill': args.fill,
-        #'group': SE3(0.2),
         'k': args.channels,
-        'knn': False,
-        'liftsamples': args.liftsamples,
-        'mean': True,
-        'nbhd': args.nbhd,
         'num_layers': args.layers,
-        'pool': True,
         'dropout': args.dropout,
         'dim_input': dim_input,
         'dim_output': 3 if args.model_task == 'multi_regression' else 1,
-        'dim_hidden': args.channels,
-        'num_heads': 8,
-        'global_pool': True,
-        'global_pool_mean': True,
-        'block_norm': "layer_pre",
-        'output_norm': "none",
-        'kernel_norm': "none",
-        'kernel_type': args.kernel_type,
-        'kernel_dim': args.kernel_dim,
-        'kernel_act': args.activation,
-        'mc_samples': 4,
-        'attention_fn': args.attention_fn,
-        'feature_embed_dim': None,
-        'max_sample_norm': None,
-        'lie_algebra_nonlinearity': None,
-        'fourier_features': args.fourier_features,
         'norm_coords': args.norm_coords,
         'norm_feats': args.norm_feats,
         'thin_mlps': args.thin_mlps,
@@ -225,10 +146,6 @@ if __name__ == '__main__':
         'edge_residual': args.egnn_edge_residual,
         'linear_gap': args.linear_gap,
         'graphnorm': args.graphnorm,
-        'classify_on_edges': args.egnn_classify_on_edges if hasattr(
-            args, 'egnn_classify_on_edges') else False,
-        'classify_on_feats': args.egnn_classify_on_feats if hasattr(
-            args, 'egnn_classify_on_feats') else True,
         'multi_fc': args.multi_fc,
         'update_coords': not args.static_coords,
         'node_final_act': args.lucid_node_final_act,
@@ -244,11 +161,6 @@ if __name__ == '__main__':
         'model_task': args.model_task,
         'include_strain_info': args.include_strain_info,
         'final_softplus': args.final_softplus,
-        'transformer_encoder': args.transformer_encoder,
-        'd_model': args.d_model,
-        'dim_feedforward': args.dim_feedforward,
-        'n_heads': args.n_heads,
-        'transformer_at_end': args.transformer_at_end
     }
 
     args_to_record.update(model_kwargs)
@@ -266,25 +178,12 @@ if __name__ == '__main__':
         if args.wandb_run is not None:
             wandb.run.name = args.wandb_run
 
-    model_class = model_classes[args.model]
-    if model_class is None:
-        print('Required libraries for {} not found. Aborting.'.format(
-            args.model))
-        exit(1)
-
-    if args.siamese:
-        model = SiameseNeuralNetwork(
-            model_class, save_path, args.learning_rate, args.weight_decay,
-            wandb_project=args.wandb_project, use_1cycle=args.use_1cycle,
-            warm_restarts=args.warm_restarts, optimiser=args.optimiser,
-            only_save_best_models=args.only_save_best_models, **model_kwargs)
-    else:
-        model = model_class(
-            save_path, args.learning_rate, args.weight_decay,
-            wandb_project=args.wandb_project, use_1cycle=args.use_1cycle,
-            warm_restarts=args.warm_restarts,
-            only_save_best_models=args.only_save_best_models,
-            optimiser=args.optimiser, **model_kwargs)
+    model = model_class(
+        save_path, args.learning_rate, args.weight_decay,
+        wandb_project=args.wandb_project, use_1cycle=args.use_1cycle,
+        warm_restarts=args.warm_restarts,
+        only_save_best_models=args.only_save_best_models,
+        optimiser=args.optimiser, **model_kwargs)
 
     if args.load_weights is not None:
         model.load_weights(args.load_weights)
@@ -302,5 +201,5 @@ if __name__ == '__main__':
         model.val(test_dl, top1_on_end=args.top1)
 
     if args.end_flag:
-        with open(save_path / '_FINISHED', 'w') as f:
+        with open(save_path / '_FINISHED', 'w', encoding='utf-8') as f:
             f.write('')

@@ -5,7 +5,6 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from lie_conv.lieGroups import SE3
 from torch_geometric.data import Data
 
 from point_vs.preprocessing.data_loaders import get_data_loader, \
@@ -17,6 +16,7 @@ from point_vs.utils import to_numpy, _set_precision
 
 
 def setup():
+    """Ensure we can write to temporary test location."""
     _set_precision('float')
 
     # Tests should be repeatable
@@ -26,7 +26,8 @@ def setup():
     # Check if we can write to /tmp/; if not, write to test directory
     dump_path = Path('/tmp/pointvs_test')
     try:
-        open(dump_path / 'probe')
+        with open(dump_path / 'probe', 'w'):  # pylint: disable=unspecified-encoding
+            pass
     except IOError:
         dump_path = Path('test/dump_path')
     return dump_path
@@ -78,12 +79,7 @@ MODEL_KWARGS = {
     'act': 'relu',
     'bn': True,
     'cache': False,
-    'ds_frac': 0.75,
-    'fill': 0.75,
-    'group': SE3(0.2),
     'k': 32,
-    'knn': False,
-    'liftsamples': 4,
     'mean': True,
     'nbhd': 32,
     'num_layers': 6,
@@ -92,15 +88,6 @@ MODEL_KWARGS = {
     'dim_input': 12,
     'dim_output': 1,
     'dim_hidden': 32,  # == 32
-    'num_heads': 8,
-    'global_pool': True,
-    'global_pool_mean': True,
-    'block_norm': "layer_pre",
-    'output_norm': "none",
-    'kernel_norm': "none",
-    'kernel_type': 'mlp',
-    'kernel_dim': 16,
-    'kernel_act': 'relu',
     'mc_samples': 1,
     'attention_fn': 'softmax',
     'feature_embed_dim': None,

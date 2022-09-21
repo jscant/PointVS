@@ -1,3 +1,4 @@
+"""For Ruben (unused by @jscant)"""
 import time
 from abc import ABC
 from pathlib import Path
@@ -16,8 +17,7 @@ from point_vs.utils import mkdir, \
 
 
 class SiameseNeuralNetwork(PNNGeometricBase, ABC):
-    """Base (abstract) class for all point cloud based binary classifiers."""
-
+    """Siamese type point cloud neural network."""
     def __init__(self, gnn_class, save_path, learning_rate, weight_decay=None,
                  wandb_project=None, wandb_run=None, silent=False,
                  use_1cycle=False, warm_restarts=False, **model_kwargs):
@@ -81,7 +81,7 @@ class SiameseNeuralNetwork(PNNGeometricBase, ABC):
         self.scheduler = None  # will change this in training preamble
 
         if not silent:
-            with open(save_path / 'model_kwargs.yaml', 'w') as f:
+            with open(save_path / 'model_kwargs.yaml', 'w') as f:  #pylint: disable=unspecified-encoding
                 yaml.dump(model_kwargs, f)
 
         pc = self.param_count
