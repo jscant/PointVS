@@ -14,8 +14,6 @@ and LieTransformer with SE(3) equivariance to perform
 pose selection.
 
 ## Installation and Initialisation
-You are required to have SSH keys set up between your machine and GitHub
-for setup of some external pip dependencies.
 ```
 git clone https://github.com/jscant/PointVS
 cd PointVS
@@ -48,10 +46,35 @@ python3 point_vs.py egnn data/small_chembl_test test_output --train_types data/s
 ## Usage
 
 ```
-Usage: point_vs.py model train_data_root save_path
+usage: point_vs.py [-h] [--load_weights LOAD_WEIGHTS] [--test_data_root TEST_DATA_ROOT]
+                   [--translated_actives TRANSLATED_ACTIVES] [--batch_size BATCH_SIZE]
+                   [--epochs EPOCHS] [--channels CHANNELS] [--learning_rate LEARNING_RATE]
+                   [--weight_decay WEIGHT_DECAY] [--wandb_project WANDB_PROJECT]
+                   [--wandb_run WANDB_RUN] [--layers LAYERS] [--radius RADIUS]
+                   [--load_args LOAD_ARGS] [--double] [--activation ACTIVATION] [--dropout DROPOUT]
+                   [--use_1cycle] [--warm_restarts] [--fourier_features FOURIER_FEATURES]
+                   [--norm_coords] [--norm_feats] [--use_atomic_numbers] [--compact] [--thin_mlps]
+                   [--hydrogens] [--augmented_actives AUGMENTED_ACTIVES]
+                   [--min_aug_angle MIN_AUG_ANGLE] [--max_active_rmsd MAX_ACTIVE_RMSD]
+                   [--min_inactive_rmsd MIN_INACTIVE_RMSD] [--val_on_epoch_end] [--synth_pharm]
+                   [--input_suffix INPUT_SUFFIX] [--train_types TRAIN_TYPES]
+                   [--test_types TEST_TYPES] [--egnn_attention] [--egnn_tanh] [--egnn_normalise]
+                   [--egnn_residual] [--edge_radius EDGE_RADIUS] [--end_flag]
+                   [--wandb_dir WANDB_DIR] [--estimate_bonds] [--linear_gap] [--prune] [--top1]
+                   [--graphnorm] [--multi_fc] [--lucid_node_final_act]
+                   [--p_remove_entity P_REMOVE_ENTITY] [--static_coords] [--permutation_invariance]
+                   [--node_attention]
+                   [--attention_activation_function ATTENTION_ACTIVATION_FUNCTION]
+                   [--node_attention_final_only] [--edge_attention_final_only]
+                   [--node_attention_first_only] [--edge_attention_first_only]
+                   [--only_save_best_models] [--egnn_edge_residual] [--gated_residual] [--rezero]
+                   [--extended_atom_types] [--max_inactive_rmsd MAX_INACTIVE_RMSD]
+                   [--model_task MODEL_TASK] [--synthpharm] [--p_noise P_NOISE]
+                   [--include_strain_info] [--final_softplus] [--optimiser OPTIMISER]
+                   model train_data_root save_path
 
 positional arguments:
-  model                 Type of point cloud network to use: lietransformer, lieconv, lucid or egnn
+  model                 Type of point cloud network to use: lucid or egnn
   train_data_root       Location of structure training *.parquets files. Receptors should be in a
                         directory named receptors, with ligands located in their specific receptor
                         subdirectory under the ligands directory.
@@ -77,12 +100,6 @@ optional arguments:
                         Number of times to iterate through training set.
   --channels CHANNELS, -k CHANNELS
                         Channels for feature vectors
-  --train_receptors [TRAIN_RECEPTORS [TRAIN_RECEPTORS ...]], -r [TRAIN_RECEPTORS [TRAIN_RECEPTORS ...]]
-                        Names of specific receptors for training. If specified, other structures
-                        will be ignored.
-  --test_receptors [TEST_RECEPTORS [TEST_RECEPTORS ...]], -q [TEST_RECEPTORS [TEST_RECEPTORS ...]]
-                        Names of specific receptors for testing. If specified, other structures
-                        will be ignored.
   --learning_rate LEARNING_RATE, -lr LEARNING_RATE
                         Learning rate for gradient descent
   --weight_decay WEIGHT_DECAY, -w WEIGHT_DECAY
@@ -92,42 +109,25 @@ optional arguments:
   --wandb_run WANDB_RUN
                         Name of run for wandb logging.
   --layers LAYERS       Number of layers in LieResNet
-  --liftsamples LIFTSAMPLES
-                        liftsamples parameter in LieConv
   --radius RADIUS       Maximum distance from a ligand atom for a receptor atom to be included in
                         input
-  --nbhd NBHD           Number of monte carlo samples for integral
   --load_args LOAD_ARGS
                         Load yaml file with command line args. Any args specified in the file will
                         overwrite other args specified on the command line.
   --double              Use 64-bit floating point precision
-  --kernel_type KERNEL_TYPE
-                        One of 2232, mlp, overrides attention_fn (see original repo)
-                        (LieTransformer)
-  --attention_fn ATTENTION_FN
-                        One of norm_exp, softmax, dot_product: activation for attention (overridden
-                        by kernel_type) (LieTransformer)
   --activation ACTIVATION
                         Activation function
-  --kernel_dim KERNEL_DIM
-                        Size of linear layers in attention kernel (LieTransformer)
-  --feature_embed_dim FEATURE_EMBED_DIM
-                        Feature embedding dimension for attention; paper had dv=848 for QM9
-                        (LieTransformer)
-  --mc_samples MC_SAMPLES
-                        Monte carlo samples for attention (LieTransformer)
   --dropout DROPOUT     Chance for nodes to be inactivated on each trainin batch (EGNN)
-  --fill FILL           LieTransformer fill parameter
   --use_1cycle          Use 1cycle learning rate scheduling
   --warm_restarts       Use cosine annealing with warm restarts
   --fourier_features FOURIER_FEATURES
-                        (EGNN) Number of fourier terms to use when encoding distances (default is
+                        (Lucid) Number of fourier terms to use when encoding distances (default is
                         not to use fourier distance encoding)
-  --norm_coords         (EGNN) Normalise coordinate vectors
-  --norm_feats          (EGNN) Normalise feature vectors
+  --norm_coords         (Lucid) Normalise coordinate vectors
+  --norm_feats          (Lucid) Normalise feature vectors
   --use_atomic_numbers  Use atomic numbers rather than smina types
   --compact             Use compact rather than true one-hot encodings
-  --thin_mlps           (EGNN) Use single layer MLPs for edge, node and coord updates
+  --thin_mlps           (Lucid) Use single layer MLPs for edge, node and coord updates
   --hydrogens           Include polar hydrogens
   --augmented_actives AUGMENTED_ACTIVES
                         Number of randomly rotated actives to be included as decoys during training
@@ -171,6 +171,48 @@ optional arguments:
                         pooling layer. This can improve performance significantly.
   --prune               (EGNN) Prune subgraphs which are not connected to the ligand
   --top1                A poorly kept secret ;)
+  --graphnorm           (EGNN) add GraphNorm layers to each node MLP
+  --multi_fc            Three fully connected layers rather than just one to summarise the graph at
+                        the end of the EGNN
+  --lucid_node_final_act
+                        (Lucid) SiLU at the end of node MLPs
+  --p_remove_entity P_REMOVE_ENTITY
+                        Rate at which one of (randomly selected) ligand or receptor is removed and
+                        label is forced to zero
+  --static_coords       Do not update coords (eq. 4, EGNN)
+  --permutation_invariance
+                        Edge features are invariant to order of input node (EGNN, experimental)
+  --node_attention      Use attention mechanism for nodes
+  --attention_activation_function ATTENTION_ACTIVATION_FUNCTION
+                        One of sigmoid, relu, silu or tanh
+  --node_attention_final_only
+                        Only apply attention mechanism to nodes in the final layer
+  --edge_attention_final_only
+                        Only apply attention mechanism to edges in the final layer
+  --node_attention_first_only
+                        Only apply attention mechanism to nodes in the first layer
+  --edge_attention_first_only
+                        Only apply attention mechanism to edges in the first layer
+  --only_save_best_models
+                        Only save models which improve upon previous models
+  --egnn_edge_residual  Residual connections for individual messages (EGNN)
+  --gated_residual      Residual connections are gated by a single learnable parameter (EGNN), see
+                        home.ttic.edu/~savarese/savarese_files/Residual_Gates.pdf
+  --rezero              ReZero residual connections (EGNN), see arxiv.org/pdf/2003.04887.pdf
+  --extended_atom_types
+                        18 atom types rather than 10
+  --max_inactive_rmsd MAX_INACTIVE_RMSD
+                        Discard structures beyond <x> RMSD from xtal pose
+  --model_task MODEL_TASK
+                        One of either classification or regression; regression is 3-class
+                        regression on binding affinities.
+  --synthpharm          For tom
+  --p_noise P_NOISE     Probability of label being inverted during training
+  --include_strain_info
+                        Include info on strain energy and RMSD from ground state of ligand
+  --final_softplus      Final layer in regression has softplus nonlinearity
+  --optimiser OPTIMISER, -o OPTIMISER
+                        Optimiser (either adam or sgd)
 ```
 
 ## Dataset generation
