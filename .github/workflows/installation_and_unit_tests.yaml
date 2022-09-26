@@ -42,4 +42,4 @@ jobs:
       - name: Preprocessing imports
         run: python3 point_vs/preprocessing/preprocessing.py -h
       - name: Unit tests
-        run: pytest -v --ignore=test/test_invariance.py  --ignore=test/test_consistency.py --ignore=test/test_class_instantiation.py
+        run: pytest -v
