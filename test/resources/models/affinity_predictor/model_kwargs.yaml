@@ -1,0 +1,70 @@
+act: relu
+attention: true
+attention_activation_fn: sigmoid
+attention_fn: dot_product
+block_norm: layer_pre
+bn: true
+cache: false
+classify_on_edges: false
+classify_on_feats: true
+dim_hidden: 32
+dim_input: 12
+dim_output: 3
+dropout: 0.0
+ds_frac: 1.0
+edge_attention: true
+edge_attention_final_only: false
+edge_attention_first_only: false
+edge_residual: false
+feature_embed_dim: null
+fill: 0.75
+final_softplus: false
+fourier_features: 0
+gated_residual: false
+global_pool: true
+global_pool_mean: true
+graphnorm: false
+group: !!python/object:lie_conv.lieGroups.SE3
+  alpha: 0.2
+  debug_config:
+    add_random_offsets: true
+    ensure_thetas_in_range: true
+    tol: 0.007
+  dual_quaternions: true
+  nsamples: null
+  per_point: 0.2
+  positive_quaternions: false
+  use_pseudo: false
+include_strain_info: false
+k: 32
+kernel_act: relu
+kernel_dim: 16
+kernel_norm: none
+kernel_type: mlp
+knn: false
+lie_algebra_nonlinearity: null
+liftsamples: 1
+linear_gap: false
+max_sample_norm: null
+mc_samples: 4
+mean: true
+model_task: multi_regression
+multi_fc: false
+nbhd: 32
+node_attention: false
+node_attention_final_only: false
+node_attention_first_only: false
+node_final_act: false
+norm_coords: true
+norm_feats: true
+normalize: true
+num_heads: 8
+num_layers: 48
+output_norm: none
+permutation_invariance: false
+pool: true
+residual: true
+rezero: false
+tanh: true
+thin_mlps: false
+update_coords: true

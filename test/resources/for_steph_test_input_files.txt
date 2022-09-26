@@ -1,0 +1,1 @@
+resources/7zzp_rec_0.pdb resources/7zzp_lig_0.sdf
