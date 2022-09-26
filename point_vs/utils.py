@@ -418,14 +418,18 @@ def pretify_dict(d, padding=5):
 
 def save_yaml(d, fname):
     """Save a dictionary in yaml format."""
-    with open(Path(fname).expanduser(), 'w') as f:
+    with open(Path(fname).expanduser(), 'w', encoding='utf-8') as f:
         yaml.dump(d, stream=f)
 
 
 def load_yaml(fname):
     """Load a yaml dictionary"""
-    with open(Path(fname).expanduser(), 'r') as f:
-        return yaml.load(f, Loader=yaml.Loader)
+    # For backwards compatability reasons we should ignore missing constructors
+    yaml.add_multi_constructor(
+        '',
+        lambda loader, suffix, node: None, Loader=yaml.SafeLoader)
+    with open(Path(fname).expanduser(), 'r', encoding='utf-8') as f:
+        return yaml.load(f, Loader=yaml.SafeLoader)
 
 
 def shorten_home(path, make_absolute=False):
