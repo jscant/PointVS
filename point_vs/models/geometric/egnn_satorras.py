@@ -1,7 +1,12 @@
+"""Equivariant graph neural network class.
+
+The E_GCL layer is modified from the code released with the original EGNN paper,
+found at https://github.com/vgsatorras/egnn.
+"""
 import torch
 from torch import nn
-from torch.nn import functional as F, TransformerEncoder
-from torch_geometric.nn.norm import GraphNorm
+from torch.nn import functional as F
+from torch_geometric.nn.norm import GraphNorm  # pylint:disable=no-name-in-module
 from torch_geometric.utils import dropout_adj
 
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase, \
@@ -11,14 +16,29 @@ from point_vs.utils import to_numpy
 
 class E_GCL(nn.Module):
     """Modified from https://github.com/vgsatorras/egnn"""
+    # pylint: disable = R, W, C
 
-    def __init__(self, input_nf, output_nf, hidden_nf, edges_in_d=0,
-                 act_fn=nn.SiLU(), residual=True, edge_residual=False,
-                 edge_attention=False, normalize=False, coords_agg='mean',
-                 tanh=False, graphnorm=False, update_coords=True,
-                 permutation_invariance=False, node_attention=False,
-                 attention_activation_fn='sigmoid',
-                 gated_residual=False, rezero=False):
+    def __init__(
+        self,
+        input_nf: int,
+        output_nf: int,
+        hidden_nf: int,
+        edges_in_d: int = 0,
+        act_fn: nn.Module = nn.SiLU(),
+        residual: bool = True,
+        edge_residual: bool = False,
+        edge_attention: bool = False,
+        normalize: bool = False,
+        coords_agg: str = 'mean',
+        tanh: bool = False,
+        graphnorm: bool = False,
+        update_coords: bool = True,
+        permutation_invariance: bool = False,
+        node_attention: bool = False,
+        attention_activation_fn: bool = 'sigmoid',
+        gated_residual: bool = False,
+        rezero: bool = False
+    ):
         assert not (gated_residual and rezero), 'gated_residual and rezero ' \
                                                 'are incompatible'
         super(E_GCL, self).__init__()
@@ -180,34 +200,42 @@ class E_GCL(nn.Module):
 
         return h, coord, edge_attr, edge_feat
 
-def init_weights(m):
-    if isinstance(m, nn.Linear):
-        torch.nn.init.xavier_uniform_(m.weight)
-        m.bias.data.fill_(0.01)
-
 
 class SartorrasEGNN(PNNGeometricBase):
-    def build_net(self, dim_input, k, dim_output,
-                  act_fn=nn.SiLU(), num_layers=4, residual=True,
-                  edge_residual=False, edge_attention=False, normalize=True,
-                  tanh=True, dropout=0, graphnorm=True, classify_on_edges=False,
-                  classify_on_feats=True, multi_fc=False, update_coords=True,
-                  permutation_invariance=False,
-                  attention_activation_fn='sigmoid',
-                  node_attention=False, node_attention_final_only=False,
-                  edge_attention_final_only=False,
-                  node_attention_first_only=False,
-                  edge_attention_first_only=False,
-                  gated_residual=False, rezero=False,
-                  model_task='classification',
-                  include_strain_info=False,
-                  final_softplus=False,
-                  transformer_encoder=False,
-                  d_model=512,
-                  dim_feedforward=2048,
-                  n_heads=8,
-                  transformer_at_end=True,
-                  **kwargs):
+    """Equivariant network based on the E_GCL layer."""
+    # pylint: disable = R, W0201, W0613
+    def build_net(
+        self,
+        dim_input: int,
+        k: int,
+        dim_output: int,
+        act_fn: nn.Module = nn.SiLU(),
+        num_layers: int = 4,
+        residual: bool = True,
+        edge_residual: bool =False,
+        edge_attention: bool = False,
+        normalize: bool = True,
+        tanh: bool = True,
+        dropout: float = 0.0,
+        graphnorm: bool = True,
+        classify_on_edges: bool = False,
+        classify_on_feats: bool = True,
+        multi_fc: bool = False,
+        update_coords: bool = True,
+        permutation_invariance: bool = False,
+        attention_activation_fn: str = 'sigmoid',
+        node_attention: bool = False,
+        node_attention_final_only: bool = False,
+        edge_attention_final_only: bool = False,
+        node_attention_first_only: bool = False,
+        edge_attention_first_only: bool = False,
+        gated_residual: bool = False,
+        rezero: bool = False,
+        model_task: str = 'classification',
+        include_strain_info: bool = False,
+        final_softplus: bool = False,
+        **kwargs
+    ):
         """
         Arguments:
             dim_input: Number of features for 'h' at the input
@@ -227,38 +255,31 @@ class SartorrasEGNN(PNNGeometricBase):
             tanh: Sets a tanh activation function at the output of phi_x(
                 m_ij). I.e. it bounds the output of phi_x(m_ij) which definitely
                 improves in stability but it may decrease in accuracy.
-            dropout:
-            graphnorm:
-            classify_on_edges:
-            classify_on_feats:
-            multi_fc:
-            update_coords:
-            permutation_invariance:
-            attention_activation_fn:
-            node_attention:
-            node_attention_final_only:
-            edge_attention_final_only:
-            node_attention_first_only:
-            edge_attention_first_only:
-            gated_residual:
-            rezero:
-            model_task:
+            dropout: dropout rate for edge/node/coordinate MLPs.
+            graphnorm: apply graph normalisation.
+            classify_on_edges: final classification on edges.
+            classify_on_feats: final classification on features (recommended).
+            multi_fc: multiple fully connected layers at the end.
+            update_coords: coordinates update at each layer.
+            permutation_invariance: edges embeddings are summed rather than
+                concatenated.
+            attention_activation_fn: activation function for attention MLPs.
+            node_attention: apply attention MLPs to node embeddings.
+            node_attention_final_only: only apply attention to nodes in final
+                layer.
+            edge_attention_final_only: only apply attention to edges in final
+                layer.
+            node_attention_first_only: only apply attention to nodes in first
+                layer.
+            edge_attention_first_only: only apply attention to nodes in first
+                layer.
+            gated_residual: residual connections are gated by learnable scalar
+                value.
+            rezero: apply ReZero normalisation.
+            model_task: 'classification' or 'regression'.
         """
-        if transformer_encoder and not transformer_at_end:
-            layers = [PygLinearPass(nn.Linear(dim_input, d_model),
-                                    return_coords_and_edges=True)]
-            transformer_encoder_layer = torch.nn.TransformerEncoderLayer(
-                d_model=d_model, nhead=n_heads, dim_feedforward=dim_feedforward,
-                dropout=0.0)
-            transformer_encoder_block = torch.nn.TransformerEncoder(
-                transformer_encoder_layer, 6)
-            layers.append(transformer_encoder_block)
-            layers.append(nn.Linear(d_model, k))
-            for layer in layers:
-                layer.apply(init_weights)
-        else:
-            layers = [PygLinearPass(nn.Linear(dim_input, k),
-                                    return_coords_and_edges=True)]
+        layers = [PygLinearPass(nn.Linear(dim_input, k),
+                                return_coords_and_edges=True)]
         self.n_layers = num_layers
         self.dropout_p = dropout
         self.residual = residual
@@ -267,8 +288,6 @@ class SartorrasEGNN(PNNGeometricBase):
         self.rezero = rezero
         self.model_task = model_task
         self.include_strain_info = include_strain_info
-        self.transformer_encoder = transformer_encoder
-        self.transformer_at_end = transformer_at_end
 
         assert classify_on_feats or classify_on_edges, \
             'We must use either or both of classify_on_feats and ' \
@@ -325,42 +344,20 @@ class SartorrasEGNN(PNNGeometricBase):
         else:
             fc_layer_dims = ((k, dim_output),)
 
-        if transformer_encoder and False:
-            transformer_encoder_layer = torch.nn.TransformerEncoderLayer(
-                d_model=d_model, nhead=n_heads, dim_feedforward=dim_feedforward,
-                dropout=0.1)
-            transformer_encoder_block = torch.nn.TransformerEncoder(
-                transformer_encoder_layer, 6)
-            self.project_to_d_model = nn.Linear(k, d_model)
-            self.attention_block = transformer_encoder_block
-            self.feats_linear_layers = nn.Linear(d_model, dim_output)
-        elif transformer_encoder and transformer_at_end:
-            transformer_encoder_layer = torch.nn.TransformerEncoderLayer(
-                d_model=d_model, nhead=n_heads, dim_feedforward=dim_feedforward,
-                dropout=0.0)
-            transformer_encoder_block = torch.nn.TransformerEncoder(
-                transformer_encoder_layer, 6)
-            transformer_encoder_block.apply(init_weights)
-            self.feats_linear_layers = nn.Sequential(
-                nn.Linear(k, d_model),
-                transformer_encoder_block,
-                nn.Linear(d_model, dim_output)
-            )
-        else:
-            feats_linear_layers = []
-            edges_linear_layers = []
-            for idx, (in_dim, out_dim) in enumerate(fc_layer_dims):
-                feats_linear_layers.append(nn.Linear(in_dim, out_dim))
-                edges_linear_layers.append(nn.Linear(in_dim, out_dim))
-                if idx < len(fc_layer_dims) - 1:
-                    feats_linear_layers.append(nn.SiLU())
-                    edges_linear_layers.append(nn.SiLU())
-            if final_softplus:
-                feats_linear_layers.append(nn.ReLU())
-            if classify_on_feats:
-                self.feats_linear_layers = nn.Sequential(*feats_linear_layers)
-            if classify_on_edges:
-                self.edges_linear_layers = nn.Sequential(*edges_linear_layers)
+        feats_linear_layers = []
+        edges_linear_layers = []
+        for idx, (in_dim, out_dim) in enumerate(fc_layer_dims):
+            feats_linear_layers.append(nn.Linear(in_dim, out_dim))
+            edges_linear_layers.append(nn.Linear(in_dim, out_dim))
+            if idx < len(fc_layer_dims) - 1:
+                feats_linear_layers.append(nn.SiLU())
+                edges_linear_layers.append(nn.SiLU())
+        if final_softplus:
+            feats_linear_layers.append(nn.ReLU())
+        if classify_on_feats:
+            self.feats_linear_layers = nn.Sequential(*feats_linear_layers)
+        if classify_on_edges:
+            self.edges_linear_layers = nn.Sequential(*edges_linear_layers)
         return nn.Sequential(*layers)
 
     def get_embeddings(self, feats, edges, coords, edge_attributes, batch):
@@ -369,19 +366,8 @@ class SartorrasEGNN(PNNGeometricBase):
                 edges, edge_attributes, self.dropout_p, force_undirected=True,
                 training=self.training)
         edge_messages = None
-        next_linear = False
         for i in self.layers:
-            if not self.transformer_at_end and (
-                    isinstance(i, torch.nn.TransformerEncoder) or next_linear):
-                feats = i(feats)
-                next_linear = True
-                if not isinstance(i, torch.nn.TransformerEncoder):
-                    next_linear = False
-            else:
-                x = i(
-                    h=feats, edge_index=edges, coord=coords,
-                    edge_attr=edge_attributes, edge_messages=edge_messages)
-                feats, coords, edge_attributes, edge_messages = i(
-                    h=feats, edge_index=edges, coord=coords,
-                    edge_attr=edge_attributes, edge_messages=edge_messages)
+            feats, coords, edge_attributes, edge_messages = i(
+                h=feats, edge_index=edges, coord=coords,
+                edge_attr=edge_attributes, edge_messages=edge_messages)
         return feats, edge_messages

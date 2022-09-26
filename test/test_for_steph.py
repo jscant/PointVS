@@ -35,4 +35,4 @@ def test_predict_on_molecular_inputs():
             output_dir=output_dir
         )
         with open(output_dir / 'predictions.txt', 'r', encoding='utf-8') as f:
-            assert f.read() == '3.930 4.127 3.569 resources/7zzp_rec_0.parquet resources/7zzp_lig_0.parquet\n'
+            assert f.read() == '4.052 3.838 3.827 resources/7zzp_rec_0.parquet resources/7zzp_lig_0.parquet\n'
