@@ -7,6 +7,7 @@ from torch_geometric.nn import global_mean_pool
 from point_vs.models.point_neural_network_base import PointNeuralNetworkBase
 from point_vs.utils import to_numpy
 
+_device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 def unsorted_segment_sum(data, segment_ids, num_segments):
     result_shape = (num_segments, data.size(1))
@@ -71,7 +72,7 @@ class GlobalAveragePooling(nn.Module):
             x.shape) == 3, 'input to GAP should be shape (bs, max_len, k)'
         if graph_sizes is None:
             return torch.mean(x, dim=2)
-        output = torch.zeros(x.shape[0], x.shape[2]).cuda()
+        output = torch.zeros(x.shape[0], x.shape[2]).to(_device)
         for i in range(x.size(0)):
             output[i] = torch.mean(x[i, :graph_sizes[i], :], dim=0)
         return output
@@ -140,15 +141,15 @@ class PNNGeometricBase(PointNeuralNetworkBase):
         pass
 
     def prepare_input(self, x):
-        return x.cuda()
+        return x.to(_device)
 
     def unpack_graph(self, graph):
-        objs = [graph.x.float().cuda(), graph.edge_index.cuda(),
-                graph.pos.float().cuda(), graph.edge_attr.cuda(),
-                graph.batch.cuda()]
+        objs = [graph.x.float().to(_device), graph.edge_index.to(_device),
+                graph.pos.float().to(_device), graph.edge_attr.to(_device),
+                graph.batch.to(_device)]
         if self.include_strain_info:
-            objs += [graph.dE.reshape(-1, 1).float().cuda(),
-                     graph.rmsd.reshape(-1, 1).float().cuda()]
+            objs += [graph.dE.reshape(-1, 1).float().to(_device),
+                     graph.rmsd.reshape(-1, 1).float().to(_device)]
         return tuple(objs)
 
     @staticmethod

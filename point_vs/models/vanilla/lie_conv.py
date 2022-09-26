@@ -50,10 +50,10 @@ class LieResNet(PNNVanillaBase):
     """Generic ResNet architecture from https://arxiv.org/abs/2002.12880"""
 
     def _get_y_true(self, y):
-        return y.cuda()
+        return y.to(_device)
 
     def prepare_input(self, x):
-        return tuple([inp.cuda() for inp in x])
+        return tuple([inp.to(_device) for inp in x])
 
     def build_net(self, dim_input, dim_output, ds_frac=1, k=1536, nbhd=np.inf,
                   act="swish", bn=True, num_layers=6, pool=True, liftsamples=1,
@@ -108,7 +108,7 @@ class LieResNet(PNNVanillaBase):
         return layers
 
     def forward(self, x):
-        x = tuple([ten.cuda() for ten in self.group.lift(x, self.liftsamples)])
+        x = tuple([ten.to(_device) for ten in self.group.lift(x, self.liftsamples)])
         for layer in self.layers:
             x = layer(x)
         return x

@@ -16,7 +16,7 @@ dump_path = setup()
 def test_sartorras_egnn_consistency():
     """Check that satorras satorras-egnn-based model is consistent."""
     model = SartorrasEGNN(
-        dump_path, 0, 0, None, None, **MODEL_KWARGS).cuda().eval()
+        dump_path, 0, 0, None, None, **MODEL_KWARGS).to(_device).eval()
     unrotated_result = float(torch.sigmoid(model(ORIGINAL_GRAPH)))
 
     assert unrotated_result != pytest.approx(0, abs=1e-5)
@@ -28,7 +28,7 @@ def test_sartorras_egnn_consistency():
 def test_lucid_egnn_consistency():
     """Check that lucid lucidrains-egnn-based model is consistent."""
     model = PygLucidEGNN(
-        dump_path, 0, 0, None, None, **MODEL_KWARGS).cuda().eval()
+        dump_path, 0, 0, None, None, **MODEL_KWARGS).to(_device).eval()
     unrotated_result = float(torch.sigmoid(model(ORIGINAL_GRAPH)))
 
     assert unrotated_result != pytest.approx(0, abs=1e-5)

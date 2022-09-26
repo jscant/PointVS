@@ -102,13 +102,13 @@ MODEL_KWARGS = {
 }
 
 N_SAMPLES = 10
-ORIGINAL_COORDS = torch.rand(1, 100, 3).cuda()
+ORIGINAL_COORDS = torch.rand(1, 100, 3).to(_device)
 ROTATED_COORDS = [
     torch.from_numpy(
         uniform_random_rotation(
             to_numpy(
                 ORIGINAL_COORDS.reshape(
-                    (100, 3))))).reshape(1, 100, 3).float().cuda()
+                    (100, 3))))).reshape(1, 100, 3).float().to(_device)
     for _ in range(N_SAMPLES)]
-FEATS = torch.rand(1, 100, 12).cuda()
-MASK = torch.ones(1, 100).bool().cuda()
+FEATS = torch.rand(1, 100, 12).to(_device)
+MASK = torch.ones(1, 100).bool().to(_device)

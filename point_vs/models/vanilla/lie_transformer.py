@@ -11,10 +11,10 @@ class EquivariantTransformer(PNNVanillaBase):
     """Adapted from https://github.com/anonymous-code-0/lie-transformer"""
 
     def _get_y_true(self, y):
-        return y.cuda()
+        return y.to(_device)
 
     def prepare_input(self, x):
-        return tuple([ten.cuda() for ten in x])
+        return tuple([ten.to(_device) for ten in x])
 
     def build_net(self, dim_input, dim_output, dim_hidden, num_layers,
                   num_heads, global_pool_mean=True, group=SE3(0.2),

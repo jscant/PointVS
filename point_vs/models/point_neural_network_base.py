@@ -16,6 +16,7 @@ from point_vs.utils import get_eta, format_time, print_with_overwrite, mkdir, \
     to_numpy, expand_path, load_yaml, get_regression_pearson, \
     find_latest_checkpoint
 
+_device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 class PointNeuralNetworkBase(nn.Module):
     """Base (abstract) class for all point cloud based binary classifiers."""
@@ -103,7 +104,7 @@ class PointNeuralNetworkBase(nn.Module):
         if self.wandb_project is not None:
             wandb.log({'Parameters': pc})
 
-        self.cuda()
+        self.to(_device)
 
     @abstractmethod
     def prepare_input(self, x):
@@ -288,9 +289,9 @@ class PointNeuralNetworkBase(nn.Module):
 
     def get_loss(self, y_true, y_pred):
         if self.model_task != 'multi_regression':
-            return self.loss_function(y_pred, y_true.cuda())
+            return self.loss_function(y_pred, y_true.to(_device))
         y_pred[torch.where(y_true == -1)] = -1
-        return 3 * self.loss_function(y_pred, y_true.cuda())
+        return 3 * self.loss_function(y_pred, y_true.to(_device))
 
     def training_setup(self, data_loader, epochs):
         start_time = time.time()

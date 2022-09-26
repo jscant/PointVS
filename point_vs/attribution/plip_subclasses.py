@@ -444,7 +444,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
 
             v = repeat(v, 'n d -> b n d', b=1)
 
-            model = model.eval().cuda()
+            model = model.eval().to(_device)
 
             if isinstance(model, PNNGeometricBase):
 
@@ -459,7 +459,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                 )))
 
             else:
-                pre_activation = model((p.cuda(), v.cuda(), m.cuda()))[0, ...]
+                pre_activation = model((p.to(_device), v.to(_device), m.to(_device)))[0, ...]
                 edge_indices = None
 
             if model.model_task == 'classification':
@@ -479,7 +479,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                     print('Original score: {:.4f}'.format(score))
 
             model_labels = attribution_fn(
-                model, p.cuda(), v.cuda(), edge_attrs=edge_attrs,
+                model, p.to(_device), v.to(_device), edge_attrs=edge_attrs,
                 edge_indices=edge_indices, bs=bs, gnn_layer=gnn_layer,
                 resis=df['resi'].to_numpy())
 
@@ -534,7 +534,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
 
                 v = repeat(v, 'n d -> b n d', b=1)
 
-                model = model.eval().cuda()
+                model = model.eval().to(_device)
 
                 edge_indices = torch.from_numpy(np.vstack(edge_indices)).long()
                 edge_attrs = one_hot(torch.from_numpy(edge_attrs).long(), 3)
@@ -567,7 +567,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                 if not idx:
                     original_score = score
                     atomic_model_labels = attribution_fn(
-                        model, p.cuda(), v.cuda(), edge_attrs=edge_attrs,
+                        model, p.to(_device), v.to(_device), edge_attrs=edge_attrs,
                         edge_indices=edge_indices, bs=bs, gnn_layer=gnn_layer)
                 else:
                     residue_scores[resi] = original_score - score

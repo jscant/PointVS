@@ -64,8 +64,8 @@ class EquivariantTransformer(PNNGeometricBase):
 
     def get_embeddings(self, feats, edges, coords, edge_attributes, batch):
         batch_size = coords.shape[0]
-        x = (coords[None, ...].cuda(), feats[None, ...].cuda(),
-             torch.ones(1, batch_size).bool().cuda())
+        x = (coords[None, ...].to(_device), feats[None, ...].to(_device),
+             torch.ones(1, batch_size).bool().to(_device))
         if self.max_sample_norm is None:
             lifted_data = self.group.lift(x, self.liftsamples)
         else:

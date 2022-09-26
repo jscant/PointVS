@@ -288,7 +288,7 @@ class PygLucidEGNN(PNNGeometricBase):
         return nn.Sequential(*layers)
 
     def get_embeddings(self, feats, edges, coords, edge_attributes, batch):
-        h = torch.cat([coords, feats], dim=-1).cuda()
+        h = torch.cat([coords, feats], dim=-1).to(_device)
         for i in self.layers:
             h = i(h=h, edge_index=edges, edge_attr=edge_attributes, batch=batch)
         return h[:, 3:], None
