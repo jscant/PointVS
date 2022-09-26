@@ -1,17 +1,36 @@
+"""Load a model from a saved checkpoint."""
 from pathlib import Path
+from typing import Dict, Tuple, Union
 
-#from lie_conv.lieGroups import SE3
+from torch import nn
 
 from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
 from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
-#from point_vs.models.vanilla.lie_conv import LieResNet
-#from point_vs.models.vanilla.lie_transformer import EquivariantTransformer
 from point_vs.utils import load_yaml, find_latest_checkpoint
 
+Fname = Union[str, Path]
 
 def load_model(
-        weights_file, silent=True, fetch_args_only=False, init_path=False):
-    model_path = Path(weights_file).expanduser()
+        model_path: Fname,
+        silent: bool = True,
+        fetch_args_only: bool = False,
+        init_path: bool = False) -> Tuple[Path, nn.Module, Dict, Dict]:
+    """Load model weights and arguments used to train model.
+
+    Arguments:
+        model_path: Location of the model checkpoint. Either a *.pt file, or
+            a directory containing the checkpoints subdirectory in which case
+            the latest saved weights will be loaded.
+        silent: Do not print messages to stdout.
+        fetch_args_only: Do not retrieve model weights.
+        init_path: Create output directories.
+
+    Returns:
+        Tuple containing the path to the model weights file, the pytorch model
+        object, and dictionaries containing the arguments used to train the
+        model.
+    """
+    model_path = Path(model_path).expanduser()
     if model_path.is_dir():
         print(
             'Model specified is directory, searching for latest checkpoint...')
@@ -34,10 +53,8 @@ def load_model(
     model_type = cmd_line_args['model']
 
     model_class = {
-        'lieconv': LieResNet,
         'egnn': SartorrasEGNN,
         'lucid': PygLucidEGNN,
-        'lietransformer': EquivariantTransformer
     }
 
     if init_path:
