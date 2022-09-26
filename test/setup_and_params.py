@@ -14,6 +14,8 @@ from point_vs.preprocessing.pyg_single_item_dataset import \
     get_pyg_single_graph_for_inference
 from point_vs.utils import to_numpy, _set_precision
 
+DEVICE = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
 
 def setup():
     """Ensure we can write to temporary test location."""
@@ -102,13 +104,13 @@ MODEL_KWARGS = {
 }
 
 N_SAMPLES = 10
-ORIGINAL_COORDS = torch.rand(1, 100, 3).to(_device)
+ORIGINAL_COORDS = torch.rand(1, 100, 3).to(DEVICE)
 ROTATED_COORDS = [
     torch.from_numpy(
         uniform_random_rotation(
             to_numpy(
                 ORIGINAL_COORDS.reshape(
-                    (100, 3))))).reshape(1, 100, 3).float().to(_device)
+                    (100, 3))))).reshape(1, 100, 3).float().to(DEVICE)
     for _ in range(N_SAMPLES)]
-FEATS = torch.rand(1, 100, 12).to(_device)
-MASK = torch.ones(1, 100).bool().to(_device)
+FEATS = torch.rand(1, 100, 12).to(DEVICE)
+MASK = torch.ones(1, 100).bool().to(DEVICE)

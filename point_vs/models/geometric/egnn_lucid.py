@@ -13,6 +13,9 @@ from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase, \
     PygLinearPass
 
 
+_device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+
 class EGNN_Sparse(MessagePassing):
     """ Different from the above since it separates the edge assignment
         from the computation (this allows for great reduction in time and

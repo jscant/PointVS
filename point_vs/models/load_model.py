@@ -38,7 +38,6 @@ def load_model(
         print('Found checkpoint at', '/'.join(str(model_path).split('/')[-3:]))
 
     model_kwargs = load_yaml(model_path.parents[1] / 'model_kwargs.yaml')
-    #model_kwargs['group'] = SE3(0.2)
     cmd_line_args = load_yaml(model_path.parents[1] / 'cmd_args.yaml')
     if 'node_attention' not in cmd_line_args.keys():
         cmd_line_args['node_attention'] = False
