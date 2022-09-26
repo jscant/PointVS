@@ -78,23 +78,13 @@ ROTATED_GRAPH = get_pyg_single_graph_for_inference(Data(
 EGNN_EPS = 3e-5
 LIFT_EPS = 3e-2
 MODEL_KWARGS = {
-    'act': 'relu',
-    'bn': True,
     'cache': False,
     'k': 32,
-    'mean': True,
-    'nbhd': 32,
     'num_layers': 6,
-    'pool': True,
     'dropout': 0,
     'dim_input': 12,
     'dim_output': 1,
-    'dim_hidden': 32,  # == 32
-    'mc_samples': 1,
-    'attention_fn': 'softmax',
-    'feature_embed_dim': None,
-    'max_sample_norm': None,
-    'lie_algebra_nonlinearity': None,
+    'dim_hidden': 32,
     'pooling_only': True,
     'linear_gap': True,
     'graphnorm': True,
