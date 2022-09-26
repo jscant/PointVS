@@ -504,7 +504,7 @@ class PointNeuralNetworkBase(nn.Module):
         checkpoint_file = expand_path(checkpoint_file)
         if checkpoint_file.is_dir():
             checkpoint_file = find_latest_checkpoint(checkpoint_file)
-        checkpoint = torch.load(str(checkpoint_file))
+        checkpoint = torch.load(str(checkpoint_file), map_location=_device)
         if self.model_task == load_yaml(
                 expand_path(checkpoint_file).parents[1] /
                 'model_kwargs.yaml').get('model_task', 'classification'):
