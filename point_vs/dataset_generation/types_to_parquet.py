@@ -786,7 +786,7 @@ class StructuralFileParser:
                 return df
             if not str(fname).endswith('.parquet'):
                 print(fname)
-                raise
+                raise RuntimeError('Output filename must end in .parquet')
             df.to_parquet(fname)
 
     def download_pdbs_from_csv(self, csv, output_dir):
