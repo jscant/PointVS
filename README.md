@@ -2,16 +2,14 @@
 
 ## Introduction
 
-[LieTransformer](https://github.com/oxcsml/lie-transformer)
-([paper](https://arxiv.org/abs/2012.10885)) is a self-attention-based group 
-equivariant network. [EGNN](https://github.com/vgsatorras/egnn)
+[EGNN](https://github.com/vgsatorras/egnn)
 ([paper](https://arxiv.org/pdf/2102.09844.pdf)) is an SE(3)-equivariant
-graph neural network. The author's previous work on deep learning for
+graph neural network layer. In this project, we use networks based on this to
+make SE(3)-invariant predictions of binding pose and affinity.
+
+The author's previous work on deep learning for
 virtual screening can be found 
-[here](https://pubs.acs.org/doi/10.1021/acs.jcim.0c00263). PointVS uses EGNN
-and LieTransformer with SE(3) equivariance to perform
-[virtual screening](https://en.wikipedia.org/wiki/Virtual_screening) and
-pose selection.
+[here](https://pubs.acs.org/doi/10.1021/acs.jcim.0c00263).
 
 ## Installation and Initialisation
 ```
@@ -40,7 +38,7 @@ and following the onscreen instructions.
 
 A small working example is:
 ```
-python3 point_vs.py egnn data/small_chembl_test test_output --train_types data/small_chembl_test.types --egnn_classify_on_feats
+python3 point_vs.py egnn data/small_chembl_test test_output --train_types data/small_chembl_test.types
 ```
 
 ## Usage
@@ -228,11 +226,9 @@ pdb, sdf and mol2 files to the required format.
 
 ## Loading datasets
 The recommended way to feed data into the models is to use types files, which
-are used extensively in [GNINA 1.0](https://github.com/gnina/gnina). The
-input `point_vs.py` arguments `train_data_root`, `--test_data_root (-t)`,
-`--train_types` and `--test_types` should be specified.
+are used extensively in [GNINA 1.0](https://github.com/gnina/gnina).
 
-### Option 1: Types File
+Types File
 Each line should follow the format:
 
 `<label> <n/a> <rmsd> <receptor> <ligand>`
@@ -265,36 +261,3 @@ value is not known:
 See the [README](https://github.com/jscant/PointVS/tree/master/point_vs/dataset_generation)
 in `point_vs/dataset_generation` for a script which generates types files and 
 calculates RMSDs.
-
-### Option 2: Active and inactive molecules sorted by directory structure
-
-The input structures should be in pandas-readable parquet files, with the ligand
-and receptor in separate files for memory efficiency. The directory structure 
-should be laid out as follows (the names of the folders `ligands` and 
-`receptors` should be preserved, and directories containing ligand structures
-should be named \<receptor\_name\>\_[actives|decoys], with receptor structures 
-named \<receptor\_name\>.parquet):
-
-```
-dataset
-├── ligands
-│   ├── receptor_a_actives
-│   │   ├──ligand_1.parquet
-│   │   ├──ligand_2.parquet
-│   ├── receptor_a_decoys
-│   │   ├──ligand_3.parquet
-│   │   ├──ligand_4.parquet
-│   ├── receptor_b_actives
-│   │   ├──ligand_5.parquet
-│   │   ├──ligand_6.parquet
-│   ├── receptor_b_decoys
-│   │   ├──ligand_7.parquet
-│   │   ├──ligand_8.parquet
-└── receptors
-    ├── receptor_a.parquet
-    └── receptor_b.parquet
-```
-
-An example of the correct directory structure can be found in 
-`data/small_chembl_test`.
-
