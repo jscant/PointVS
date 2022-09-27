@@ -3,10 +3,10 @@ PointVS uses the the various group-equivariant layers to perform virtual
 screening on protein-ligand complexes. This is the main script, and can be used
 like so:
 
-python3 point_vs.py <model> <data_root> <save_path> --batch_size int
+python3 point_vs.py <model> <data_root> <save_path> --train_types <train_types> --<other_options>
 
 for example:
-python3 point_vs.py lieconv data/small_chembl_test ~/test_output
+python3 point_vs.py egnn data/small_chembl_test /tmp/test_output --train_types data/small_chembl_test.types
 """
 import os
 import socket
