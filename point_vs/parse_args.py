@@ -3,7 +3,8 @@
 import argparse
 
 
-def parse_args():
+def parse_args():  #pylint:disable=too-many-statements
+    """Parse command line arguments."""
     parser = argparse.ArgumentParser()
     parser.add_argument('model', type=str,
                         help='Type of point cloud network to use: '
@@ -19,6 +20,9 @@ def parse_args():
                              'stored. If wandb_run and wandb_project are '
                              'specified, save_path/wandb_project/wandb_run '
                              'will be used to store results.')
+    parser.add_argument('--logging_level', type=str, default='info',
+                        help='Level at which to print logging statements. Any '
+                        'of notset, debug, info, warning, error, critical.')
     parser.add_argument('--load_weights', '-l', type=str, required=False,
                         help='Load a model.')
     parser.add_argument('--test_data_root', '-t', type=str,

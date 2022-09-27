@@ -8,6 +8,7 @@ python3 point_vs.py <model> <data_root> <save_path> --train_types <train_types> 
 for example:
 python3 point_vs.py egnn data/small_chembl_test /tmp/test_output --train_types data/small_chembl_test.types
 """
+import logging
 import os
 import socket
 import warnings
@@ -28,20 +29,29 @@ from point_vs.preprocessing.data_loaders import SynthPharmDataset
 from point_vs.utils import load_yaml
 from point_vs.utils import mkdir
 
-logger = log.create_log_obj('PointVS')
-
-try:
-    import wandb
-    logger.info('Wandb found.')
-except ImportError:
-    logger.warning('Library wandb not available. --wandb and --run flags '
-        'should not be used.')
-    wandb = None
-
 warnings.filterwarnings("ignore", category=UserWarning)
 
 if __name__ == '__main__':
     args = parse_args()
+
+    logging_levels = {
+        'notset': logging.NOTSET,
+        'debug': logging.DEBUG,
+        'info': logging.INFO,
+        'warning': logging.WARNING,
+        'error': logging.ERROR,
+        'critical': logging.CRITICAL
+    }
+    logger = log.create_log_obj(
+        'PointVS', level=logging_levels[args.logging_level.lower()])
+
+    try:
+        import wandb
+        logger.info('Wandb found.')
+    except ImportError:
+        logger.warning('Library wandb not available. --wandb and --run flags '
+            'should not be used.')
+        wandb = None
 
     # This is a lot slower so only use if precision is an issue
     if args.double:
