@@ -19,11 +19,13 @@ import yaml
 from point_vs import utils
 from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
 from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
-from point_vs.models.siamese import SiameseNeuralNetwork
 from point_vs.parse_args import parse_args
-from point_vs.preprocessing.data_loaders import get_data_loader, \
-    PointCloudDataset, PygPointCloudDataset, SynthPharmDataset
-from point_vs.utils import load_yaml, mkdir
+from point_vs.preprocessing.data_loaders import get_data_loader
+from point_vs.preprocessing.data_loaders import PygPointCloudDataset
+from point_vs.preprocessing.data_loaders import SynthPharmDataset
+from point_vs.utils import load_yaml
+from point_vs.utils import mkdir
+
 
 try:
     import wandb
