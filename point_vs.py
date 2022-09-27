@@ -17,6 +17,8 @@ import torch
 import yaml
 
 from point_vs import utils
+from point_vs import log
+
 from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
 from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
 from point_vs.parse_args import parse_args
@@ -26,12 +28,14 @@ from point_vs.preprocessing.data_loaders import SynthPharmDataset
 from point_vs.utils import load_yaml
 from point_vs.utils import mkdir
 
+logger = log.create_log_obj('PointVS')
 
 try:
     import wandb
+    logger.info('Wandb found.')
 except ImportError:
-    print('Library wandb not available. --wandb and --run flags should not be '
-          'used.')
+    logger.warning('Library wandb not available. --wandb and --run flags '
+        'should not be used.')
     wandb = None
 
 warnings.filterwarnings("ignore", category=UserWarning)
