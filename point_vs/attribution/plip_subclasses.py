@@ -25,6 +25,8 @@ from point_vs.preprocessing.pyg_single_item_dataset import \
 from point_vs.utils import coords_to_string, PositionDict, \
     get_colour_interpolation_fn
 
+_device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
 
 class VisualizerDataWithMolecularInfo(VisualizerData):
     """VisualizerData but with the mol, ligand and pli objects stored."""
