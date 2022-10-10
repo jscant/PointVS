@@ -16,7 +16,9 @@ from point_vs.utils import get_eta, format_time, print_with_overwrite, mkdir, \
     to_numpy, expand_path, load_yaml, get_regression_pearson, \
     find_latest_checkpoint
 
-_device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+_device = torch.device(
+    'cuda') if torch.cuda.is_available() else torch.device('cpu')
+
 
 class PointNeuralNetworkBase(nn.Module):
     """Base (abstract) class for all point cloud based binary classifiers."""
@@ -132,7 +134,8 @@ class PointNeuralNetworkBase(nn.Module):
                 at the end of each epoch (if supplied)
             top1_on_end:
         """
-        start_time = self.training_setup(data_loader=data_loader, epochs=epochs)
+        start_time = self.training_setup(
+            data_loader=data_loader, epochs=epochs)
         for self.epoch in range(self.init_epoch, epochs):
             self.train()
             for self.batch, graph in enumerate(data_loader):
@@ -185,7 +188,6 @@ class PointNeuralNetworkBase(nn.Module):
                 self.val_iter += 1
                 y_pred, y_true, ligands, receptors = self.process_graph(graph)
 
-
                 if self.model_task == 'classification':
                     is_label = y_true is not None
                     if is_label:
@@ -193,7 +195,7 @@ class PointNeuralNetworkBase(nn.Module):
                     y_pred_np = to_numpy(nn.Sigmoid()(y_pred)).reshape((-1,))
                     num_type = int
                 elif self.model_task == 'multi_regression':
-                    is_label = y_true[0][0] is not None
+                    is_label = y_true[0] is not None
                     y_pred_np = to_numpy(y_pred).reshape((-1, 3))
                     if is_label:
                         y_true_np = to_numpy(y_true).reshape((-1, 3))
