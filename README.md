@@ -3,9 +3,9 @@
 ## Introduction
 
 [EGNN](https://github.com/vgsatorras/egnn)
-([paper](https://arxiv.org/pdf/2102.09844.pdf)) is an SE(3)-equivariant
+([paper](https://arxiv.org/pdf/2102.09844.pdf)) is an E(3)-equivariant
 graph neural network layer. In this project, we use networks based on this to
-make SE(3)-invariant predictions of binding pose and affinity.
+make E(3)-invariant predictions of binding pose and affinity.
 
 The author's previous work on deep learning for
 virtual screening can be found 
@@ -21,7 +21,7 @@ conda activate pointvs
 pip install -e .
 ```
 
-To run tests for invariance under SE(3) transformations:
+To run tests for invariance under E(3) transformations:
 ```
 python3 -m pytest -vvv
 ```
@@ -38,64 +38,109 @@ and following the onscreen instructions.
 
 A small working example is:
 ```
-python3 point_vs.py egnn data/small_chembl_test /tmp/test_output --train_types data/small_chembl_test.types
+python3 point_vs.py multitask /tmp/test_run --model_task both \
+-ea 1 -ep 1 --layers 3 \
+--train_data_root_pose data/small_chembl_test \
+--train_types_pose data/small_chembl_test.types \
+--train_data_root_affinity data/multi_classification_sample \
+--train_types_affinity data/multi_classification_sample.types
+--test_data_root_pose data/small_chembl_test \
+--test_types_pose data/small_chembl_test.types \
+--test_types_affinity data/multi_classification_sample.types \
+--test_data_root_affinity data/multi_classification_sample
 ```
 
 ## Usage
 
 ```
-usage: point_vs.py [-h] [--load_weights LOAD_WEIGHTS] [--test_data_root TEST_DATA_ROOT]
-                   [--translated_actives TRANSLATED_ACTIVES] [--batch_size BATCH_SIZE]
-                   [--epochs EPOCHS] [--channels CHANNELS] [--learning_rate LEARNING_RATE]
-                   [--weight_decay WEIGHT_DECAY] [--wandb_project WANDB_PROJECT]
-                   [--wandb_run WANDB_RUN] [--layers LAYERS] [--radius RADIUS]
-                   [--load_args LOAD_ARGS] [--double] [--activation ACTIVATION] [--dropout DROPOUT]
-                   [--use_1cycle] [--warm_restarts] [--fourier_features FOURIER_FEATURES]
-                   [--norm_coords] [--norm_feats] [--use_atomic_numbers] [--compact] [--thin_mlps]
+usage: point_vs.py [-h] [--train_data_root_pose TRAIN_DATA_ROOT_POSE]
+                   [--train_data_root_affinity TRAIN_DATA_ROOT_AFFINITY]
+                   [--test_data_root_pose TEST_DATA_ROOT_POSE]
+                   [--test_data_root_affinity TEST_DATA_ROOT_AFFINITY]
+                   [--logging_level LOGGING_LEVEL] [--load_weights LOAD_WEIGHTS]
+                   [--test_data_root TEST_DATA_ROOT]
+                   [--translated_actives TRANSLATED_ACTIVES]
+                   [--batch_size BATCH_SIZE] [--epochs_pose EPOCHS_POSE]
+                   [--epochs_affinity EPOCHS_AFFINITY] [--channels CHANNELS]
+                   [--learning_rate LEARNING_RATE] [--weight_decay WEIGHT_DECAY]
+                   [--wandb_project WANDB_PROJECT] [--wandb_run WANDB_RUN]
+                   [--layers LAYERS] [--radius RADIUS] [--load_args LOAD_ARGS]
+                   [--double] [--activation ACTIVATION] [--dropout DROPOUT]
+                   [--use_1cycle] [--warm_restarts]
+                   [--fourier_features FOURIER_FEATURES] [--norm_coords]
+                   [--norm_feats] [--use_atomic_numbers] [--compact] [--thin_mlps]
                    [--hydrogens] [--augmented_actives AUGMENTED_ACTIVES]
-                   [--min_aug_angle MIN_AUG_ANGLE] [--max_active_rmsd MAX_ACTIVE_RMSD]
-                   [--min_inactive_rmsd MIN_INACTIVE_RMSD] [--val_on_epoch_end] [--synth_pharm]
-                   [--input_suffix INPUT_SUFFIX] [--train_types TRAIN_TYPES]
-                   [--test_types TEST_TYPES] [--egnn_attention] [--egnn_tanh] [--egnn_normalise]
-                   [--egnn_residual] [--edge_radius EDGE_RADIUS] [--end_flag]
-                   [--wandb_dir WANDB_DIR] [--estimate_bonds] [--linear_gap] [--prune] [--top1]
-                   [--graphnorm] [--multi_fc] [--lucid_node_final_act]
-                   [--p_remove_entity P_REMOVE_ENTITY] [--static_coords] [--permutation_invariance]
-                   [--node_attention]
+                   [--min_aug_angle MIN_AUG_ANGLE]
+                   [--max_active_rmsd MAX_ACTIVE_RMSD]
+                   [--min_inactive_rmsd MIN_INACTIVE_RMSD] [--val_on_epoch_end]
+                   [--synth_pharm] [--input_suffix INPUT_SUFFIX]
+                   [--train_types_pose TRAIN_TYPES_POSE]
+                   [--train_types_affinity TRAIN_TYPES_AFFINITY]
+                   [--test_types_pose TEST_TYPES_POSE]
+                   [--test_types_affinity TEST_TYPES_AFFINITY] [--egnn_attention]
+                   [--egnn_tanh] [--egnn_normalise] [--egnn_residual]
+                   [--edge_radius EDGE_RADIUS] [--end_flag] [--wandb_dir WANDB_DIR]
+                   [--estimate_bonds] [--linear_gap] [--prune] [--top1] [--graphnorm]
+                   [--multi_fc] [--lucid_node_final_act]
+                   [--p_remove_entity P_REMOVE_ENTITY] [--static_coords]
+                   [--permutation_invariance] [--node_attention]
                    [--attention_activation_function ATTENTION_ACTIVATION_FUNCTION]
                    [--node_attention_final_only] [--edge_attention_final_only]
                    [--node_attention_first_only] [--edge_attention_first_only]
-                   [--only_save_best_models] [--egnn_edge_residual] [--gated_residual] [--rezero]
-                   [--extended_atom_types] [--max_inactive_rmsd MAX_INACTIVE_RMSD]
-                   [--model_task MODEL_TASK] [--synthpharm] [--p_noise P_NOISE]
-                   [--include_strain_info] [--final_softplus] [--optimiser OPTIMISER]
-                   model train_data_root save_path
+                   [--only_save_best_models] [--egnn_edge_residual]
+                   [--gated_residual] [--rezero] [--extended_atom_types]
+                   [--max_inactive_rmsd MAX_INACTIVE_RMSD] [--model_task MODEL_TASK]
+                   [--synthpharm] [--p_noise P_NOISE] [--include_strain_info]
+                   [--final_softplus] [--optimiser OPTIMISER]
+                   [--multi_target_affinity]
+                   model save_path
 
 positional arguments:
   model                 Type of point cloud network to use: lucid or egnn
-  train_data_root       Location of structure training *.parquets files. Receptors should be in a
-                        directory named receptors, with ligands located in their specific receptor
-                        subdirectory under the ligands directory.
-  save_path             Directory in which experiment outputs are stored. If wandb_run and
-                        wandb_project are specified, save_path/wandb_project/wandb_run will be used
-                        to store results.
+  save_path             Directory in which experiment outputs are stored. If
+                        wandb_run and wandb_project are specified,
+                        save_path/wandb_project/wandb_run will be used to store
+                        results.
 
 optional arguments:
   -h, --help            show this help message and exit
+  --train_data_root_pose TRAIN_DATA_ROOT_POSE
+                        Location relative to which parquets files for training the
+                        pose classifier as specified in the train_types_pose file are
+                        stored.
+  --train_data_root_affinity TRAIN_DATA_ROOT_AFFINITY, --tdra TRAIN_DATA_ROOT_AFFINITY
+                        Location relative to which parquets files for training the
+                        affinity predictor as specified in the train_types file are
+                        stored.
+  --test_data_root_pose TEST_DATA_ROOT_POSE
+                        Location relative to which parquets files for testing the
+                        pose classifier as specified in the test_types_pose file are
+                        stored.
+  --test_data_root_affinity TEST_DATA_ROOT_AFFINITY
+                        Location relative to which parquets files for testing the
+                        affinity predictor as specified in the test_types file are
+                        stored.
+  --logging_level LOGGING_LEVEL
+                        Level at which to print logging statements. Any of notset,
+                        debug, info, warning, error, critical.
   --load_weights LOAD_WEIGHTS, -l LOAD_WEIGHTS
                         Load a model.
   --test_data_root TEST_DATA_ROOT, -t TEST_DATA_ROOT
-                        Location of structure test *.parquets files. Receptors should be in a
-                        directory named receptors, with ligands located in their specific receptor
-                        subdirectory under the ligands directory.
+                        Location of structure test *.parquets files. Receptors should
+                        be in a directory named receptors, with ligands located in
+                        their specific receptor subdirectory under the ligands
+                        directory.
   --translated_actives TRANSLATED_ACTIVES
-                        Directory in which translated actives are stored. If unspecified, no
-                        translated actives will be used. The use of translated actives are is
-                        discussed in https://pubs.acs.org/doi/10.1021/acs.jcim.0c00263
+                        Directory in which translated actives are stored. If
+                        unspecified, no translated actives will be used. The use of
+                        translated actives are is discussed in
+                        https://pubs.acs.org/doi/10.1021/acs.jcim.0c00263
   --batch_size BATCH_SIZE, -b BATCH_SIZE
                         Number of examples to include in each batch for training.
-  --epochs EPOCHS, -e EPOCHS
-                        Number of times to iterate through training set.
+  --epochs_pose EPOCHS_POSE, -ep EPOCHS_POSE
+                        Number of times to iterate through pose training set.
+  --epochs_affinity EPOCHS_AFFINITY, -ea EPOCHS_AFFINITY
+                        Number of times to iterate through affinity training set.
   --channels CHANNELS, -k CHANNELS
                         Channels for feature vectors
   --learning_rate LEARNING_RATE, -lr LEARNING_RATE
@@ -103,83 +148,101 @@ optional arguments:
   --weight_decay WEIGHT_DECAY, -w WEIGHT_DECAY
                         Weight decay for regularisation
   --wandb_project WANDB_PROJECT
-                        Name of wandb project. If left blank, wandb logging will not be used.
+                        Name of wandb project. If left blank, wandb logging will not
+                        be used.
   --wandb_run WANDB_RUN
                         Name of run for wandb logging.
   --layers LAYERS       Number of layers in LieResNet
-  --radius RADIUS       Maximum distance from a ligand atom for a receptor atom to be included in
-                        input
+  --radius RADIUS       Maximum distance from a ligand atom for a receptor atom to be
+                        included in input
   --load_args LOAD_ARGS
-                        Load yaml file with command line args. Any args specified in the file will
-                        overwrite other args specified on the command line.
+                        Load yaml file with command line args. Any args specified in
+                        the file will overwrite other args specified on the command
+                        line.
   --double              Use 64-bit floating point precision
   --activation ACTIVATION
                         Activation function
-  --dropout DROPOUT     Chance for nodes to be inactivated on each trainin batch (EGNN)
+  --dropout DROPOUT     Chance for nodes to be inactivated on each trainin batch
+                        (EGNN)
   --use_1cycle          Use 1cycle learning rate scheduling
   --warm_restarts       Use cosine annealing with warm restarts
   --fourier_features FOURIER_FEATURES
-                        (Lucid) Number of fourier terms to use when encoding distances (default is
-                        not to use fourier distance encoding)
+                        (Lucid) Number of fourier terms to use when encoding
+                        distances (default is not to use fourier distance encoding)
   --norm_coords         (Lucid) Normalise coordinate vectors
   --norm_feats          (Lucid) Normalise feature vectors
   --use_atomic_numbers  Use atomic numbers rather than smina types
   --compact             Use compact rather than true one-hot encodings
-  --thin_mlps           (Lucid) Use single layer MLPs for edge, node and coord updates
+  --thin_mlps           (Lucid) Use single layer MLPs for edge, node and coord
+                        updates
   --hydrogens           Include polar hydrogens
   --augmented_actives AUGMENTED_ACTIVES
-                        Number of randomly rotated actives to be included as decoys during training
+                        Number of randomly rotated actives to be included as decoys
+                        during training
   --min_aug_angle MIN_AUG_ANGLE
-                        Minimum angle of rotation for augmented actives as specified in the
-                        augmented_actives argument
+                        Minimum angle of rotation for augmented actives as specified
+                        in the augmented_actives argument
   --max_active_rmsd MAX_ACTIVE_RMSD
-                        (Pose selection) maximum non-aligned RMSD between the original crystal pose
-                        and active redocked poses
+                        (Pose selection) maximum non-aligned RMSD between the
+                        original crystal pose and active redocked poses
   --min_inactive_rmsd MIN_INACTIVE_RMSD
-                        (Pose selection) minimum non-aligned RMSD between original crystal pose and
-                        inactive redocked poses
+                        (Pose selection) minimum non-aligned RMSD between original
+                        crystal pose and inactive redocked poses
   --val_on_epoch_end, -v
-                        Run inference ion the validation set at the end of every epoch during
-                        training
+                        Run inference ion the validation set at the end of every
+                        epoch during training
   --synth_pharm, -p     Synthetic Pharmacophore mode (for Tom, beta)
   --input_suffix INPUT_SUFFIX, -s INPUT_SUFFIX
                         Filename extension for inputs
-  --train_types TRAIN_TYPES
-                        Optional name of GNINA-like types file which contains paths and labels for
-                        a training set. See GNINA 1.0 documentation for specification.
-  --test_types TEST_TYPES
-                        Optional name of GNINA-like types file which contains paths and labels for
-                        a test set. See GNINA 1.0 documentation for specification.
+  --train_types_pose TRAIN_TYPES_POSE
+                        Optional name of GNINA-like types file which contains paths
+                        and labels for a pose training set. See GNINA 1.0
+                        documentation for specification.
+  --train_types_affinity TRAIN_TYPES_AFFINITY
+                        Optional name of GNINA-like types file which contains paths
+                        and labels for an affinity training set. See GNINA 1.0
+                        documentation for specification.
+  --test_types_pose TEST_TYPES_POSE
+                        Optional name of GNINA-like types file which contains paths
+                        and labels for a pose test set. See GNINA 1.0 documentation
+                        for specification.
+  --test_types_affinity TEST_TYPES_AFFINITY
+                        Optional name of GNINA-like types file which contains paths
+                        and labels for an affinity test set. See GNINA 1.0
+                        documentation for specification.
   --egnn_attention      Use attention mechanism on edges for EGNN
   --egnn_tanh           Put tanh layer at the end of the coordinates mlp (EGNN)
   --egnn_normalise      Normalise radial coordinates (EGNN)
   --egnn_residual       Use residual connections (EGNN)
   --edge_radius EDGE_RADIUS
                         Maximum interatomic distance for an edge to exist (EGNN)
-  --end_flag            Add a file named "_FINISHED" to the save_path upon training and test
-                        completion
+  --end_flag            Add a file named "_FINISHED" to the save_path upon training
+                        and test completion
   --wandb_dir WANDB_DIR
                         Location to store wandb files. Defaults to
                         <save_path>/<wandb_project>/<wandb_run>/wandb.
-  --estimate_bonds      (EGNN): Instead of using a fixed edge radius,the intermolecular radius is
-                        set at --edge_radius Angstroms but the intramolecular radius is set at 2A,
-                        which has the effect of putting edges where there are covalent bonds
-                        between atoms in the same molecule.
-  --linear_gap          Final linear layer comes after rather than before the global average
-                        pooling layer. This can improve performance significantly.
+  --estimate_bonds      (EGNN): Instead of using a fixed edge radius,the
+                        intermolecular radius is set at --edge_radius Angstroms but
+                        the intramolecular radius is set at 2A, which has the effect
+                        of putting edges where there are covalent bonds between atoms
+                        in the same molecule.
+  --linear_gap          Final linear layer comes after rather than before the global
+                        average pooling layer. This can improve performance
+                        significantly.
   --prune               (EGNN) Prune subgraphs which are not connected to the ligand
   --top1                A poorly kept secret ;)
   --graphnorm           (EGNN) add GraphNorm layers to each node MLP
-  --multi_fc            Three fully connected layers rather than just one to summarise the graph at
-                        the end of the EGNN
+  --multi_fc            Three fully connected layers rather than just one to
+                        summarise the graph at the end of the EGNN
   --lucid_node_final_act
                         (Lucid) SiLU at the end of node MLPs
   --p_remove_entity P_REMOVE_ENTITY
-                        Rate at which one of (randomly selected) ligand or receptor is removed and
-                        label is forced to zero
+                        Rate at which one of (randomly selected) ligand or receptor
+                        is removed and label is forced to zero
   --static_coords       Do not update coords (eq. 4, EGNN)
   --permutation_invariance
-                        Edge features are invariant to order of input node (EGNN, experimental)
+                        Edge features are invariant to order of input node (EGNN,
+                        experimental)
   --node_attention      Use attention mechanism for nodes
   --attention_activation_function ATTENTION_ACTIVATION_FUNCTION
                         One of sigmoid, relu, silu or tanh
@@ -194,23 +257,29 @@ optional arguments:
   --only_save_best_models
                         Only save models which improve upon previous models
   --egnn_edge_residual  Residual connections for individual messages (EGNN)
-  --gated_residual      Residual connections are gated by a single learnable parameter (EGNN), see
+  --gated_residual      Residual connections are gated by a single learnable
+                        parameter (EGNN), see
                         home.ttic.edu/~savarese/savarese_files/Residual_Gates.pdf
-  --rezero              ReZero residual connections (EGNN), see arxiv.org/pdf/2003.04887.pdf
+  --rezero              ReZero residual connections (EGNN), see
+                        arxiv.org/pdf/2003.04887.pdf
   --extended_atom_types
                         18 atom types rather than 10
   --max_inactive_rmsd MAX_INACTIVE_RMSD
                         Discard structures beyond <x> RMSD from xtal pose
   --model_task MODEL_TASK
-                        One of either classification or regression; regression is 3-class
-                        regression on binding affinities.
+                        One of either classification or regression;
   --synthpharm          For tom
   --p_noise P_NOISE     Probability of label being inverted during training
   --include_strain_info
-                        Include info on strain energy and RMSD from ground state of ligand
+                        Include info on strain energy and RMSD from ground state of
+                        ligand
   --final_softplus      Final layer in regression has softplus nonlinearity
   --optimiser OPTIMISER, -o OPTIMISER
                         Optimiser (either adam or sgd)
+  --multi_target_affinity
+                        Use multitarget regression for affinity. If True, targets are
+                        split depending on if labels are pkd, pki or IC50.
+
 ```
 
 ## Dataset generation

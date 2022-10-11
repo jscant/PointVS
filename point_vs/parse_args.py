@@ -9,12 +9,22 @@ def parse_args():  #pylint:disable=too-many-statements
     parser.add_argument('model', type=str,
                         help='Type of point cloud network to use: '
                              'lucid or egnn')
-    parser.add_argument('train_data_root', type=str,
-                        help='Location of structure training *.parquets files. '
-                             'Receptors should be in a directory named '
-                             'receptors, with ligands located in their '
-                             'specific receptor subdirectory under the '
-                             'ligands directory.')
+    parser.add_argument('--train_data_root_pose', type=str,
+                        help='Location relative to which parquets files for '
+                             'training the pose classifier as specified in the '
+                             'train_types_pose file are stored.')
+    parser.add_argument('--train_data_root_affinity', '--tdra', type=str,
+                        help='Location relative to which parquets files for '
+                             'training the affinity predictor as specified in '
+                             'the train_types file are stored.')
+    parser.add_argument('--test_data_root_pose', type=str,
+                        help='Location relative to which parquets files for '
+                             'testing the pose classifier as specified in the '
+                             'test_types_pose file are stored.')
+    parser.add_argument('--test_data_root_affinity', type=str,
+                        help='Location relative to which parquets files for '
+                             'testing the affinity predictor as specified in '
+                             'the test_types file are stored.')
     parser.add_argument('save_path', type=str,
                         help='Directory in which experiment outputs are '
                              'stored. If wandb_run and wandb_project are '
@@ -25,13 +35,6 @@ def parse_args():  #pylint:disable=too-many-statements
                         'of notset, debug, info, warning, error, critical.')
     parser.add_argument('--load_weights', '-l', type=str, required=False,
                         help='Load a model.')
-    parser.add_argument('--test_data_root', '-t', type=str,
-                        required=False,
-                        help='Location of structure test *.parquets files. '
-                             'Receptors should be in a directory named '
-                             'receptors, with ligands located in their '
-                             'specific receptor subdirectory under the '
-                             'ligands directory.')
     parser.add_argument('--translated_actives', type=str,
                         help='Directory in which translated actives are stored.'
                              ' If unspecified, no translated actives will be '
@@ -42,9 +45,14 @@ def parse_args():  #pylint:disable=too-many-statements
                         default=32,
                         help='Number of examples to include in each batch for '
                              'training.')
-    parser.add_argument('--epochs', '-e', type=int, required=False,
+    parser.add_argument('--epochs_pose', '-ep', type=int, required=False,
                         default=1,
-                        help='Number of times to iterate through training set.')
+                        help='Number of times to iterate through pose '
+                             'training set.')
+    parser.add_argument('--epochs_affinity', '-ea', type=int, required=False,
+                        default=1,
+                        help='Number of times to iterate through affinity '
+                             'training set.')
     parser.add_argument('--channels', '-k', type=int, default=32,
                         help='Channels for feature vectors')
     parser.add_argument('--learning_rate', '-lr', type=float, default=0.002,
@@ -114,13 +122,23 @@ def parse_args():  #pylint:disable=too-many-statements
                         help='Synthetic Pharmacophore mode (for Tom, beta)')
     parser.add_argument('--input_suffix', '-s', type=str, default='parquet',
                         help='Filename extension for inputs')
-    parser.add_argument('--train_types', type=str,
+    parser.add_argument('--train_types_pose', type=str,
                         help='Optional name of GNINA-like types file which '
-                             'contains paths and labels for a training set. '
+                             'contains paths and labels for a pose training '
+                             'set. '
                              'See GNINA 1.0 documentation for specification.')
-    parser.add_argument('--test_types', type=str,
+    parser.add_argument('--train_types_affinity', type=str,
                         help='Optional name of GNINA-like types file which '
-                             'contains paths and labels for a test set. '
+                             'contains paths and labels for an affinity '
+                             'training set. '
+                             'See GNINA 1.0 documentation for specification.')
+    parser.add_argument('--test_types_pose', type=str,
+                        help='Optional name of GNINA-like types file which '
+                             'contains paths and labels for a pose test set. '
+                             'See GNINA 1.0 documentation for specification.')
+    parser.add_argument('--test_types_affinity', type=str,
+                        help='Optional name of GNINA-like types file which '
+                             'contains paths and labels for an affinity test set. '
                              'See GNINA 1.0 documentation for specification.')
     parser.add_argument('--egnn_attention', action='store_true',
                         help='Use attention mechanism on edges for EGNN')
@@ -209,9 +227,7 @@ def parse_args():  #pylint:disable=too-many-statements
                         help='Discard structures beyond <x> RMSD from xtal '
                              'pose')
     parser.add_argument('--model_task', type=str, default='classification',
-                        help='One of either classification or regression; '
-                             'regression is 3-class regression on binding '
-                             'affinities.')
+                        help='One of either classification or regression; ')
     parser.add_argument('--synthpharm', action='store_true', help='For tom')
     parser.add_argument('--p_noise', type=float, default=-1,
                         help='Probability of label being inverted during '
@@ -224,4 +240,8 @@ def parse_args():  #pylint:disable=too-many-statements
                              'nonlinearity')
     parser.add_argument('--optimiser', '-o', type=str, default='adam',
                         help='Optimiser (either adam or sgd)')
+    parser.add_argument('--multi_target_affinity', action='store_true',
+                        help='Use multitarget regression for affinity. If '
+                             'True, targets are split depending on if labels '
+                             'are pkd, pki or IC50.')
     return parser.parse_args()

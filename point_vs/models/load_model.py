@@ -1,12 +1,14 @@
 """Load a model from a saved checkpoint."""
 from pathlib import Path
-from typing import Dict, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 from torch import nn
 
+from point_vs.models.geometric.egnn_multitask import MultitaskSatorrasEGNN
 from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
 from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
-from point_vs.utils import load_yaml, find_latest_checkpoint
+from point_vs.utils import load_yaml
+from point_vs.utils import find_latest_checkpoint
 
 Fname = Union[str, Path]
 
@@ -14,7 +16,9 @@ def load_model(
         model_path: Fname,
         silent: bool = True,
         fetch_args_only: bool = False,
-        init_path: bool = False) -> Tuple[Path, nn.Module, Dict, Dict]:
+        init_path: bool = False,
+        model_task: Optional[str] = None
+    ) -> Tuple[Path, nn.Module, Dict, Dict]:
     """Load model weights and arguments used to train model.
 
     Arguments:
@@ -24,6 +28,8 @@ def load_model(
         silent: Do not print messages to stdout.
         fetch_args_only: Do not retrieve model weights.
         init_path: Create output directories.
+        model_task: (multitask models only) either load the pose or affinity
+            saved model.
 
     Returns:
         Tuple containing the path to the model weights file, the pytorch model
@@ -34,11 +40,14 @@ def load_model(
     if model_path.is_dir():
         print(
             'Model specified is directory, searching for latest checkpoint...')
-        model_path = find_latest_checkpoint(model_path)
+        model_path = find_latest_checkpoint(model_path, model_task=model_task)
         print('Found checkpoint at', '/'.join(str(model_path).split('/')[-3:]))
 
     model_kwargs = load_yaml(model_path.parents[1] / 'model_kwargs.yaml')
     cmd_line_args = load_yaml(model_path.parents[1] / 'cmd_args.yaml')
+    if cmd_line_args.get('model') == 'multitask' and model_task is None:
+        raise RuntimeError(
+            'model_task must be specified when loading a multitask model')
     if 'node_attention' not in cmd_line_args.keys():
         cmd_line_args['node_attention'] = False
     if 'edge_attention' not in cmd_line_args.keys():
@@ -54,6 +63,7 @@ def load_model(
     model_class = {
         'egnn': SartorrasEGNN,
         'lucid': PygLucidEGNN,
+        'multitask': MultitaskSatorrasEGNN
     }
 
     if init_path:

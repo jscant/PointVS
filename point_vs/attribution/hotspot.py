@@ -76,7 +76,7 @@ def find_identifier(coords_to_identifier, coords):
 def binding_events_to_ranked_protein_atoms(
         input_fnames, model_path, output_dir, ligand_name,
         attribution='edge_attention', layer=1, use_rank=False,
-        ligand_chain='A'):
+        ligand_chain='A', model_task=None):
     """Use multiple protein-ligand structures to score protein atoms.
 
     The importance of each protein atom is assumed to be related to its mean
@@ -97,6 +97,7 @@ def binding_events_to_ranked_protein_atoms(
         layer: which layer from the GNN to take attention weights from for
             scoring
         use_rank: use ranked order of bond scores in place of raw bond scores
+        model_task: pose or affinity (type of model to load, multitask only)
 
     Returns:
         pd.DataFrame with columns:
@@ -134,7 +135,7 @@ def binding_events_to_ranked_protein_atoms(
     with open(expand_path(input_fnames), 'r') as f:
         fnames = [expand_path(fname.strip()) for fname in
                   f.readlines() if len(fname.strip())]
-    _, model, _, _ = load_model(expand_path(model_path))
+    _, model, _, _ = load_model(expand_path(model_path), model_task=model_task)
 
     processed_dfs = []
     prot_atom_to_max_lig_atom = defaultdict(list)
@@ -404,13 +405,17 @@ if __name__ == '__main__':
     parser.add_argument('--ligand_chain', '-chain', type=str, default='A',
                         help='What chain will the ligand be labeled as? Either '
                              'any letter A-Z or " "')
+    parser.add_argument('--model_task', type=str,
+                        help='(multitask models only) load pose or affinity '
+                             'saved model files')
 
     args = parser.parse_args()
     rank_df = binding_events_to_ranked_protein_atoms(
         args.filenames, args.model, args.output_dir,
         args.ligand_residue_code.upper(), attribution=args.scoring_method,
         layer=args.layer, use_rank=args.use_rank,
-        ligand_chain=args.ligand_chain)
+        ligand_chain=args.ligand_chain,
+        model_task=args.model_task)
     df = scores_to_pharmacophore_df(
         args.apo_protein, rank_df, use_rank=args.use_rank)
     print(df[:10])

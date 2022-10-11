@@ -16,6 +16,7 @@ from torch import nn
 from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingWarmRestarts
 
 from point_vs.analysis.top_n import top_n
+from point_vs.utils import flatten_nested_iterables
 from point_vs.utils import get_eta, format_time, print_with_overwrite, mkdir, \
     to_numpy, expand_path, load_yaml, get_regression_pearson, \
     find_latest_checkpoint
@@ -33,7 +34,7 @@ class PointNeuralNetworkBase(nn.Module):
                  only_save_best_models=False, optimiser='adam',
                  **model_kwargs):
         super().__init__()
-        self.model_task = model_kwargs.get('model_task', 'classification')
+        self.set_task(model_kwargs.get('model_task', 'classification'))
         self.include_strain_info = False
         self.batch = 0
         self.epoch = 0
@@ -46,9 +47,10 @@ class PointNeuralNetworkBase(nn.Module):
         self.only_save_best_models = only_save_best_models
         if not silent:
             mkdir(self.save_path)
-        self.predictions_file = self.save_path / 'predictions.txt'
 
-        self.loss_plot_file = self.save_path / 'loss.png'
+        self.predictions_file = Path(self.save_path, 'predictions.txt')
+        self.loss_plot_file = Path(
+            self.save_path, f'{self.model_task_for_fnames}_loss.png')
 
         self.lr = learning_rate
         self.weight_decay = weight_decay
@@ -65,7 +67,8 @@ class PointNeuralNetworkBase(nn.Module):
             self.model_task_string = 'Mean squared error'
         else:
             raise RuntimeError(
-                'model_task must be either classification or regression')
+                'model_task must be either classification, regression or '
+                f'muti_regression. (model_task is {self.model_task})')
 
         self.wandb_project = wandb_project
         self.wandb_path = self.save_path / 'wandb_{}'.format(wandb_project)
@@ -177,6 +180,8 @@ class PointNeuralNetworkBase(nn.Module):
         """
         if predictions_file is None:
             predictions_file = self.predictions_file
+        predictions_fname = f'{self.model_task_for_fnames}_' + predictions_file.name
+        predictions_file = predictions_file.parent / predictions_fname
         predictions_file = Path(predictions_file).expanduser()
         if predictions_file.is_file():
             predictions_file.unlink()
@@ -335,11 +340,17 @@ class PointNeuralNetworkBase(nn.Module):
             decoy_idx = (np.where(y_true_np < 0.5),)
             is_actives = bool(sum(y_true_np))
             is_decoys = not bool(np.product(y_true_np))
+            active_idx = flatten_nested_iterables(
+                active_idx, unpack_arrays=True)
+            decoy_idx = flatten_nested_iterables(decoy_idx, unpack_arrays=True)
         else:
-            active_idx = (np.where(y_true_np > -np.inf),)
-            decoy_idx = (np.where(y_true_np < np.inf),)
+            y_true_np = y_true_np[y_true_np >= 0]
             is_actives = True
             is_decoys = False
+            if self.model_task == 'multi_regression':
+                y_pred_np = y_pred_np.reshape(-1, 3)
+                y_pred_np = np.mean(y_pred_np, axis=1)
+            active_idx = np.arange(len(y_true_np))
 
         if is_actives:
             self.active_mean_pred = np.mean(y_pred_np[active_idx])
@@ -486,7 +497,7 @@ class PointNeuralNetworkBase(nn.Module):
         """Save all network attributes, including internal states."""
 
         if save_path is None:
-            fname = 'ckpt_epoch_{}.pt'.format(self.epoch + 1)
+            fname = f'{self.model_task_for_fnames}_ckpt_epoch_{self.epoch + 1}.pt'
             save_path = self.save_path / 'checkpoints' / fname
 
         mkdir(save_path.parent)
@@ -571,3 +582,10 @@ class PointNeuralNetworkBase(nn.Module):
     def param_count(self):
         return sum(
             [torch.numel(t) for t in self.parameters() if t.requires_grad])
+
+    def set_task(self, task):
+        if task not in ('classification', 'regression', 'multi_regression'):
+            raise ValueError('Argument for set_task must be one of '
+                             'classification, regression or multi_regression')
+        self.model_task = task
+        self.model_task_for_fnames = 'affinity' if 'regression' in task else 'pose'

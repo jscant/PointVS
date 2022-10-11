@@ -32,17 +32,28 @@ from point_vs.preprocessing.data_loaders import get_data_loader, \
 from point_vs.utils import expand_path
 
 
-def get_model_and_test_dl(checkpoint_path, test_types, test_data_root):
-
+def get_model_and_test_dl(
+    checkpoint_path, test_types, test_data_root, model_task=None):
+    """Load model and test dataloader."""
     checkpoint_path, model, model_kwargs, cmd_line_args = load_model(
-        checkpoint_path, silent=False)
+        checkpoint_path, silent=False, model_task=model_task)
 
     # Is a validation set specified?
-    if cmd_line_args['model'] in ('lucid', 'egnn'):
+    if cmd_line_args['model'] in ('lucid', 'egnn', 'multitask'):
         dataset_class = PygPointCloudDataset
     else:
         dataset_class = PointCloudDataset
 
+    if model_task is None:
+        model_task_ = cmd_line_args.get('model_task', 'classification')
+    else:
+        model_task_ = {'pose': 'classification',
+                       'affinity': 'regression'}[model_task]
+        is_multi = cmd_line_args.get('multimulti_target_affinity',
+            cmd_line_args.get('model_task', 'multi_regression'))
+        if is_multi and model_task_ == 'regression':
+            model_task_ = 'multi_regression'
+    model.set_task(model_task_)
     test_dl = get_data_loader(
         test_data_root, receptors=None,
         compact=cmd_line_args['compact'],
@@ -57,7 +68,7 @@ def get_model_and_test_dl(checkpoint_path, test_types, test_data_root):
         prune=cmd_line_args.get('prune', False),
         rot=False, mode='val', fname_suffix=cmd_line_args['input_suffix'],
         extended_atom_types=cmd_line_args.get('extended_atom_types', False),
-        model_task=cmd_line_args.get('model_task', 'classification'),
+        model_task=model_task_
     )
 
     return checkpoint_path, model, model_kwargs, cmd_line_args, test_dl
@@ -73,6 +84,9 @@ if __name__ == '__main__':
     parser.add_argument('test_data_root', type=str,
                         help='Location to which paths in test_types are '
                              'relative')
+    parser.add_argument('--model_task', type=str,
+                        help='(multitask models only) load pose or affinity '
+                             'saved model files')
     parser.add_argument('--wandb_project', '-p', type=str,
                         help='Specify a wandb project. If unspecified, wandb '
                              'will not be used; if set to "SAME", the same '
@@ -87,7 +101,13 @@ if __name__ == '__main__':
     checkpoint_path = expand_path(args.model_checkpoint)
     checkpoint_path, model, model_kwargs, cmd_line_args, test_dl = \
         get_model_and_test_dl(
-            checkpoint_path, args.test_types, args.test_data_root)
+            checkpoint_path, args.test_types, args.test_data_root,
+            args.model_task)
+    if args.model_task is not None:
+        model.set_task({
+            'pose': 'classification',
+            'affinity': 'regression'
+        }[args.model_task])
 
     results_fname = expand_path(Path(
         checkpoint_path.parents[1],

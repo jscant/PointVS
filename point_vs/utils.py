@@ -26,18 +26,42 @@ from scipy.stats import pearsonr
 from point_vs.constants import AA_TRIPLET_CODES
 
 
-def find_latest_checkpoint(root):
+def find_latest_checkpoint(root, model_task=None):
+    """Find latest saved checkpoint in directory."""
+    if model_task is not None and model_task not in ('pose', 'affinity'):
+        raise RuntimeError(
+            'model_task must be either pose or affinity if specified.')
+    if not model_task:
+        model_task = ''
     max_epoch = -1
-    for fname in expand_path(root, 'checkpoints').glob('*.pt'):
+    glob_str = model_task + '*.pt'
+    for fname in expand_path(root, 'checkpoints').glob(glob_str):
         max_epoch = max(
             max_epoch, int(fname.with_suffix('').name.split('_')[-1]))
+    if model_task:
+        model_task += '_'
     if max_epoch > -1:
-        return Path(root, 'checkpoints', 'ckpt_epoch_{}.pt'.format(max_epoch))
+        return Path(
+            root, 'checkpoints', f'{model_task}ckpt_epoch_{max_epoch}.pt')
     raise RuntimeError('Could not find saved model in', root)
 
 
+def flatten_nested_iterables(list_tup, unpack_arrays=False):
+    """Flatten an arbitrarily deep nested list or tuple."""
+    if isinstance(list_tup, (list, tuple)):
+        if isinstance(list_tup[0], (list, tuple)):
+            if len(list_tup) > 1:
+                raise RuntimeError(
+                    'Nested iterables have more than one iterable inside them.')
+            return flatten_nested_iterables(list_tup[0], unpack_arrays)
+        return list_tup[0]
+    if isinstance(list_tup, (np.ndarray, torch.Tensor)) and unpack_arrays:
+        return list_tup
+    return list_tup
+
+
 def get_n_cols(text_file):
-    with open(expand_path(text_file), 'r') as f:
+    with open(expand_path(text_file), 'r', encoding='utf-8') as f:
         line = f.readline()
     return len(line.strip().split())
 

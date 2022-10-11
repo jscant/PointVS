@@ -17,6 +17,7 @@ from point_vs.attribution.attribution_fns import atom_masking, cam, \
     attention_wrapper, bond_masking, masking_wrapper
 from point_vs.attribution.process_pdb import score_and_colour_pdb
 from point_vs.models.load_model import load_model
+from point_vs.models.geometric.egnn_multitask import MultitaskSatorrasEGNN
 from point_vs.utils import ensure_writable, expand_path, mkdir, rename_lig, \
     find_latest_checkpoint
 
@@ -130,6 +131,7 @@ def attribute(attribution_type, model_file, output_dir, pdbid=None,
               override_attribution_name=None, atom_blind=False,
               inverse_colour=False, pdb_file=None, loaded_model=None,
               quiet=False, track_atom_positions=False, check_multiconf=True,
+              prediction_mode='classification',
               rename=False, only_first=False, split_by_mol=True):
     config.NOFIX = True
     if attribution_type in ('edge_attention', 'node_attention'):
@@ -178,11 +180,13 @@ def attribute(attribution_type, model_file, output_dir, pdbid=None,
     if expand_path(model_file).is_dir():
         model_file = find_latest_checkpoint(model_file)
 
-    _, model, model_kwargs, cmd_line_args = load_model(
+    _, model, _, cmd_line_args = load_model(
         model_file, silent=False,
         fetch_args_only=attribution_fn is None or loaded_model is not None)
     if loaded_model is not None:
         model = loaded_model
+    if isinstance(model, MultitaskSatorrasEGNN):
+        model.set_task(prediction_mode)
 
     dfs = score_and_colour_pdb(
         model=model, attribution_fn=attribution_fn,
@@ -243,8 +247,8 @@ def attribute(attribution_type, model_file, output_dir, pdbid=None,
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('attribution_type', type=str,
-                        help='Method of graph attribution; just {} for '
-                             'now.'.format(', '.join(ALLOWED_METHODS)))
+                        help='Method of graph attribution; just '
+                        f'{",".join(ALLOWED_METHODS)} for now.')
     parser.add_argument('model', type=str, help='Saved pytorch model')
     parser.add_argument('output_dir', type=str,
                         help='Directory in which to store results')
@@ -268,20 +272,25 @@ if __name__ == '__main__':
     parser.add_argument('--split_by_mol', '-s', action='store_true',
                         help='Treat receptor and ligand as separate when '
                              'colouring and calculating precision-recall')
+    parser.add_argument('--prediction_mode', type=str,
+                        default='classsification',
+                        help='(For multitask models only) Mode for attribution.'
+                        ' Either classification or regression')
     args = parser.parse_args()
     config.NOFIX = True
     if isinstance(args.pdbid, str) + isinstance(args.input_file, str) != 1:
         raise RuntimeError(
             'Specify exactly one of either --pdbid or --input_file.')
-    pd.set_option('display.float_format', lambda x: '%.3f' % x)
+    pd.set_option('display.float_format', lambda x: f'{x:.3f}')
 
-    if not args.only_first or not args.split_by_mol:
+    if not (args.only_first and args.split_by_mol):
         print(*[item[1][:10] for item in attribute(
             args.attribution_type, args.model, args.output_dir, pdbid=args.pdbid,
             input_file=args.input_file, only_process=args.only_process,
             atom_blind=True, gnn_layer=args.gnn_layer,
             track_atom_positions=args.track_atom_positions,
             split_by_mol=args.split_by_mol, rename=args.rename,
+            prediction_mode=args.prediction_mode,
             only_first=args.only_first).values()], sep='\n\n')
     else:
         df = list(attribute(
@@ -290,6 +299,7 @@ if __name__ == '__main__':
             atom_blind=True, gnn_layer=args.gnn_layer,
             track_atom_positions=args.track_atom_positions,
             split_by_mol=args.split_by_mol, rename=args.rename,
+            prediction_mode=args.prediction_mode,
             only_first=args.only_first).values())[0][1]
         try:
             print('Ligand:')

@@ -14,8 +14,8 @@ from point_vs.utils import expand_path, load_yaml, mkdir, PositionDict, \
 
 
 def get_stats_from_dir(model_fname, directory, types, attribution_fn,
-                       no_receptor=False):
-    _, model, model_kwargs, cmd_line_args = load_model(model_fname)
+                       no_receptor=False, model_task=None):
+    _, model, _, cmd_line_args = load_model(model_fname, model_task=model_task)
     model = model.eval()
     directory = expand_path(directory)
     atom_labels_dict = load_yaml(directory.parent / 'atomic_labels.yaml')
@@ -147,11 +147,15 @@ if __name__ == '__main__':
     parser.add_argument('output_dir', type=str, help='Where to store graphs')
     parser.add_argument('--no_receptor', '-n', action='store_true',
                         help='Do not include receptor information')
+    parser.add_argument('--model_task', type=str,
+                        help='(multitask models only) load classification or '
+                             'regression saved model files')
     args = parser.parse_args()
 
     for attr_fn, fn_name in zip((cam, atom_masking), ('CAM', 'Masking')):
         lrp, lap, rrp, rap, lig_positions, rec_positions = get_stats_from_dir(
-            args.model, args.input_dir, args.types, attr_fn, args.no_receptor)
+            args.model, args.input_dir, args.types, attr_fn, args.no_receptor,
+            args.model_task)
         if args.model.endswith('.pt'):
             project_name = expand_path(args.model).parents[1].name
         else:
