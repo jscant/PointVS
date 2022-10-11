@@ -38,7 +38,7 @@ def generate_types_file(input_fnames: Fname, types_fname: Fname) -> None:
 
 def predict_on_molecular_inputs(
     input_fnames: Path, data_root: Path, model_path: Path, output_dir: Path
-    ) -> None:
+) -> None:
     """Run inference on PDB and SDF files.
 
     Arguments:
@@ -93,6 +93,9 @@ def predict_on_molecular_inputs(
     logging.info('Performing inference...\n')
 
     model.val(test_dl, preds_fname)
+    preds_fname = Path(
+        preds_fname.parent,
+        model.model_task_for_fnames + '_' + preds_fname.name)
     with open(preds_fname, 'r', encoding='utf-8') as f:
         predictions = f.read().replace(' | ', ' ')
     with open(preds_fname, 'w', encoding='utf-8') as f:
