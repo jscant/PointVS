@@ -50,7 +50,7 @@ if __name__ == '__main__':
         logger.info('Wandb found.')
     except ImportError:
         logger.warning('Library wandb not available. --wandb and --run flags '
-            'should not be used.')
+                       'should not be used.')
         wandb = None
 
     # This is a lot slower so only use if precision is an issue
@@ -187,7 +187,7 @@ if __name__ == '__main__':
         wandb_dir = mkdir(args.wandb_dir)
     wandb_init_kwargs = {
         'project': args.wandb_project, 'allow_val_change': True,
-        'config': args_to_record, 'dir': wandb_dir
+        'config': args_to_record, 'dir': str(wandb_dir)
     }
     if args.wandb_project is not None:
         wandb.init(**wandb_init_kwargs)
