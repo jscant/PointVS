@@ -24,8 +24,6 @@ class MultitaskSatorrasEGNN(SartorrasEGNN):
         tanh: bool = True,
         dropout: float = 0.0,
         graphnorm: bool = True,
-        classify_on_edges: bool = False,
-        classify_on_feats: bool = True,
         update_coords: bool = True,
         permutation_invariance: bool = False,
         attention_activation_fn: str = 'sigmoid',
@@ -61,8 +59,6 @@ class MultitaskSatorrasEGNN(SartorrasEGNN):
                 improves in stability but it may decrease in accuracy.
             dropout: dropout rate for edge/node/coordinate MLPs.
             graphnorm: apply graph normalisation.
-            classify_on_edges: final classification on edges.
-            classify_on_feats: final classification on features (recommended).
             multi_fc: multiple fully connected layers at the end.
             update_coords: coordinates update at each layer.
             permutation_invariance: edges embeddings are summed rather than
@@ -92,9 +88,6 @@ class MultitaskSatorrasEGNN(SartorrasEGNN):
         self.rezero = rezero
         self.model_task = model_task
 
-        assert classify_on_feats or classify_on_edges, \
-            'We must use either or both of classify_on_feats and ' \
-            'classify_on_edges'
         assert not (gated_residual and rezero), \
             'gated_residual and rezero are incompatible'
         for i in range(0, num_layers):
