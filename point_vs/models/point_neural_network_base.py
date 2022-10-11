@@ -1,3 +1,7 @@
+"""Base class for group-invariant networks for pose classificatio and affinity
+prediction.
+"""
+
 import math
 import time
 from abc import abstractmethod
@@ -97,7 +101,8 @@ class PointNeuralNetworkBase(nn.Module):
         self.test_metric = 0
 
         if not silent:
-            with open(save_path / 'model_kwargs.yaml', 'w') as f:
+            with open(
+                save_path / 'model_kwargs.yaml', 'w', encoding='utf-8') as f:
                 yaml.dump(model_kwargs, f)
 
         pc = self.param_count
@@ -110,15 +115,15 @@ class PointNeuralNetworkBase(nn.Module):
 
     @abstractmethod
     def prepare_input(self, x):
-        pass
+        """(Abstract method) make sure inputs are in the correct format."""
 
     @abstractmethod
     def process_graph(self, graph):
-        pass
+        """(Abstract method) Unpack the graph into tensors."""
 
     @abstractmethod
     def forward(self, x):
-        pass
+        """(Abstract method) Forward pass for the neural network."""
 
     def train_model(self, data_loader, epochs=1, epoch_end_validation_set=None,
                     top1_on_end=False):
@@ -139,7 +144,7 @@ class PointNeuralNetworkBase(nn.Module):
         for self.epoch in range(self.init_epoch, epochs):
             self.train()
             for self.batch, graph in enumerate(data_loader):
-                y_pred, y_true, ligands, receptors = self.process_graph(graph)
+                y_pred, y_true, _, _ = self.process_graph(graph)
                 self.get_mean_preds(y_true, y_pred)
                 loss_ = self.backprop(y_true, y_pred)
                 if self.scheduler is not None:
