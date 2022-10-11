@@ -200,7 +200,9 @@ class PointNeuralNetworkBase(nn.Module):
                     y_pred_np = to_numpy(nn.Sigmoid()(y_pred)).reshape((-1,))
                     num_type = int
                 elif self.model_task == 'multi_regression':
-                    is_label = y_true[0] is not None
+                    check_val = y_true[0][0] if isinstance(
+                        y_true, (tuple, list)) else y_true[0]
+                    is_label = check_val is not None
                     y_pred_np = to_numpy(y_pred).reshape((-1, 3))
                     if is_label:
                         y_true_np = to_numpy(y_true).reshape((-1, 3))
