@@ -46,11 +46,11 @@ def parse_args():  #pylint:disable=too-many-statements
                         help='Number of examples to include in each batch for '
                              'training.')
     parser.add_argument('--epochs_pose', '-ep', type=int, required=False,
-                        default=1,
+                        default=0,
                         help='Number of times to iterate through pose '
                              'training set.')
     parser.add_argument('--epochs_affinity', '-ea', type=int, required=False,
-                        default=1,
+                        default=0,
                         help='Number of times to iterate through affinity '
                              'training set.')
     parser.add_argument('--channels', '-k', type=int, default=32,
