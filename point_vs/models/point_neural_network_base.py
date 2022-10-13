@@ -38,7 +38,6 @@ class PointNeuralNetworkBase(nn.Module):
         self.include_strain_info = False
         self.batch = 0
         self.epoch = 0
-        self.losses = []
         self.feats_linear_layers = None
         self.edges_linear_layers = None
         self.transformer_encoder = None
@@ -49,15 +48,11 @@ class PointNeuralNetworkBase(nn.Module):
             mkdir(self.save_path)
 
         self.predictions_file = Path(self.save_path, 'predictions.txt')
-        self.loss_plot_file = Path(
-            self.save_path, f'{self.model_task_for_fnames}_loss.png')
 
         self.lr = learning_rate
         self.weight_decay = weight_decay
         self.translated_actives = model_kwargs.get('translated_actives', None)
         self.n_translated_actives = model_kwargs.get('n_translated_actives', 0)
-
-        self.loss_log_file = self.save_path / 'loss.log'
 
         if self.model_task == 'classification':
             self.loss_function = nn.BCEWithLogitsLoss()
@@ -368,15 +363,11 @@ class PointNeuralNetworkBase(nn.Module):
             if hasattr(self, '_get_min_max'):
                 print(self._get_min_max())
             raise RuntimeError('We have hit a NaN loss value.')
-        self.losses.append(loss_)
         return loss_
 
     def record_and_display_info(
             self, start_time, epochs, data_loader, loss, record_type='train'):
         lr = self.optimiser.param_groups[0]['lr']
-        if not (self.batch + 1) % self.log_interval or \
-                self.batch == self.total_iters - 1:
-            self.save_loss(self.log_interval)
 
         if record_type == 'train':
             eta = get_eta(start_time, self.global_iter, self.total_iters)
@@ -505,7 +496,6 @@ class PointNeuralNetworkBase(nn.Module):
             'learning_rate': self.lr,
             'weight_decay': self.weight_decay,
             'epoch': self.epoch + 1,
-            'losses': self.losses,
             'model_state_dict': self.state_dict(),
             'optimiser_state_dict': self.optimiser.state_dict()
         }, save_path)
@@ -549,7 +539,6 @@ class PointNeuralNetworkBase(nn.Module):
             self.epoch = checkpoint['epoch']
             if not self.epoch:
                 self.epoch += 1
-            self.losses = checkpoint['losses']
             if rename:
                 for layer in self.layers:
                     if hasattr(layer, 'att_mlp'):
@@ -564,19 +553,6 @@ class PointNeuralNetworkBase(nn.Module):
             except ValueError:
                 pth = Path(checkpoint_file)
             print('Sucesfully loaded weights from', pth)
-
-    def save_loss(self, save_interval):
-        """Save the loss information to disk.
-
-        Arguments:
-            save_interval: how often the loss is being recorded (in batches).
-        """
-        log_file = self.save_path / 'loss.log'
-        start_idx = save_interval * (self.batch // save_interval)
-        with open(log_file, 'a') as f:
-            f.write('\n'.join(
-                [str(idx + start_idx + 1) + ' ' + str(loss) for idx, loss in
-                 enumerate(self.losses[-save_interval:])]) + '\n')
 
     @property
     def param_count(self):
