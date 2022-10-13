@@ -33,18 +33,12 @@ def find_latest_checkpoint(root, model_task=None):
             'model_task must be either pose or affinity if specified.')
     if not model_task:
         model_task = ''
-    max_epoch = -1
     glob_str = model_task + '*.pt'
-    for fname in expand_path(root, 'checkpoints').glob(glob_str):
-        max_epoch = max(
-            max_epoch, int(fname.with_suffix('').name.split('_')[-1]))
-    if model_task:
-        model_task += '_'
-    if max_epoch > -1:
-        return Path(
-            root, 'checkpoints', f'{model_task}ckpt_epoch_{max_epoch}.pt')
-    raise RuntimeError('Could not find saved model in', root)
-
+    try:
+        return max(Path(root, 'checkpoints').glob(glob_str),
+                   key=lambda f: f.stat().st_ctime)
+    except ValueError as exc:
+        raise ValueError(f'No checkpoints found in {root}.') from exc
 
 def flatten_nested_iterables(list_tup, unpack_arrays=False):
     """Flatten an arbitrarily deep nested list or tuple."""
