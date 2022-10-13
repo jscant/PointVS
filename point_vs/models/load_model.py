@@ -18,7 +18,7 @@ def load_model(
         fetch_args_only: bool = False,
         init_path: bool = False,
         model_task: Optional[str] = None
-    ) -> Tuple[Path, nn.Module, Dict, Dict]:
+    ) -> Tuple[Path, Optional[nn.Module], Dict, Dict]:
     """Load model weights and arguments used to train model.
 
     Arguments:
@@ -45,9 +45,6 @@ def load_model(
 
     model_kwargs = load_yaml(model_path.parents[1] / 'model_kwargs.yaml')
     cmd_line_args = load_yaml(model_path.parents[1] / 'cmd_args.yaml')
-    if cmd_line_args.get('model') == 'multitask' and model_task is None:
-        raise RuntimeError(
-            'model_task must be specified when loading a multitask model')
     if 'node_attention' not in cmd_line_args.keys():
         cmd_line_args['node_attention'] = False
     if 'edge_attention' not in cmd_line_args.keys():
@@ -56,7 +53,7 @@ def load_model(
         model_kwargs['edge_attention'] = cmd_line_args['edge_attention']
 
     if fetch_args_only:
-        return None, None, model_kwargs, cmd_line_args
+        return model_path, None, model_kwargs, cmd_line_args
 
     model_type = cmd_line_args['model']
 
