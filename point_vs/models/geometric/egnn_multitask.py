@@ -9,7 +9,7 @@ from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
 
 class MultitaskSatorrasEGNN(SartorrasEGNN):
     """Equivariant network based on the E_GCL layer."""
-    # pylint: disable = R, W0201, W0613, W0211
+    # pylint: disable = R, W0201, W0613, W0221
     def build_net(
         self,
         dim_input: int,
@@ -134,18 +134,17 @@ class MultitaskSatorrasEGNN(SartorrasEGNN):
                       gated_residual=gated_residual,
                       rezero=rezero))
 
-        feats_linear_layers_pose = [nn.Linear(k, 1)]
         feats_linear_layers_affinity = [nn.Linear(k, dim_output)]
         feats_linear_layers_affinity.append(
             nn.Softplus() if final_softplus else nn.ReLU())
-        self.feats_linear_layers_pose = nn.Sequential(*feats_linear_layers_pose)
+        self.feats_linear_layers_pose = nn.Sequential(nn.Linear(k, 1))
         self.feats_linear_layers_affinity = nn.Sequential(
             *feats_linear_layers_affinity)
         return nn.Sequential(*embedding_layers)
 
 
     def forward(self, graph):
-        feats, edges, coords, edge_attributes, batch = self.unpack_graph(
+        feats, edges, coords, edge_attributes, batch = self.unpack_graph(  # pylint:disable=W0632
             graph)
         feats, _ = self.get_embeddings(
             feats, edges, coords, edge_attributes, batch)
