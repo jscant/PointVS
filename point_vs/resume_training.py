@@ -201,7 +201,7 @@ if __name__ == '__main__':
     if pose_train_dl is not None:
         model.set_task('classification')
         model.train_model(
-            pose_train_dl, epochs=args.epochs_pose, top1_on_end=top1,
+            pose_train_dl, epochs=epochs_classi, top1_on_end=top1,
             epoch_end_validation_set=pose_test_dl if val_on_epoch_end else None)
     if pose_test_dl is not None:
         model.set_task('classification')
@@ -209,7 +209,7 @@ if __name__ == '__main__':
     if affinity_train_dl is not None:
         model.set_task(regression_task)
         model.train_model(
-            affinity_train_dl, epochs=args.epochs_pose, top1_on_end=top1,
+            affinity_train_dl, epochs=epochs_affini, top1_on_end=top1,
             epoch_end_validation_set=affinity_test_dl if val_on_epoch_end else None)
     if affinity_test_dl is not None:
         model.set_task(regression_task)
