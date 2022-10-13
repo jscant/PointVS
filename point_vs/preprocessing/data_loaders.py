@@ -82,8 +82,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
 
         self.fname_suffix = fname_suffix
         if not self.base_path.exists():
-            raise FileNotFoundError(
-                'Dataset {} does not exist.'.format(self.base_path))
+            raise FileNotFoundError(f'Dataset {self.base_path} does not exist.')
         self.polar_hydrogens = polar_hydrogens
         self.use_atomic_numbers = use_atomic_numbers
         self.compact = compact
@@ -529,8 +528,9 @@ def regression_types_to_lists(data_root, types_fname):
     pki, pkd, ic50, receptors, ligands = [], [], [], [], []
     missing = []
     for i in range(len(df)):
-        if Path(data_root, lists[-2][i]).is_file() and Path(
-                data_root, lists[-1][i]).is_file():
+        rec_path = Path(data_root, lists[-2][i])
+        lig_path = Path(data_root, lists[-1][i])
+        if rec_path.is_file() and lig_path.is_file():
             pki.append(lists[0][i])
             pkd.append(lists[1][i])
             ic50.append(lists[2][i])
