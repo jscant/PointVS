@@ -54,16 +54,8 @@ class PointNeuralNetworkBase(nn.Module):
         self.translated_actives = model_kwargs.get('translated_actives', None)
         self.n_translated_actives = model_kwargs.get('n_translated_actives', 0)
 
-        if self.model_task == 'classification':
-            self.loss_function = nn.BCEWithLogitsLoss()
-            self.model_task_string = 'Binary crossentropy'
-        elif self.model_task.endswith('regression'):
-            self.loss_function = nn.MSELoss()
-            self.model_task_string = 'Mean squared error'
-        else:
-            raise RuntimeError(
-                'model_task must be either classification, regression or '
-                f'muti_regression. (model_task is {self.model_task})')
+        self.bce = nn.BCEWithLogitsLoss()
+        self.regression_loss = nn.MSELoss()
 
         self.wandb_project = wandb_project
         self.wandb_path = self.save_path / 'wandb_{}'.format(wandb_project)
@@ -297,10 +289,14 @@ class PointNeuralNetworkBase(nn.Module):
         return True
 
     def get_loss(self, y_true, y_pred):
-        if self.model_task != 'multi_regression':
-            return self.loss_function(y_pred, y_true.to(_device))
+        """Either bce or mse depending on model task."""
+        if self.model_task == 'classification':
+            return self.bce(y_pred, y_true.to(_device))
+        if self.model_task == 'regression':
+            return self.regression_loss(y_pred, y_true.to(_device))
         y_pred[torch.where(y_true == -1)] = -1
-        return 3 * self.loss_function(y_pred, y_true.to(_device))
+        # True loss is only one one, so reverse the mean operation over all 3.
+        return 3 * self.regression_loss(y_pred, y_true.to(_device))
 
     def training_setup(self, data_loader, epochs):
         start_time = time.time()
