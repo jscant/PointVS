@@ -52,6 +52,7 @@ if __name__ == '__main__':
     pose_test_dl = None
     affinity_test_dl = None
 
+    # Older models will have epochs in their recorded commands.
     if cmd_line_args.get('epochs', False):
         if cmd_line_args.get('model_task', 'regression') == 'multi_regression':
             regression_task = 'multi_regression'
@@ -71,7 +72,7 @@ if __name__ == '__main__':
             affinity_types_train = cmd_line_args['train_types']
             affinity_data_root_test = cmd_line_args['test_data_root']
             affinity_types_test = cmd_line_args['test_types']
-    else:
+    else:  # Newer models follow this branch.
         if cmd_line_args['multi_target_affinity']:
             regression_task = 'multi_regression'
         else:
@@ -199,18 +200,22 @@ if __name__ == '__main__':
     val_on_epoch_end = cmd_line_args.get('val_on_epoch_end', False)
     top1 = cmd_line_args.get('top1', False)
     if pose_train_dl is not None:
+        model.train()
         model.set_task('classification')
         model.train_model(
             pose_train_dl, epochs=epochs_classi, top1_on_end=top1,
             epoch_end_validation_set=pose_test_dl if val_on_epoch_end else None)
     if pose_test_dl is not None:
+        model.eval()
         model.set_task('classification')
         model.val(pose_test_dl, top1_on_end=top1)
     if affinity_train_dl is not None:
+        model.train()
         model.set_task(regression_task)
         model.train_model(
             affinity_train_dl, epochs=epochs_affini, top1_on_end=top1,
             epoch_end_validation_set=affinity_test_dl if val_on_epoch_end else None)
     if affinity_test_dl is not None:
+        model.eval()
         model.set_task(regression_task)
         model.val(affinity_test_dl, top1_on_end=top1)
