@@ -58,7 +58,7 @@ class PointNeuralNetworkBase(nn.Module):
         self.regression_loss = nn.MSELoss()
 
         self.wandb_project = wandb_project
-        self.wandb_path = self.save_path / 'wandb_{}'.format(wandb_project)
+        self.wandb_path = self.save_path / f'wandb_{wandb_project}'
         self.wandb_run = wandb_run
 
         self.n_layers = model_kwargs.get('num_layers', 12)
@@ -74,8 +74,7 @@ class PointNeuralNetworkBase(nn.Module):
                 weight_decay=weight_decay,
                 nesterov=True)
         else:
-            raise NotImplementedError('{} not recognised optimiser.'.format(
-                optimiser))
+            raise NotImplementedError(f'{optimiser} not recognised optimiser.')
 
         assert not (use_1cycle and warm_restarts), '1cycle nad warm restarts ' \
                                                    'are mutually exclusive'
@@ -560,4 +559,9 @@ class PointNeuralNetworkBase(nn.Module):
             raise ValueError('Argument for set_task must be one of '
                              'classification, regression or multi_regression')
         self.model_task = task
-        self.model_task_for_fnames = 'affinity' if 'regression' in task else 'pose'
+        if 'regression' in task:
+            self.model_task_for_fnames = 'affinity'
+            self.model_task_string = 'Mean squared error'
+        else:
+            self.model_task_for_fnames = 'pose'
+            self.model_task_string = 'Binary crossentropy'
