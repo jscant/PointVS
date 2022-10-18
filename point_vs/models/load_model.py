@@ -77,6 +77,8 @@ def load_model(
                         weight_decay=cmd_line_args['weight_decay'],
                         use_1cycle=cmd_line_args['use_1cycle'],
                         warm_restarts=cmd_line_args['warm_restarts'],
+                        regression_loss=cmd_line_args.get(
+                            'regression_loss', 'mse'),
                         silent=silent, **model_kwargs)
 
     model.load_weights(model_path, silent=silent)

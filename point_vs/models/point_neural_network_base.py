@@ -32,6 +32,7 @@ class PointNeuralNetworkBase(nn.Module):
                  wandb_project=None, wandb_run=None, silent=False,
                  use_1cycle=False, warm_restarts=False,
                  only_save_best_models=False, optimiser='adam',
+                 regression_loss='mse',
                  **model_kwargs):
         super().__init__()
         self.set_task(model_kwargs.get('model_task', 'classification'))
@@ -56,7 +57,7 @@ class PointNeuralNetworkBase(nn.Module):
         self.n_translated_actives = model_kwargs.get('n_translated_actives', 0)
 
         self.bce = nn.BCEWithLogitsLoss()
-        self.regression_loss = nn.MSELoss()
+        self.regression_loss = nn.MSELoss() if regression_loss == 'mse' else nn.HuberLoss()
 
         self.wandb_project = wandb_project
         self.wandb_path = self.save_path / f'wandb_{wandb_project}'

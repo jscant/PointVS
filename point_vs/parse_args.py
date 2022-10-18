@@ -244,4 +244,6 @@ def parse_args():  #pylint:disable=too-many-statements
                         help='Use multitarget regression for affinity. If '
                              'True, targets are split depending on if labels '
                              'are pkd, pki or IC50.')
+    parser.add_argument('--regression_loss', type=str, default='mse',
+                        help='Either mse or huber.')
     return parser.parse_args()
