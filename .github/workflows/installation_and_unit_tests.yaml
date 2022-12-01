@@ -44,7 +44,7 @@ jobs:
       - name: Unit tests
         run: pytest -v
   installation-and-unit-tests-m1:
-    name: Installation and unit tests
+    name: Installation and unit tests (Mac M1)
     runs-on: m1max
     defaults:
       run:
