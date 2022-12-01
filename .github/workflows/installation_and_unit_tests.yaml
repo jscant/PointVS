@@ -43,3 +43,45 @@ jobs:
         run: python3 point_vs/preprocessing/preprocessing.py -h
       - name: Unit tests
         run: pytest -v
+installation-and-unit-tests-m1:
+    name: Installation and unit tests
+    runs-on: m1max
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - name: Install SHH Key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.SSH_KEY }}
+          name: id_rsa
+          known_hosts: ${{ secrets.KNOWN_HOSTS }}
+          if_key_exists: fail
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '14'
+      - name: Create conda envionment from environment.yml
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          environment-file: environment.yml
+          python-version: 3.8
+          auto-activate-base: false
+          auto-update-conda: false
+          activate-environment: pointvs
+      - name: pip installation
+        run: arch -arm64 pip install -e .
+      - name: Main script imports
+        run: arch -arm64 python3 point_vs.py -h
+      - name: Attribution imports
+        run: arch -arm64 python3 point_vs/attribution/attribution.py -h
+      - name: Types to parquet imports
+        run: arch -arm64 python3 point_vs/dataset_generation/types_to_parquet.py -h
+      - name: Generate types file imports
+        run: arch -arm64 python3 point_vs/dataset_generation/generate_types_file.py -h
+      - name: Data loaders imports
+        run: arch -arm64 python3 point_vs/preprocessing/data_loaders.py -h
+      - name: Preprocessing imports
+        run: arch -arm64 python3 point_vs/preprocessing/preprocessing.py -h
+      - name: Unit tests
+        run: arch -arm64 pytest -v
