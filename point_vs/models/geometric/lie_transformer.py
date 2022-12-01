@@ -6,6 +6,7 @@ from lie_conv.utils import Pass
 from torch import nn
 from torch_geometric.nn import global_mean_pool
 
+from point_vs.global_objects import DEVICE
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase
 
 
@@ -64,8 +65,8 @@ class EquivariantTransformer(PNNGeometricBase):
 
     def get_embeddings(self, feats, edges, coords, edge_attributes, batch):
         batch_size = coords.shape[0]
-        x = (coords[None, ...].to(_device), feats[None, ...].to(_device),
-             torch.ones(1, batch_size).bool().to(_device))
+        x = (coords[None, ...].to(DEVICE), feats[None, ...].to(DEVICE),
+             torch.ones(1, batch_size).bool().to(DEVICE))
         if self.max_sample_norm is None:
             lifted_data = self.group.lift(x, self.liftsamples)
         else:

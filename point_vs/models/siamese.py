@@ -9,11 +9,11 @@ import yaml
 from torch import nn
 from torch.nn.functional import silu
 
+from point_vs.global_objects import DEVICE
 from point_vs.analysis.top_n import top_n
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase
 from point_vs.models.point_neural_network_base import PointNeuralNetworkBase
-from point_vs.utils import mkdir, \
-    to_numpy
+from point_vs.utils import mkdir, to_numpy
 
 
 class SiameseNeuralNetwork(PNNGeometricBase, ABC):
@@ -61,10 +61,10 @@ class SiameseNeuralNetwork(PNNGeometricBase, ABC):
         self.wandb_run = wandb_run
 
         self.linear_layers = [
-            nn.Linear(embed_size, 64).to(_device), nn.Linear(64, 32).to(_device),
-            nn.Linear(32, 1).to(_device)]
-        self.activation_layers = [nn.SiLU().to(_device), nn.SiLU().to(_device),
-                                  nn.Identity().to(_device)]
+            nn.Linear(embed_size, 64).to(DEVICE), nn.Linear(64, 32).to(DEVICE),
+            nn.Linear(32, 1).to(DEVICE)]
+        self.activation_layers = [nn.SiLU().to(DEVICE), nn.SiLU().to(DEVICE),
+                                  nn.Identity().to(DEVICE)]
 
         self.optimiser = torch.optim.Adam(
             self.parameters(), lr=self.lr, weight_decay=weight_decay)
@@ -89,7 +89,7 @@ class SiameseNeuralNetwork(PNNGeometricBase, ABC):
         if self.wandb_project is not None:
             wandb.log({'Parameters': pc})
 
-        self.to(_device)
+        self.to(DEVICE)
 
     def forward(self, rec_graph, lig_graph):
         rec_embedding = self.rec_nn(rec_graph)

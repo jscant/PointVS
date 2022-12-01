@@ -15,14 +15,12 @@ import yaml
 from torch import nn
 from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingWarmRestarts
 
+from point_vs.global_objects import DEVICE
 from point_vs.analysis.top_n import top_n
 from point_vs.utils import flatten_nested_iterables
 from point_vs.utils import get_eta, format_time, print_with_overwrite, mkdir, \
     to_numpy, expand_path, load_yaml, get_regression_pearson, \
     find_latest_checkpoint
-
-_device = torch.device(
-    'cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
 class PointNeuralNetworkBase(nn.Module):
@@ -102,7 +100,7 @@ class PointNeuralNetworkBase(nn.Module):
         if self.wandb_project is not None:
             wandb.log({'Parameters': pc})
 
-        self.to(_device)
+        self.to(DEVICE)
 
     @abstractmethod
     def prepare_input(self, x):
@@ -293,12 +291,12 @@ class PointNeuralNetworkBase(nn.Module):
     def get_loss(self, y_true, y_pred):
         """Either bce or mse depending on model task."""
         if self.model_task == 'classification':
-            return self.bce(y_pred, y_true.to(_device))
+            return self.bce(y_pred, y_true.to(DEVICE))
         if self.model_task == 'regression':
-            return self.regression_loss(y_pred, y_true.to(_device))
+            return self.regression_loss(y_pred, y_true.to(DEVICE))
         y_pred[torch.where(y_true == -1)] = -1
         # True loss is only one one, so reverse the mean operation over all 3.
-        return 3 * self.regression_loss(y_pred, y_true.to(_device))
+        return 3 * self.regression_loss(y_pred, y_true.to(DEVICE))
 
     def training_setup(self, data_loader, epochs, model_task=None):
         start_time = time.time()
@@ -518,7 +516,7 @@ class PointNeuralNetworkBase(nn.Module):
         checkpoint_file = expand_path(checkpoint_file)
         if checkpoint_file.is_dir():
             checkpoint_file = find_latest_checkpoint(checkpoint_file)
-        checkpoint = torch.load(str(checkpoint_file), map_location=_device)
+        checkpoint = torch.load(str(checkpoint_file), map_location=DEVICE)
         if self.model_task == load_yaml(
                 expand_path(checkpoint_file).parents[1] /
                 'model_kwargs.yaml').get('model_task', 'classification'):

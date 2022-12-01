@@ -4,6 +4,7 @@ import torch
 from scipy.stats import rankdata
 from torch_geometric.data import Data
 
+from point_vs.global_objects import DEVICE
 from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase
 from point_vs.models.point_neural_network_base import to_numpy
@@ -426,8 +427,8 @@ def atom_masking(
             p = p.reshape(1, *p.shape)
             v = v.reshape(1, *v.shape)
         for i in range(n_atoms):
-            p_input_matrix = torch.zeros(p.size(1) - 1, p.size(2)).to(_device)
-            v_input_matrix = torch.zeros(v.size(1) - 1, v.size(2)).to(_device)
+            p_input_matrix = torch.zeros(p.size(1) - 1, p.size(2)).to(DEVICE)
+            v_input_matrix = torch.zeros(v.size(1) - 1, v.size(2)).to(DEVICE)
 
             p_input_matrix[:i, :] = p[:, :i, :]
             p_input_matrix[i:, :] = p[:, i + 1:, :]
@@ -458,9 +459,9 @@ def atom_masking(
                     scores[i] = original_score - float(to_numpy(x))
     else:
         original_score = float(to_numpy(torch.sigmoid(model((p, v, m)))))
-        p_input_matrix = torch.zeros(bs, p.size(1) - 1, p.size(2)).to(_device)
-        v_input_matrix = torch.zeros(bs, v.size(1) - 1, v.size(2)).to(_device)
-        m_input_matrix = torch.ones(bs, m.size(1) - 1).bool().to(_device)
+        p_input_matrix = torch.zeros(bs, p.size(1) - 1, p.size(2)).to(DEVICE)
+        v_input_matrix = torch.zeros(bs, v.size(1) - 1, v.size(2)).to(DEVICE)
+        m_input_matrix = torch.ones(bs, m.size(1) - 1).bool().to(DEVICE)
         for i in range(p.size(1) // bs):
             print(i * bs)
             for j in range(bs):
@@ -475,9 +476,9 @@ def atom_masking(
                 p_input_matrix, v_input_matrix,
                 m_input_matrix)))).squeeze() - original_score
         for i in range(bs * (p.size(1) // bs), p.size(1)):
-            masked_p = p[:, torch.arange(p.size(1)) != i, :].to(_device)
-            masked_v = v[:, torch.arange(v.size(1)) != i, :].to(_device)
-            masked_m = m[:, torch.arange(m.size(1)) != i].to(_device)
+            masked_p = p[:, torch.arange(p.size(1)) != i, :].to(DEVICE)
+            masked_v = v[:, torch.arange(v.size(1)) != i, :].to(DEVICE)
+            masked_m = m[:, torch.arange(m.size(1)) != i].to(DEVICE)
             scores[i] = original_score - float(to_numpy(torch.sigmoid(
                 model((masked_p, masked_v, masked_m)))))
     return scores

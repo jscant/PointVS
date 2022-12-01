@@ -12,6 +12,7 @@ from pymol.cgo import CYLINDER
 from torch.nn.functional import one_hot
 from torch_geometric.data import Data
 
+from point_vs.global_objects import DEVICE
 from point_vs.attribution.attribution_fns import edge_attention, \
     edge_embedding_attribution, track_bond_lengths, node_attention, \
     attention_wrapper, cam_wrapper, atom_masking, bond_masking, masking_wrapper
@@ -24,8 +25,6 @@ from point_vs.preprocessing.pyg_single_item_dataset import \
     get_pyg_single_graph_for_inference
 from point_vs.utils import coords_to_string, PositionDict, \
     get_colour_interpolation_fn
-
-_device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
 class VisualizerDataWithMolecularInfo(VisualizerData):
@@ -446,7 +445,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
 
             v = repeat(v, 'n d -> b n d', b=1)
 
-            model = model.eval().to(_device)
+            model = model.eval().to(DEVICE)
 
             if isinstance(model, PNNGeometricBase):
 
@@ -461,7 +460,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                 )))
 
             else:
-                pre_activation = model((p.to(_device), v.to(_device), m.to(_device)))[0, ...]
+                pre_activation = model((p.to(DEVICE), v.to(DEVICE), m.to(DEVICE)))[0, ...]
                 edge_indices = None
 
             if model.model_task == 'classification':
@@ -481,7 +480,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                     print('Original score: {:.4f}'.format(score))
 
             model_labels = attribution_fn(
-                model, p.to(_device), v.to(_device), edge_attrs=edge_attrs,
+                model, p.to(DEVICE), v.to(DEVICE), edge_attrs=edge_attrs,
                 edge_indices=edge_indices, bs=bs, gnn_layer=gnn_layer,
                 resis=df['resi'].to_numpy())
 
@@ -536,7 +535,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
 
                 v = repeat(v, 'n d -> b n d', b=1)
 
-                model = model.eval().to(_device)
+                model = model.eval().to(DEVICE)
 
                 edge_indices = torch.from_numpy(np.vstack(edge_indices)).long()
                 edge_attrs = one_hot(torch.from_numpy(edge_attrs).long(), 3)
@@ -569,7 +568,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                 if not idx:
                     original_score = score
                     atomic_model_labels = attribution_fn(
-                        model, p.to(_device), v.to(_device), edge_attrs=edge_attrs,
+                        model, p.to(DEVICE), v.to(DEVICE), edge_attrs=edge_attrs,
                         edge_indices=edge_indices, bs=bs, gnn_layer=gnn_layer)
                 else:
                     residue_scores[resi] = original_score - score

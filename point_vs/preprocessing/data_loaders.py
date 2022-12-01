@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader
 from torch_geometric.loader import DataLoader as GeoDataLoader
 from torch_geometric.data import Data
 
+from point_vs.global_objects import NUM_WORKERS
 from point_vs.preprocessing.preprocessing import make_box, \
     concat_structs, make_bit_vector, uniform_random_rotation, generate_edges
 from point_vs.utils import expand_path, shorten_home, get_n_cols
@@ -175,7 +176,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
                         self.sample_weights, len(self.sample_weights)
                     )
         self.labels = labels
-        print('There are', len(self.ligand_fnames), 'training points in',
+        print('There are', len(self.ligand_fnames), 'data points in',
               shorten_home(base_path))
 
         # apply random rotations to ALL coordinates?
@@ -296,7 +297,7 @@ class PointCloudDataset(torch.utils.data.Dataset):
         v = make_bit_vector(
             struct.types.to_numpy(), self.n_features, self.compact)
 
-        return p, v, struct, force_zero_label
+        return p.float(), v.float(), struct, force_zero_label
 
     def __getitem__(self, item):
         """Given an index, locate and preprocess relevant parquet file.
@@ -502,12 +503,12 @@ def get_data_loader(
         return DataLoader(
             ds, batch_size, False, sampler=sampler,
             collate_fn=collate, drop_last=False, pin_memory=True,
-            num_workers=min(4, psutil.cpu_count()))
+            num_workers=NUM_WORKERS)
     else:
         return GeoDataLoader(
             ds, batch_size, False, sampler=sampler,
             drop_last=False, pin_memory=True,
-            num_workers=min(4, psutil.cpu_count()))
+            num_workers=NUM_WORKERS)
 
 
 def regression_types_to_lists(data_root, types_fname):

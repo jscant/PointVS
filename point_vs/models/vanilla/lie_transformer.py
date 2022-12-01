@@ -4,6 +4,7 @@ from lie_conv.lieGroups import SE3
 from lie_conv.utils import Pass
 from torch import nn
 
+from point_vs.global_objects import DEVICE
 from point_vs.models.vanilla.pnn_vanilla_base import PNNVanillaBase
 
 
@@ -11,10 +12,10 @@ class EquivariantTransformer(PNNVanillaBase):
     """Adapted from https://github.com/anonymous-code-0/lie-transformer"""
 
     def _get_y_true(self, y):
-        return y.to(_device)
+        return y.to(DEVICE)
 
     def prepare_input(self, x):
-        return tuple([ten.to(_device) for ten in x])
+        return tuple([ten.to(DEVICE) for ten in x])
 
     def build_net(self, dim_input, dim_output, dim_hidden, num_layers,
                   num_heads, global_pool_mean=True, group=SE3(0.2),

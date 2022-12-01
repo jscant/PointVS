@@ -11,7 +11,7 @@ The author's previous work on deep learning for
 virtual screening can be found 
 [here](https://pubs.acs.org/doi/10.1021/acs.jcim.0c00263).
 
-## Installation and Initialisation
+## Installation and Initialisation (Linux)
 ```
 git clone https://github.com/jscant/PointVS
 cd PointVS
@@ -20,6 +20,18 @@ conda env create -f environment.yml python=3.8
 conda activate pointvs
 pip install -e .
 ```
+
+## Installation and Initialisation (Mac OS, CPU only)
+```
+git clone https://github.com/jscant/PointVS
+cd PointVS
+git remote set-url origin git@github.com:jscant/PointVS.git
+conda env create -f environment_apple_silicon.yml python=3.9
+conda activate pointvs
+pip install -e .
+```
+Note: Apple Silicon support will be enabled as soon as supported by Pytorch
+Geometric.
 
 To run tests for invariance under E(3) transformations:
 ```

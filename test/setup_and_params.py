@@ -13,8 +13,7 @@ from point_vs.preprocessing.preprocessing import uniform_random_rotation
 from point_vs.preprocessing.pyg_single_item_dataset import \
     get_pyg_single_graph_for_inference
 from point_vs.utils import to_numpy, _set_precision
-
-DEVICE = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+from point_vs.global_objects import DEVICE
 
 
 def setup():
@@ -64,7 +63,7 @@ DATALOADER_KWARGS = {
     'prune': True
 }
 
-ORIGINAL_GRAPH = list(_test_dl)[0]
+ORIGINAL_GRAPH = list(_test_dl)[0].to(DEVICE)
 
 rotated_coords = torch.from_numpy(
     uniform_random_rotation(to_numpy(ORIGINAL_GRAPH.pos)))
