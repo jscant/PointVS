@@ -43,7 +43,7 @@ python3 point_vs.py multitask /tmp/test_run --model_task both \
 --train_data_root_pose data/small_chembl_test \
 --train_types_pose data/small_chembl_test.types \
 --train_data_root_affinity data/multi_classification_sample \
---train_types_affinity data/multi_classification_sample.types
+--train_types_affinity data/multi_classification_sample.types \
 --test_data_root_pose data/small_chembl_test \
 --test_types_pose data/small_chembl_test.types \
 --test_types_affinity data/multi_classification_sample.types \
