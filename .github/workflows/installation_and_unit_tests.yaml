@@ -43,7 +43,7 @@ jobs:
         run: python3 point_vs/preprocessing/preprocessing.py -h
       - name: Unit tests
         run: pytest -v
-installation-and-unit-tests-m1:
+  installation-and-unit-tests-m1:
     name: Installation and unit tests
     runs-on: m1max
     defaults:
