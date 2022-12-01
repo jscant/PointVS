@@ -2,7 +2,7 @@ name: unit-tests
 on: [push]
 jobs:
   installation-and-unit-tests:
-    name: Installation and unit tests
+    name: Installation and unit tests (Ubuntu)
     runs-on: ubuntu-latest
     defaults:
       run:
