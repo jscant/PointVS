@@ -1,9 +1,10 @@
 """Tests for invariance to SE(3) transformations of the input."""
-
-import pytest
-import torch
 from pathlib import Path
 from tempfile import TemporaryDirectory
+
+import pytest
+import numpy as np
+import torch
 
 from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
 from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
@@ -13,6 +14,11 @@ from .setup_and_params import MODEL_KWARGS
 from .setup_and_params import ORIGINAL_GRAPH
 from .setup_and_params import EGNN_EPS
 from .setup_and_params import ROTATED_GRAPH
+
+
+# Tests should be repeatable
+torch.random.manual_seed(2)
+np.random.seed(2)
 
 
 def test_lucid_egnn_invariance():

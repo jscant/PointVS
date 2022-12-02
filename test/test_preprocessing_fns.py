@@ -1,10 +1,17 @@
+"""Tests for data pipeline."""
 import numpy as np
 import pandas as pd
 import pytest
+import numpy as np
 from numpy.testing import assert_array_equal
 
 from point_vs.preprocessing.preprocessing import angle_3d, generate_edges, \
     extract_coords
+
+
+# Tests should be repeatable
+np.random.seed(2)
+
 
 struct = pd.DataFrame({
     'x': [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],

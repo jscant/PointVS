@@ -3,11 +3,19 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import numpy as np
+import torch
+
 from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
 from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
 from point_vs.preprocessing.data_loaders import PointCloudDataset, \
     PygPointCloudDataset
 from .setup_and_params import MODEL_KWARGS, DATALOADER_KWARGS
+
+
+# Tests should be repeatable
+torch.random.manual_seed(2)
+np.random.seed(2)
 
 
 def test_sartorras_egnn_instantiation():

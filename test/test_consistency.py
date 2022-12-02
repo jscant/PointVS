@@ -2,6 +2,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import numpy as np
 import pytest
 import torch
 
@@ -12,6 +13,11 @@ from .setup_and_params import EGNN_EPS
 from .setup_and_params import N_SAMPLES
 from .setup_and_params import ORIGINAL_GRAPH
 from .setup_and_params import DEVICE
+
+
+# Tests should be repeatable
+torch.random.manual_seed(2)
+np.random.seed(2)
 
 
 def test_sartorras_egnn_consistency():
