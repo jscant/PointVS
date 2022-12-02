@@ -112,6 +112,7 @@ dependencies:
   - pyqt=5.15.7
   - pyqt5-sip=12.11.0
   - pysocks=1.7.1
+  - pytest=7.1.2
   - python=3.9.15
   - python-dateutil=2.8.2
   - python-snappy=0.6.1
