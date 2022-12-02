@@ -21,7 +21,7 @@ conda activate pointvs
 pip install -e .
 ```
 
-## Installation and Initialisation (Mac OS, CPU only)
+## Installation and Initialisation (Mac OS, Intel)
 ```
 git clone https://github.com/jscant/PointVS
 cd PointVS
@@ -30,8 +30,18 @@ conda env create -f environment_apple_silicon.yml python=3.9
 conda activate pointvs
 pip install -e .
 ```
-Note: Apple Silicon support will be enabled as soon as supported by Pytorch
-Geometric.
+
+## Installation and Initialisation (Mac OS, Apple Silicon)
+```
+git clone https://github.com/jscant/PointVS
+cd PointVS
+git remote set-url origin git@github.com:jscant/PointVS.git
+conda env create -f environment_apple_silicon.yml python=3.9
+conda activate pointvs
+pip install -e .
+```
+Note: Apple Silicon MPS support will be enabled once
+https://github.com/pytorch/pytorch/issues/77794 is resolved.
 
 To run tests for invariance under E(3) transformations:
 ```
