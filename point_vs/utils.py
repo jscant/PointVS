@@ -691,6 +691,7 @@ def format_time(t):
     Raises:
         ValueError if t < 0
     """
+    t = t or 0
     if t < 0:
         raise ValueError('Time must be positive.')
 

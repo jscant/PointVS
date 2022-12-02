@@ -6,6 +6,7 @@ import math
 import time
 from abc import abstractmethod
 from collections import OrderedDict
+from contextlib import nullcontext
 from pathlib import Path
 
 import numpy as np
@@ -15,12 +16,22 @@ import yaml
 from torch import nn
 from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingWarmRestarts
 
+from rich.console import Group
+from rich.live import Live
+from rich.progress import Progress, TimeElapsedColumn
+
 from point_vs.global_objects import DEVICE
 from point_vs.analysis.top_n import top_n
 from point_vs.utils import flatten_nested_iterables
 from point_vs.utils import get_eta, format_time, print_with_overwrite, mkdir, \
     to_numpy, expand_path, load_yaml, get_regression_pearson, \
     find_latest_checkpoint
+
+
+def _get_progress_ctx():
+    return Progress(
+        *Progress.get_default_columns(), TimeElapsedColumn(), transient=False,
+        refresh_per_second=2)
 
 
 class PointNeuralNetworkBase(nn.Module):
@@ -101,6 +112,9 @@ class PointNeuralNetworkBase(nn.Module):
             wandb.log({'Parameters': pc})
 
         self.to(DEVICE)
+        self.total_progress = None
+        self.epoch_progress = None
+        self.validation_progress = None
 
     @abstractmethod
     def prepare_input(self, x):
@@ -128,32 +142,65 @@ class PointNeuralNetworkBase(nn.Module):
                 at the end of each epoch (if supplied)
             top1_on_end:
         """
-        init_epoch, start_time = self.training_setup(
-            data_loader=data_loader, epochs=epochs)
-        for _ in range(init_epoch, epochs):
-            self.train()
-            for self.batch, graph in enumerate(data_loader):
-                y_pred, y_true, _, _ = self.process_graph(graph)
-                self.get_mean_preds(y_true, y_pred)
-                loss_ = self.backprop(y_true, y_pred)
-                if self.scheduler is not None:
-                    self.scheduler.step()
-                self.global_iter += 1
-                self.record_and_display_info(
-                    start_time=start_time,
+        init_epoch, _ = self.training_setup(data_loader=data_loader, epochs=epochs)
+        task_desc_word = 'regression' if 'reg' in self.model_task else 'classification'
+        total_desc = '[green]Epoch           {0:7d}' + f'/{epochs-init_epoch:7d} ({task_desc_word})'
+        epoch_desc = '[white]Batch           {0:7d}' + f'/{len(data_loader):7d} ({task_desc_word})'
+        if epoch_end_validation_set:
+            infer_desc = '[pink]Inference       {0:7d}' + f'/{len(epoch_end_validation_set):7d} ({task_desc_word})'
+        with _get_progress_ctx() as progress:
+            self.total_progress = progress.add_task(
+                total_desc.format(1),
+                total=len(data_loader) * (epochs-init_epoch))
+            self.epoch_progress = progress.add_task(
+                epoch_desc.format(1),
+                total=len(data_loader))
+            if epoch_end_validation_set:
+                self.validation_progress = progress.add_task(
+                    infer_desc.format(0),
+                    total=len(epoch_end_validation_set),
+                    start=False)
+            epoch = 0
+            for _ in range(init_epoch, epochs):
+                self.train()
+                epoch += 1
+                if epoch_end_validation_set:
+                    progress.update(self.validation_progress, visible=False)
+                    progress.reset(self.validation_progress, start=False)
+                progress.reset(self.epoch_progress)
+                for self.batch, graph in enumerate(data_loader):
+                    progress.refresh()
+                    y_pred, y_true, _, _ = self.process_graph(graph)
+                    self.get_mean_preds(y_true, y_pred)
+                    loss_ = self.backprop(y_true, y_pred)
+                    if self.scheduler is not None:
+                        self.scheduler.step()
+                    self.global_iter += 1
+                    
+                    try:  # Used for wandb reporting.
+                        self.eta = format_time(
+                            progress._tasks[self.total_progress].time_remaining)
+                    except KeyError: pass
+
+                    self.record_and_display_info(
+                        data_loader=data_loader,
+                        loss=loss_,
+                        record_type='train')
+
+                    progress.update(
+                        self.epoch_progress, advance=1.0,
+                        description=epoch_desc.format(self.batch + 1))
+                    progress.update(self.total_progress, advance=1.0,
+                                    description=total_desc.format(epoch))
+                self.eval()
+                self.on_epoch_end(
+                    epoch_end_validation_set=epoch_end_validation_set,
                     epochs=epochs,
-                    data_loader=data_loader,
-                    loss=loss_,
-                    record_type='train'
-                )
-            self.eval()
-            self.on_epoch_end(
-                epoch_end_validation_set=epoch_end_validation_set,
-                epochs=epochs,
-                top1_on_end=top1_on_end)
+                    top1_on_end=top1_on_end,
+                    rich_ctx=progress)
 
 
-    def val(self, data_loader, predictions_file=None, top1_on_end=False):
+    def val(self, data_loader, predictions_file=None, top1_on_end=False, rich_ctx=None):
         """Use trained network to perform inference on the test set.
 
         Uses the neural network (in Session.network), to perform predictions
@@ -176,85 +223,104 @@ class PointNeuralNetworkBase(nn.Module):
         self.total_iters = len(data_loader)
         self.eval()
         self.val_iter = 0
-        val_start_time = time.time()
-
-        with torch.no_grad():
-            for self.batch, graph in enumerate(
-                    data_loader):
-
-                self.val_iter += 1
-                y_pred, y_true, ligands, receptors = self.process_graph(graph)
-
-                if self.model_task == 'classification':
-                    is_label = y_true is not None
-                    if is_label:
-                        y_true_np = to_numpy(y_true).reshape((-1,))
-                    y_pred_np = to_numpy(nn.Sigmoid()(y_pred)).reshape((-1,))
-                    num_type = int
-                elif self.model_task == 'multi_regression':
-                    check_val = y_true[0][0] if isinstance(
-                        y_true, (tuple, list)) else y_true[0]
-                    is_label = check_val is not None
-                    y_pred_np = to_numpy(y_pred).reshape((-1, 3))
-                    if is_label:
-                        y_true_np = to_numpy(y_true).reshape((-1, 3))
-                        metrics = np.array(
-                            [['pki', 'pkd', 'ic50'] for _ in
-                             range(len(ligands))])
-                        metrics = list(metrics[np.where(y_true_np > -0.5)])
-                        y_pred_np = y_pred_np[np.where(y_true_np > -0.5)]
-                        y_true_np = y_true_np[np.where(y_true_np > -0.5)]
-                    num_type = float
-                else:
-                    is_label = y_true is not None
-                    if is_label:
-                        y_true_np = to_numpy(y_true).reshape((-1,))
-                    y_pred_np = to_numpy(y_pred).reshape((-1,))
-                    num_type = float
-
-                self.get_mean_preds(y_true, y_pred, is_label=is_label)
-                self.record_and_display_info(
-                    val_start_time, None, data_loader, None, record_type='test')
-
-                if self.model_task == 'multi_regression':
-                    if is_label:
-                        predictions += '\n'.join(
-                            ['{0:.3f} | {1:.3f} {2} {3} | {4}'.format(
-                                num_type(y_true_np[i]),
-                                y_pred_np[i],
-                                receptors[i],
-                                ligands[i],
-                                metrics[i]) for i in range(len(receptors))]
-                        ) + '\n'
-                    else:
-                        predictions += '\n'.join(
-                            ['{0:.3f} {1:.3f} {2:.3f} | {3} {4}'.format(
-                                *y_pred_np[i],
-                                receptors[i],
-                                ligands[i]) for i in range(len(receptors))]
-                        ) + '\n'
-                else:
-                    if is_label:
-                        predictions += '\n'.join(
-                            ['{0:.3f} | {1:.3f} {2} {3}'.format(
-                                num_type(y_true_np[i]),
-                                y_pred_np[i],
-                                receptors[i],
-                                ligands[i]) for i in range(len(receptors))]
-                        ) + '\n'
-                    else:
-                        predictions += '\n'.join(
-                            ['{0:.3f} | {1} {2}'.format(
-                                y_pred_np[i],
-                                receptors[i],
-                                ligands[i]) for i in range(len(receptors))]
-                        ) + '\n'
-
-                predictions = self.write_predictions(
-                    predictions,
-                    predictions_file,
-                    data_loader
+        make_new_val_task_id = rich_ctx is None
+        task_desc_word = 'regression' if 'reg' in self.model_task else 'classification'
+        infer_desc = '[cyan]Epoch Inference {0:7d}' + f'/{len(data_loader):7d} ({task_desc_word})'
+        with _get_progress_ctx() if rich_ctx is None else nullcontext(rich_ctx) as progress:
+            if make_new_val_task_id:
+                infer_desc = '[red]Final Inference {0:7d}' + f'/{len(data_loader):7d} ({task_desc_word})'
+                self.validation_progress = progress.add_task(
+                    infer_desc.format(1), total=len(data_loader))
+            else:
+                progress.update(self.validation_progress, visible=True,
                 )
+                progress.reset(self.validation_progress)
+            progress.update(self.validation_progress, description=infer_desc.format(1))
+            
+            with torch.no_grad():
+                for self.batch, graph in enumerate(
+                        data_loader):
+
+                    self.val_iter += 1
+                    y_pred, y_true, ligands, receptors = self.process_graph(graph)
+
+                    if self.model_task == 'classification':
+                        is_label = y_true is not None
+                        if is_label:
+                            y_true_np = to_numpy(y_true).reshape((-1,))
+                        y_pred_np = to_numpy(nn.Sigmoid()(y_pred)).reshape((-1,))
+                        num_type = int
+                    elif self.model_task == 'multi_regression':
+                        check_val = y_true[0][0] if isinstance(
+                            y_true, (tuple, list)) else y_true[0]
+                        is_label = check_val is not None
+                        y_pred_np = to_numpy(y_pred).reshape((-1, 3))
+                        if is_label:
+                            y_true_np = to_numpy(y_true).reshape((-1, 3))
+                            metrics = np.array(
+                                [['pki', 'pkd', 'ic50'] for _ in
+                                range(len(ligands))])
+                            metrics = list(metrics[np.where(y_true_np > -0.5)])
+                            y_pred_np = y_pred_np[np.where(y_true_np > -0.5)]
+                            y_true_np = y_true_np[np.where(y_true_np > -0.5)]
+                        num_type = float
+                    else:
+                        is_label = y_true is not None
+                        if is_label:
+                            y_true_np = to_numpy(y_true).reshape((-1,))
+                        y_pred_np = to_numpy(y_pred).reshape((-1,))
+                        num_type = float
+
+                    self.get_mean_preds(y_true, y_pred, is_label=is_label)
+                    try:
+                        self.eta = format_time(
+                            progress._tasks[self.validation_progress].time_remaining)
+                    except KeyError: pass
+                    self.record_and_display_info(
+                        data_loader, None, record_type='test')
+
+                    if self.model_task == 'multi_regression':
+                        if is_label:
+                            predictions += '\n'.join(
+                                ['{0:.3f} | {1:.3f} {2} {3} | {4}'.format(
+                                    num_type(y_true_np[i]),
+                                    y_pred_np[i],
+                                    receptors[i],
+                                    ligands[i],
+                                    metrics[i]) for i in range(len(receptors))]
+                            ) + '\n'
+                        else:
+                            predictions += '\n'.join(
+                                ['{0:.3f} {1:.3f} {2:.3f} | {3} {4}'.format(
+                                    *y_pred_np[i],
+                                    receptors[i],
+                                    ligands[i]) for i in range(len(receptors))]
+                            ) + '\n'
+                    else:
+                        if is_label:
+                            predictions += '\n'.join(
+                                ['{0:.3f} | {1:.3f} {2} {3}'.format(
+                                    num_type(y_true_np[i]),
+                                    y_pred_np[i],
+                                    receptors[i],
+                                    ligands[i]) for i in range(len(receptors))]
+                            ) + '\n'
+                        else:
+                            predictions += '\n'.join(
+                                ['{0:.3f} | {1} {2}'.format(
+                                    y_pred_np[i],
+                                    receptors[i],
+                                    ligands[i]) for i in range(len(receptors))]
+                            ) + '\n'
+
+                    predictions = self.write_predictions(
+                        predictions,
+                        predictions_file,
+                        data_loader
+                    )
+                    try: progress.update(self.validation_progress, advance=1.0,
+                                         description=infer_desc.format(self.batch + 1))
+                    except KeyError: pass
 
         if top1_on_end:
             if self.model_task == 'classification':
@@ -301,19 +367,12 @@ class PointNeuralNetworkBase(nn.Module):
     def training_setup(self, data_loader, epochs, model_task=None):
         start_time = time.time()
         if self.use_1cycle:
-            print('Using 1cycle')
             self.scheduler = OneCycleLR(
                 self.optimiser, max_lr=self.lr,
                 steps_per_epoch=epochs * len(data_loader), epochs=1)
-            print('Using 1cycle')
         elif self.warm_restarts:
-            print('Using CosineAnnealingWarmRestarts')
             self.scheduler = CosineAnnealingWarmRestarts(
                 self.optimiser, T_0=len(data_loader), T_mult=1, eta_min=0)
-        else:
-            print('Using a flat learning rate')
-        print()
-        print()
         if model_task is not None:
             self.set_task(model_task)
         init_epoch = self.a_epoch if 'regression' in self.model_task else self.p_epoch
@@ -364,19 +423,20 @@ class PointNeuralNetworkBase(nn.Module):
         return loss_
 
     def record_and_display_info(
-            self, start_time, epochs, data_loader, loss, record_type='train'):
+            self, data_loader, loss, record_type='train'):
         lr = self.optimiser.param_groups[0]['lr']
-
-        if record_type == 'train':
-            eta = get_eta(start_time, self.global_iter, self.total_iters)
-        else:
-            eta = get_eta(start_time, self.val_iter, len(data_loader))
-
-        time_elapsed = format_time(time.time() - start_time)
-
+        eta = self.eta
         epoch = self.a_epoch if 'regression' in self.model_task else self.p_epoch
+        train_val = 'train' if record_type == 'train' else 'validation'
+        wandb_update_dict = {
+            f'Time remaining ({train_val}, {self.model_task_for_fnames})': eta,
+            f'Examples seen ({train_val}, {self.model_task_for_fnames})': 
+                epoch * len(data_loader) * data_loader.batch_size + 
+                data_loader.batch_size * self.batch,
+            
+        }
         if record_type == 'train':
-            wandb_update_dict = {
+            wandb_update_dict.update({
                 f'Time remaining (train, {self.model_task_for_fnames})': eta,
                 f'{self.model_task_string} (train)': loss,
                 f'Batch (train, {self.model_task_for_fnames})':
@@ -386,64 +446,19 @@ class PointNeuralNetworkBase(nn.Module):
                         data_loader) * data_loader.batch_size +
                     data_loader.batch_size * self.batch,
                 f'Learning rate (train, {self.model_task_for_fnames})': lr
-            }
+            })
             if self.model_task == 'classification':
                 wandb_update_dict.update({
                     'Mean active prediction (train)': self.active_mean_pred,
                     'Mean inactive prediction (train)': self.decoy_mean_pred
                 })
-                print_with_overwrite(
-                    ('Epoch:',
-                     f'{epoch  + 1}/{epochs}',
-                    '|', 'Batch:', f'{self.batch + 1}/{len(data_loader)}',
-                    'LR:', f'{lr:.3e}'),
-                    ('Time elapsed:', time_elapsed, '|',
-                     'Time remaining:', eta),
-                    (f'Loss: {loss:.4f}', '|',
-                     f'Mean active: {self.active_mean_pred:.4f}',
-                     '|', f'Mean decoy: {self.decoy_mean_pred:.4f}')
-                )
-            else:
-                print_with_overwrite(
-                    ('Epoch:',
-                     f'{epoch + 1}/{epochs}',
-                     '|', f'Batch:', f'{self.batch + 1}/{len(data_loader)}',
-                     'LR:', f'{lr:.3e}'),
-                    ('Time elapsed:', time_elapsed, '|',
-                     'Time remaining:', eta),
-                    (f'Loss: {loss:.4f}',)
-                )
-        else:
-            wandb_update_dict = {
-                f'Time remaining (validation, {self.model_task_for_fnames})': eta,
-                f'Examples seen (validation, {self.model_task_for_fnames})':
-                    epoch * len(data_loader) * data_loader.batch_size +
-                    data_loader.batch_size * self.batch,
-            }
-            if self.model_task == 'classification':
+        elif self.model_task == 'classification':
                 wandb_update_dict.update({
                     'Mean active prediction (validation)':
                         self.active_mean_pred,
                     'Mean decoy prediction (validation)':
                         self.decoy_mean_pred,
                 })
-                print_with_overwrite(
-                    ('Inference on: {}'.format(data_loader.dataset.base_path),
-                     '|', 'Iteration:', '{0}/{1}'.format(
-                        self.batch + 1, len(data_loader))),
-                    ('Time elapsed:', time_elapsed, '|',
-                     'Time remaining:', eta),
-                    ('Mean active: {0:.4f}'.format(self.active_mean_pred), '|',
-                     'Mean decoy: {0:.4f}'.format(self.decoy_mean_pred))
-                )
-            else:
-                print_with_overwrite(
-                    ('Inference on: {}'.format(data_loader.dataset.base_path),
-                     '|', 'Iteration:', '{0}/{1}'.format(
-                        self.batch + 1, len(data_loader))),
-                    ('Time elapsed:', time_elapsed, '|',
-                     'Time remaining:', eta)
-                )
         try:
             try:
                 wandb.log(wandb_update_dict)
@@ -453,7 +468,7 @@ class PointNeuralNetworkBase(nn.Module):
             # New versions of wandb have different structure
             pass
 
-    def on_epoch_end(self, epoch_end_validation_set, epochs, top1_on_end):
+    def on_epoch_end(self, epoch_end_validation_set, epochs, top1_on_end, rich_ctx=None):
         # save after each epoch
         if 'regression' in self.model_task:
             self.a_epoch += 1
@@ -471,7 +486,7 @@ class PointNeuralNetworkBase(nn.Module):
             best = self.val(
                 epoch_end_validation_set,
                 predictions_file=epoch_end_predictions_fname,
-                top1_on_end=top1_on_end)
+                top1_on_end=top1_on_end, rich_ctx=rich_ctx)
             if self.only_save_best_models and best:
                 self.save()
 
