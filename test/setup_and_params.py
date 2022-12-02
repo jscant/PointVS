@@ -1,37 +1,15 @@
-# This is higher than usual, because for infinite Lie groups, there are several
-# approximations (MC sampling, for example) which reduce the true invariance
-# to approximate invariance.
+"""Some resources for unit tests."""
 from pathlib import Path
 
-import numpy as np
 import torch
 from torch_geometric.data import Data
 
-from point_vs.preprocessing.data_loaders import get_data_loader, \
-    PygPointCloudDataset
-from point_vs.preprocessing.preprocessing import uniform_random_rotation
-from point_vs.preprocessing.pyg_single_item_dataset import \
-    get_pyg_single_graph_for_inference
-from point_vs.utils import to_numpy, _set_precision
 from point_vs.global_objects import DEVICE
-
-
-def setup():
-    """Ensure we can write to temporary test location."""
-    _set_precision('float')
-
-    # Tests should be repeatable
-    torch.random.manual_seed(2)
-    np.random.seed(2)
-
-    # Check if we can write to /tmp/; if not, write to test directory
-    dump_path = Path('/tmp/pointvs_test')
-    try:
-        with open(dump_path / 'probe', 'w'):  # pylint: disable=unspecified-encoding
-            pass
-    except IOError:
-        dump_path = Path('test/dump_path')
-    return dump_path
+from point_vs.preprocessing.data_loaders import get_data_loader
+from point_vs.preprocessing.data_loaders import PygPointCloudDataset
+from point_vs.preprocessing.preprocessing import uniform_random_rotation
+from point_vs.preprocessing.pyg_single_item_dataset import get_pyg_single_graph_for_inference
+from point_vs.utils import to_numpy
 
 
 _test_dl = get_data_loader(
