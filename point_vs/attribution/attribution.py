@@ -1,15 +1,17 @@
 """Driver script for various graph attribution methods."""
 import argparse
+import logging
 import urllib
 from pathlib import Path
+from point_vs import logging
 
 import matplotlib
 import pandas as pd
+from sklearn.metrics import average_precision_score, precision_recall_curve
+
 from plip.basic import config
 from plip.basic.supplemental import extract_pdbid
 from plip.exchange.webservices import fetch_pdb
-from sklearn.metrics import average_precision_score, \
-    precision_recall_curve
 
 from point_vs.attribution.attribution_fns import atom_masking, cam, \
     edge_embedding_attribution, edge_attention, node_attention, \
@@ -26,6 +28,7 @@ matplotlib.use('agg')
 from matplotlib import pyplot as plt
 
 ALLOWED_METHODS = ('atom_masking', 'cam')
+LOG = logging.get_logger('PointVS')
 
 
 def download_pdb_file(pdbid, output_dir):
@@ -36,7 +39,7 @@ def download_pdb_file(pdbid, output_dir):
     output_dir = Path(output_dir).expanduser()
     pdbpath = output_dir / '{}.pdb'.format(pdbid)
     if pdbpath.is_file():
-        print(pdbpath, 'already exists.')
+        LOG.warning(f'{pdbpath} already exists.')
         return pdbpath
     if len(pdbid) != 4 or extract_pdbid(
             pdbid.lower()) == 'UnknownProtein':
@@ -45,16 +48,15 @@ def download_pdb_file(pdbid, output_dir):
         try:
             pdbfile, pdbid = fetch_pdb(pdbid.lower())
         except urllib.error.URLError:
-            print('Fetching pdb {} failed, retrying...'.format(
-                pdbid))
+            LOG.warning(f'Fetching pdb {pdbid} failed, retrying...'.format)
         else:
             break
     if pdbfile is None:
         return 'none'
     output_dir.mkdir(parents=True, exist_ok=True)
-    with open(pdbpath, 'w') as g:
+    with open(pdbpath, 'w', encoding='utf-8') as g:
         g.write(pdbfile)
-    print('File downloaded as', pdbpath)
+    LOG.info(f'File downloaded as {pdbpath}')
     return pdbpath
 
 
@@ -68,13 +70,13 @@ def precision_recall(df, save_path=None):
     random_average_precision = sum(interactions) / len(interactions)
     average_precision = average_precision_score(
         interactions, normalised_attributions)
-    print('Average precision (random classifier): {:.3f}'.format(
+    LOG.info('Average precision (random classifier): {:.3f}'.format(
         random_average_precision))
-    print('Average precision (neural network)   : {:.3f}'.format(
+    LOG.info('Average precision (neural network)   : {:.3f}'.format(
         average_precision))
     precision, recall, thresholds = precision_recall_curve(
         interactions, normalised_attributions)
-    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+    _, ax = plt.subplots(1, 1, figsize=(12, 8))
     ax.plot(recall, precision, 'k-')
     ax.set_title('Precision-recall plot')
     ax.set_xlabel('Recall')
@@ -149,11 +151,8 @@ def attribute(attribution_type, model_file, output_dir, pdbid=None,
     if check_multiconf:
         conf_lines = has_multiple_conformations(pdbpath)
         if len(conf_lines):
-            print()
-            print('WARNING:', pdbpath, 'contains multiple conformations!',
-                  'Multiconf line indices:')
-            print(*conf_lines)
-            print()
+            LOG.warning('WARNING: {0} contains multiple conformations! Multiconf line indices: {1}'.format(
+                pdbpath, ' '.join([str(s) for s in conf_lines])))
 
     if rename:
         only_process = 'LIG'
@@ -235,8 +234,8 @@ def attribute(attribution_type, model_file, output_dir, pdbid=None,
                         aps.append(ap)
                     precision_str += '{0},{1},{2:.4f},{3:.4f},{4:.4f},{5:.4f},{6:.4f}\n'.format(
                         pdbid, lig_id, r_aps[0], r_aps[1], aps[0], aps[1], score)
-                    print()
-                with open(output_dir / 'average_precisions.txt', 'w') as f:
+                with open(output_dir / 'average_precisions.txt',
+                          'w', encoding='utf-8') as f:
                     f.write(precision_str)
             except (KeyError, ValueError):
                 pass
@@ -277,6 +276,7 @@ if __name__ == '__main__':
                         help='(For multitask models only) Mode for attribution.'
                         ' Either classification or regression')
     args = parser.parse_args()
+
     config.NOFIX = True
     if isinstance(args.pdbid, str) + isinstance(args.input_file, str) != 1:
         raise RuntimeError(
@@ -284,14 +284,16 @@ if __name__ == '__main__':
     pd.set_option('display.float_format', lambda x: f'{x:.3f}')
 
     if not (args.only_first and args.split_by_mol):
-        print(*[item[1][:10] for item in attribute(
+        for res in attribute(
             args.attribution_type, args.model, args.output_dir, pdbid=args.pdbid,
             input_file=args.input_file, only_process=args.only_process,
             atom_blind=True, gnn_layer=args.gnn_layer,
             track_atom_positions=args.track_atom_positions,
             split_by_mol=args.split_by_mol, rename=args.rename,
             prediction_mode=args.prediction_mode,
-            only_first=args.only_first).values()], sep='\n\n')
+            only_first=args.only_first).values():
+            df = res[1]
+            LOG.info(df[:10])
     else:
         df = list(attribute(
             args.attribution_type, args.model, args.output_dir, pdbid=args.pdbid,
@@ -302,10 +304,10 @@ if __name__ == '__main__':
             prediction_mode=args.prediction_mode,
             only_first=args.only_first).values())[0][1]
         try:
-            print('Ligand:')
-            print(df[df['bp'] == 0][:10])
-            print()
-            print('Receptor:')
-            print(df[df['bp'] == 1][:10])
+            LOG.info(df)
+            LOG.info('Ligand:')
+            LOG.info(df[df['bp'] == 0][:10])
+            LOG.info('Receptor:')
+            LOG.info(df[df['bp'] == 1][:10])
         except KeyError:
-            print(df[:10])
+            LOG.info(df[:10])

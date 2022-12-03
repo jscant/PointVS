@@ -4,6 +4,7 @@ import torch
 from scipy.stats import rankdata
 from torch_geometric.data import Data
 
+from point_vs import logging
 from point_vs.global_objects import DEVICE
 from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase
@@ -12,7 +13,10 @@ from point_vs.preprocessing.pyg_single_item_dataset import \
     get_pyg_single_graph_for_inference
 from point_vs.utils import expand_path
 
+
 SIGMOID = False
+LOG = logging.get_logger('PointVS')
+
 
 def attention_wrapper(**kwargs):
     """Dummy fn."""
@@ -100,8 +104,8 @@ def bond_masking(model, p, v, m=None, bs=32, edge_indices=None, edge_attrs=None,
         scores.append(
             original_score - extract_score(graph))
         if not i % 500:
-            print('{0}/{1}'.format(i, edge_indices.shape[1]), scores[-1],
-                  max(scores))
+            LOG.debug('{0}/{1}'.format(i, edge_indices.shape[1]),
+                                       scores[-1], max(scores))
     return np.array(scores)
 
 
@@ -148,7 +152,7 @@ def track_position_changes(
         displacements.append(np.sqrt(sq_displacement))
         # original_coords = model.layers[layer].intermediate_coords
     displacements = np.vstack(displacements).T
-    print(np.sum(displacements, axis=1))
+    LOG.debug(f'{np.sum(displacements, axis=1)}')
     return np.sum(displacements, axis=1)
 
 
@@ -463,7 +467,7 @@ def atom_masking(
         v_input_matrix = torch.zeros(bs, v.size(1) - 1, v.size(2)).to(DEVICE)
         m_input_matrix = torch.ones(bs, m.size(1) - 1).bool().to(DEVICE)
         for i in range(p.size(1) // bs):
-            print(i * bs)
+            LOG.debug(f'{i * bs}')
             for j in range(bs):
                 global_idx = bs * i + j
                 p_input_matrix[j, :, :] = p[0,

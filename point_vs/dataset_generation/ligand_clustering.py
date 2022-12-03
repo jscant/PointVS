@@ -1,3 +1,4 @@
+"""Cluster ligands by tanimoto similarity of morgan fingerprints."""
 import argparse
 import multiprocessing as mp
 from pathlib import Path
@@ -8,8 +9,12 @@ from rdkit.Chem import AllChem, MolFromMol2File, SDMolSupplier
 from rdkit.DataStructs import TanimotoSimilarity, UIntSparseIntVect
 from rich.progress import Progress
 
+from point_vs import logging
 from point_vs.utils import expand_path, py_mollify, get_n_cols, execute_cmd, \
     mkdir
+
+
+LOG = logging.get_logger('PointVS')
 
 
 def is_similar(mol1, mol2, cutoff):
@@ -217,8 +222,10 @@ if __name__ == '__main__':
     sdfs_not_present_test = list(
         {sdf for sdf, mol in test_mols.items() if mol is None})
     test_mols = {sdf: mol for sdf, mol in test_mols.items() if mol is not None}
-    print('There are', len(test_mols), 'test molecules')
-    print('There are', len(sdfs_not_present_test), 'missing test sdfs')
+    LOG.info(f'There are {len(test_mols)} test molecules')
+    if len(sdfs_not_present_test):
+        LOG.warning(
+            f'There are {len(sdfs_not_present_test)} missing test sdfs')
 
     with open(mkdir(args.output_dir) / 'missing_sdfs_test.txt', 'w') as f:
         f.write('\n'.join(sdfs_not_present_test) + '\n')
@@ -264,8 +271,10 @@ if __name__ == '__main__':
         {sdf for sdf, mol in train_mols.items() if mol is None})
     train_mols = {sdf: mol for sdf, mol in train_mols.items() if
                   mol is not None}
-    print('There are', len(train_mols), 'train molecules')
-    print('There are', len(sdfs_not_present_train), 'missing train sdfs')
+    LOG.info(f'There are {len(train_mols)} train molecules')
+    if len(sdfs_not_present_train):
+        LOG.warning(
+            f'There are {len(sdfs_not_present_train)} missing train sdfs')
     with open(mkdir(args.output_dir) / 'missing_sdfs_train.txt', 'w') as f:
         f.write('\n'.join(sdfs_not_present_train) + '\n')
 
@@ -308,6 +317,6 @@ if __name__ == '__main__':
         args.output_dir) / '{}_ligand_filtered.types'.format(
         Path(args.train_types).with_suffix('').name
     )
-    print('Types file written to', str(output_types_file))
+    LOG.info(f'Types file written to {str(output_types_file)}.')
     with open(output_types_file, 'w') as f:
         f.write(return_lines + '\n')

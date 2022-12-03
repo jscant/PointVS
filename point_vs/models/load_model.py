@@ -4,6 +4,7 @@ from typing import Dict, Optional, Tuple, Union
 
 from torch import nn
 
+from point_vs import logging
 from point_vs.models.geometric.egnn_multitask import MultitaskSatorrasEGNN
 from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
 from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
@@ -11,6 +12,7 @@ from point_vs.utils import load_yaml
 from point_vs.utils import find_latest_checkpoint
 
 Fname = Union[str, Path]
+LOG = logging.get_logger('PointVS')
 
 def load_model(
         model_path: Fname,
@@ -25,7 +27,7 @@ def load_model(
         model_path: Location of the model checkpoint. Either a *.pt file, or
             a directory containing the checkpoints subdirectory in which case
             the latest saved weights will be loaded.
-        silent: Do not print messages to stdout.
+        silent: Do not log messages.
         fetch_args_only: Do not retrieve model weights.
         init_path: Create output directories.
         model_task: (multitask models only) either load the pose or affinity
@@ -38,10 +40,11 @@ def load_model(
     """
     model_path = Path(model_path).expanduser()
     if model_path.is_dir():
-        print(
+        LOG.info(
             'Model specified is directory, searching for latest checkpoint...')
         model_path = find_latest_checkpoint(model_path, model_task=model_task)
-        print('Found checkpoint at', '/'.join(str(model_path).split('/')[-3:]))
+        LOG.info(
+            'Found checkpoint at ' + '/'.join(str(model_path).split('/')[-3:]))
 
     model_kwargs = load_yaml(model_path.parents[1] / 'model_kwargs.yaml')
     cmd_line_args = load_yaml(model_path.parents[1] / 'cmd_args.yaml')

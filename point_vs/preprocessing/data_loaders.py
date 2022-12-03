@@ -8,17 +8,26 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import psutil
+
 import torch
 from torch.nn.functional import one_hot
 from torch.utils.data import DataLoader
 from torch_geometric.loader import DataLoader as GeoDataLoader
 from torch_geometric.data import Data
 
+from point_vs import logging
 from point_vs.global_objects import NUM_WORKERS
-from point_vs.preprocessing.preprocessing import make_box, \
-    concat_structs, make_bit_vector, uniform_random_rotation, generate_edges
-from point_vs.utils import expand_path, shorten_home, get_n_cols
+from point_vs.preprocessing.preprocessing import make_box
+from point_vs.preprocessing.preprocessing import concat_structs
+from point_vs.preprocessing.preprocessing import make_bit_vector
+from point_vs.preprocessing.preprocessing import uniform_random_rotation
+from point_vs.preprocessing.preprocessing import generate_edges
+from point_vs.utils import shorten_home
+from point_vs.utils import get_n_cols
+from point_vs.utils import expand_path
+
+
+LOG = logging.get_logger('PointVS')
 
 
 class PointCloudDataset(torch.utils.data.Dataset):
@@ -176,8 +185,8 @@ class PointCloudDataset(torch.utils.data.Dataset):
                         self.sample_weights, len(self.sample_weights)
                     )
         self.labels = labels
-        print('There are', len(self.ligand_fnames), 'data points in',
-              shorten_home(base_path))
+        LOG.info(
+            f'There are {len(self.ligand_fnames)} data points in {shorten_home(base_path)}')
 
         # apply random rotations to ALL coordinates?
         self.transformation = uniform_random_rotation if rot else lambda x: x
@@ -540,11 +549,11 @@ def regression_types_to_lists(data_root, types_fname):
         else:
             missing.append((lists[-2][i], lists[-1][i]))
     if len(missing):
-        print('Missing sturctures:')
+        LOG.warning('Missing sturctures:')
         for lost in missing:
             for item in lost:
                 if not Path(data_root, item).is_file():
-                    print(Path(data_root, item))
+                    LOG.warning(f'{Path(data_root, item)}')
     return pki, pkd, ic50, receptors, ligands
 
 

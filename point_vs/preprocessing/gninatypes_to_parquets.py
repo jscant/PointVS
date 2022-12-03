@@ -1,3 +1,4 @@
+"""Legacy code for posterity, broadly ignore this."""
 import argparse
 import struct
 from pathlib import Path
@@ -6,7 +7,12 @@ import numpy as np
 import pandas as pd
 
 from atom_types import Typer
+
+from point_vs import logging
 from point_vs.utils import mkdir, expand_path, no_return_parallelise
+
+
+LOG = logging.getLogger('PointVS')
 
 
 def get_type_map(types: list = None):
@@ -87,7 +93,7 @@ if __name__ == "__main__":
     for gt in input_dir.glob('**/*.gninatypes'):
         input_fnames.append(str(gt))
         output_fnames.append(str(output_dir / gt))
-    print(input_fnames)
-    print(output_fnames)
+    LOG.info(input_fnames)
+    LOG.info(output_fnames)
     no_return_parallelise(
         gninatypes_to_parquet, input_fnames, output_fnames, args.structure_type)

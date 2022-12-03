@@ -12,6 +12,7 @@ from pymol.cgo import CYLINDER
 from torch.nn.functional import one_hot
 from torch_geometric.data import Data
 
+from point_vs import logging
 from point_vs.global_objects import DEVICE
 from point_vs.attribution.attribution_fns import edge_attention, \
     edge_embedding_attribution, track_bond_lengths, node_attention, \
@@ -25,6 +26,9 @@ from point_vs.preprocessing.pyg_single_item_dataset import \
     get_pyg_single_graph_for_inference
 from point_vs.utils import coords_to_string, PositionDict, \
     get_colour_interpolation_fn
+
+
+LOG = logging.get_logger('PointVS')
 
 
 class VisualizerDataWithMolecularInfo(VisualizerData):
@@ -381,9 +385,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                 edge_attrs_.append(edge_attrs)
                 resis.append(resi)
 
-
-        if not quiet:
-            print('Attributing scores to site:', self.plcomplex.uid)
+        LOG.info(f'Attributing scores to site: {self.plcomplex.uid}')
 
         if not polar_hydrogens:
             df = df[df['atomic_number'] > 1]
@@ -466,19 +468,19 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
             if model.model_task == 'classification':
                 score = float(to_numpy(torch.sigmoid(pre_activation)))
                 if not quiet:
-                    print('Original score: {:.4f}'.format(score))
+                    LOG.info('Original score: {:.4f}'.format(score))
             elif model.model_task == 'multi_regression':
                 score = to_numpy(pre_activation).squeeze()
                 if not quiet:
-                    print('Original scores: pKi={0:.4f} ({3:.1f} nm), pKd={1:.4f} '
-                          '({4:.1f} nm), pIC50={2:.4f} ({5:.1f} nm)'.format(
+                    LOG.info(
+                        'Original scores: pKi={0:.4f} ({3:.1f} nm), pKd={1:.4f} '
+                        '({4:.1f} nm), pIC50={2:.4f} ({5:.1f} nm)'.format(
                         *score, *[10 ** (-x) * 10 ** 9 for x in score]))
                 score = score[0]
             else:
                 score = float(to_numpy(pre_activation))
                 if not quiet:
-                    print('Original score: {:.4f}'.format(score))
-
+                    LOG.info('Original score: {:.4f}'.format(score))
             model_labels = attribution_fn(
                 model, p.to(DEVICE), v.to(DEVICE), edge_attrs=edge_attrs,
                 edge_indices=edge_indices, bs=bs, gnn_layer=gnn_layer,
@@ -550,11 +552,11 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                 if model.model_task == 'classification':
                     score = float(to_numpy(torch.sigmoid(pre_activation)))
                     if not quiet:
-                        print('Original score: {:.4f}'.format(score))
+                        LOG.info('Original score: {:.4f}'.format(score))
                 elif model.model_task == 'multi_regression':
                     score = to_numpy(pre_activation).squeeze()
                     if not quiet:
-                        print(
+                        LOG.info(
                             'Original scores: pKi={0:.4f} ({3:.1f} nm), '
                             'pKd={1:.4f} '
                             '({4:.1f} nm), pIC50={2:.4f} ({5:.1f} nm)'.format(
@@ -563,7 +565,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                 else:
                     score = float(to_numpy(pre_activation))
                     if not quiet:
-                        print('Original score: {:.4f}'.format(score))
+                        LOG.info('Original score: {:.4f}'.format(score))
 
                 if not idx:
                     original_score = score
@@ -646,7 +648,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                     str) + ':' + df['z'].apply(str)
                 df['atom_id'] = df['coords'].apply(find_identifier)
                 del df['coords']
-                print(df)
+                LOG.info(df)
                 df.sort_values(by='attribution', ascending=False, inplace=True)
                 df['gnn_rank'] = np.arange(len(df))
 
@@ -720,9 +722,8 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
                     *scoring_args, **scoring_kwargs,
                     attribution_fn=bond_masking)
 
-            print(atom_mask_df.sort_values(by='attribution'))
-            print(edge_df.sort_values(by='bond_score', ascending=False))
-            print()
+            LOG.info(atom_mask_df.sort_values(by='attribution'))
+            LOG.info(edge_df.sort_values(by='bond_score', ascending=False))
 
             atom_id_to_score = {aid: score for aid, score in zip(
                 atom_mask_df['atom_id'], atom_mask_df['attribution'])}
@@ -807,14 +808,14 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
 
         if not quiet:
             if split_by_mol:
-                print('Colouring ligand b-factors in range ({0:0.3f}, '
+                LOG.info('Colouring ligand b-factors in range ({0:0.3f}, '
                       '{1:0.3f})'.format(
                     left_bfactor_limit_lig, right_bfactor_limit_lig))
-                print('Colouring receptor b-factors in range ({0:0.3f}, '
+                LOG.info('Colouring receptor b-factors in range ({0:0.3f}, '
                       '{1:0.3f})'.format(
                     left_bfactor_limit_rec, right_bfactor_limit_rec))
             else:
-                print(
+                LOG.info(
                     'Colouring b-factors in range ({0:0.3f}, {1:0.3f})'.format(
                         left_bfactor_limit, right_bfactor_limit))
 
@@ -822,10 +823,10 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
 
         cmd.alter('all', "b=0")
         if not quiet:
-            print('Changing bfactors...')
+            LOG.info('Changing bfactors...')
         change_bfactors(atom_to_bfactor_map)
         if not quiet:
-            print('Done!')
+            LOG.info('Done!')
         if split_by_mol:
             cmd.spectrum('b', colour_scheme, selection='name is LIG',
                          minimum=left_bfactor_limit_lig,

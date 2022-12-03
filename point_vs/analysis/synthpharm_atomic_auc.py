@@ -1,3 +1,4 @@
+"""Statistics on attribution (for Tom)."""
 import argparse
 from pathlib import Path
 
@@ -6,11 +7,15 @@ from matplotlib import pyplot as plt
 from sklearn.metrics import average_precision_score
 from torch_geometric.loader import DataLoader
 
+from point_vs import logging
 from point_vs.attribution.attribution import load_model
 from point_vs.attribution.attribution_fns import atom_masking, cam
 from point_vs.preprocessing.data_loaders import SynthPharmDataset
 from point_vs.utils import expand_path, load_yaml, mkdir, PositionDict, \
     coords_to_string
+
+
+LOG = logging.get_logger('PointVS')
 
 
 def get_stats_from_dir(model_fname, directory, types, attribution_fn,
@@ -19,9 +24,9 @@ def get_stats_from_dir(model_fname, directory, types, attribution_fn,
     model = model.eval()
     directory = expand_path(directory)
     atom_labels_dict = load_yaml(directory.parent / 'atomic_labels.yaml')
-    print('Loaded atomic labels')
+    LOG.info('Loaded atomic labels')
     mol_label_dict = load_yaml(directory.parent / 'labels.yaml')
-    print('Loaded molecular labels')
+    LOG.info('Loaded molecular labels')
     lig_fnames, pharm_fnames, fname_indices = [], [], []
     lig_random_precisions = []
     rec_random_precisions = []
@@ -160,21 +165,21 @@ if __name__ == '__main__':
             project_name = expand_path(args.model).parents[1].name
         else:
             project_name = expand_path(args.model).name
-        print()
-        print('Project: {0}, Attribution method: {1}'.format(
+        LOG.info()
+        LOG.info('Project: {0}, Attribution method: {1}'.format(
             project_name, fn_name))
-        print('Mean average precision (ligand):               {:.4f}'.format(
+        LOG.info('Mean average precision (ligand):               {:.4f}'.format(
             np.mean(lap)))
-        print('Random average precision (ligand):             {:.4f}'.format(
+        LOG.info('Random average precision (ligand):             {:.4f}'.format(
             np.mean(lrp)))
-        print('Mean average precision (receptor):             {:.4f}'.format(
+        LOG.info('Mean average precision (receptor):             {:.4f}'.format(
             np.mean(rap)))
-        print('Random average precision (receptor):           {:.4f}'.format(
+        LOG.info('Random average precision (receptor):           {:.4f}'.format(
             np.mean(rrp)))
-        print()
-        print('Mean top scoring bonding atom rank (ligand):   {:.4f}'.format(
+        LOG.info()
+        LOG.info('Mean top scoring bonding atom rank (ligand):   {:.4f}'.format(
             np.mean(lig_positions)))
-        print('Mean top scoring bonding atom rank (receptor): {:.4f}'.format(
+        LOG.info('Mean top scoring bonding atom rank (receptor): {:.4f}'.format(
             np.mean(rec_positions)))
         plot_rank_histogram(
             lig_positions, rec_positions, project_name,

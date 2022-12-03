@@ -6,15 +6,20 @@ import numpy as np
 import pandas as pd
 from pymol import cmd
 
-from point_vs.attribution.attribution import attribute, pdb_coords_to_identifier
+from point_vs import logging
+from point_vs.attribution.attribution import attribute
+from point_vs.attribution.attribution import pdb_coords_to_identifier
 from point_vs.dataset_generation.types_to_parquet import StructuralFileParser
 from point_vs.models.load_model import load_model
-from point_vs.utils import expand_path, mkdir, print_df
+from point_vs.utils import expand_path
+from point_vs.utils import print_df
+from point_vs.utils import mkdir
 
+
+LOG = logging.get_logger('PointVS')
 AA_TRIPLET_CODES = {'ILE', 'GLU', 'CYS', 'TRP', 'ALA', 'PRO', 'PHE', 'ASN',
                     'GLY', 'THR', 'ARG', 'MET', 'HIS', 'VAL', 'GLN', 'TYR',
                     'LYS', 'LEU', 'SER', 'ASP'}
-
 VDW_RADII = {1: 1.1, 2: 1.4, 3: 1.82, 4: 1.53, 5: 1.92, 6: 1.7, 7: 1.55,
              8: 1.52, 9: 1.47, 10: 1.54, 11: 2.27, 12: 1.73, 13: 1.84, 14: 2.1,
              15: 1.8, 16: 1.8, 17: 1.75, 18: 1.88, 19: 2.75, 20: 2.31, 21: 2.15,
@@ -143,7 +148,8 @@ def binding_events_to_ranked_protein_atoms(
             return id_2
         elif id_2.split(':')[-2] == ligand_name:
             return id_1
-        print('Ligand triplet code not found in either atom.' + bond_identifier)
+        LOG.warning(
+            f'Protein triplet code not found in either atom {bond_identifier}.')
         return 'none'
 
     def find_ligand_atom(bond_identifier):
@@ -152,10 +158,11 @@ def binding_events_to_ranked_protein_atoms(
             return id_1
         elif id_2.split(':')[-2] == ligand_name:
             return id_2
-        print('Ligand triplet code not found in either atom.' + bond_identifier)
+        LOG.warning(
+            f'Ligand triplet code not found in either atom {bond_identifier}.')
         return 'none'
 
-    model, _, _ = load_model(expand_path(model_path))
+    _, model, _, _ = load_model(expand_path(model_path))
 
     processed_dfs = []
     prot_atom_to_max_lig_atom = defaultdict(list)
@@ -224,8 +231,9 @@ def binding_events_to_ranked_protein_atoms(
             df.reset_index(drop=True, inplace=True)
             processed_dfs.append(df)
 
-        print('Completed file ', fname.name, ', with scores: ', ', '.join(
-            ['{:.3f}'.format(score) for score in scores]), sep='')
+        scores_str = ', '.join(['{:.3f}'.format(score) for score in scores])
+        LOG.info(
+            f'Completed file {fname.name}, with scores: {scores_str}')
 
     f_index = len(processed_dfs)
     processed_dfs = [df.set_index('protein_atom') for df in processed_dfs]

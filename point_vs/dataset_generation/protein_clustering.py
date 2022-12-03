@@ -1,9 +1,14 @@
+"""Protein clustering based on sequence similarity with cdhit."""
 import argparse
 from pathlib import Path
 
+from point_vs import logging
 from point_vs.dataset_generation.split_by_cdhit_output import \
     cdhit_output_to_graph
 from point_vs.utils import expand_path, mkdir, execute_cmd
+
+
+LOG = logging.get_logger('PointVS')
 
 
 def filter_fasta_file(fasta_file, pdbids_file, output_file):
@@ -59,15 +64,15 @@ if __name__ == '__main__':
         20
     ), silent=False, raise_exceptions=True)
 
-    print('Constructing graph...')
+    LOG.info('Constructing graph...')
     g = cdhit_output_to_graph(output_dir / 'cdhit_output.clstr')
-    print('Done!')
+    LOG.info('Done!')
     similar_pdbids = set()
     for key, value in g.items():
         similar_pdbids.add(key)
         similar_pdbids = similar_pdbids.union(set(value))
     similar_pdbids = list(similar_pdbids)
-    print('Modifying types file...')
+    LOG.info('Modifying types file...')
     new_types = ''
     with open(expand_path(args.train_types), 'r') as f:
         for line in f.readlines():
@@ -82,4 +87,4 @@ if __name__ == '__main__':
                    Path(args.train_types).with_suffix('').name +
                    '_unbaised.types'), 'w') as f:
         f.write(new_types)
-    print('Done!')
+    LOG.info('Done!')

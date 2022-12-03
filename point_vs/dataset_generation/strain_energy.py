@@ -5,7 +5,11 @@ from pathlib import Path
 import pandas as pd
 from rdkit import RDLogger
 
+from point_vs import logging
 from point_vs.utils import expand_path, find_delta_E, save_yaml
+
+
+LOG = logging.get_logger('PointVS')
 
 
 def find_sdfs(types_file, data_root):
@@ -78,6 +82,7 @@ if __name__ == '__main__':
     for proc in jobs:
         proc.join()
 
-    print('Saving..')
+    LOG.info('Saving..')
     save_yaml(dict(strain_energies), data_root / 'strain_energies.yaml')
-    print('Saved to', data_root / 'strain_energies.yaml')
+    saved_pth = data_root / 'strain_energies.yaml'
+    LOG.info(f'Saved to {saved_pth}')

@@ -10,6 +10,7 @@ import pandas as pd
 from openbabel import openbabel
 from plip.basic.supplemental import extract_pdbid
 
+from point_vs import logging
 from point_vs.utils import mkdir, no_return_parallelise, coords_to_string, \
     PositionSet, expand_path
 
@@ -18,6 +19,7 @@ try:
 except (ModuleNotFoundError, ImportError):
     import pybel
 
+LOG = logging.get_logger('PointVS')
 
 def fetch_pdb(pdbid):
     """Modified plip function."""
@@ -26,10 +28,10 @@ def fetch_pdb(pdbid):
     try:
         pdbfile = urlopen(pdburl).read().decode()
         if 'sorry' in pdbfile:
-            print('No file in PDB format available from wwPDB for', pdbid)
+            LOG.error(f'No file in PDB format available from wwPDB for {pdbid}')
             return None, None
     except HTTPError:
-        print('No file in PDB format available from wwPDB for', pdbid)
+        LOG.error(f'No file in PDB format available from wwPDB for {pdibd}')
         return None, None
     return [pdbfile, pdbid]
 
@@ -780,12 +782,11 @@ class StructuralFileParser:
                     mol.OBMol.GetTitle()).name.split('.')[0]
             else:
                 fname = output_path / output_fname
-                #print(fname)
             df = self.obmol_to_parquet(mol, add_polar_hydrogens)
             if output_path is None:
                 return df
             if not str(fname).endswith('.parquet'):
-                print(fname)
+                LOG.error(f'{fname} does not have parquet extension')
                 raise RuntimeError('Output filename must end in .parquet')
             df.to_parquet(fname)
 
@@ -809,7 +810,7 @@ class StructuralFileParser:
         output_dir = Path(output_dir).expanduser()
         pdbpath = output_dir / 'receptor.pdb'
         if pdbpath.is_file():
-            print(pdbpath, 'already exists.')
+            LOG.warning(pdbpath, 'already exists.')
             return
         if len(pdbid) != 4 or extract_pdbid(
                 pdbid.lower()) == 'UnknownProtein':
@@ -818,8 +819,7 @@ class StructuralFileParser:
             try:
                 pdbfile, pdbid = fetch_pdb(pdbid.lower())
             except urllib.error.URLError:
-                print('Fetching pdb {} failed, retrying...'.format(
-                    pdbid))
+                LOG.warning(f'Fetching pdb {pdbid} failed, retrying...')
             else:
                 break
         if pdbfile is None:
@@ -827,7 +827,7 @@ class StructuralFileParser:
         output_dir.mkdir(parents=True, exist_ok=True)
         with open(pdbpath, 'w') as g:
             g.write(pdbfile)
-        print('File downloaded as', pdbpath)
+        LOG.info(f'File downloaded as {pdbpath}.')
         return pdbpath
 
 

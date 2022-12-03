@@ -1,4 +1,5 @@
-"""Base class for group-invariant networks for pose classificatio and affinity
+"""
+Base class for group-invariant networks for pose classificatio and affinity
 prediction.
 """
 
@@ -20,12 +21,20 @@ from rich.console import Group
 from rich.live import Live
 from rich.progress import Progress, TimeElapsedColumn
 
+from point_vs import logging
 from point_vs.global_objects import DEVICE
 from point_vs.analysis.top_n import top_n
 from point_vs.utils import flatten_nested_iterables
-from point_vs.utils import get_eta, format_time, print_with_overwrite, mkdir, \
-    to_numpy, expand_path, load_yaml, get_regression_pearson, \
-    find_latest_checkpoint
+from point_vs.utils import mkdir
+from point_vs.utils import to_numpy
+from point_vs.utils import expand_path
+from point_vs.utils import format_time
+from point_vs.utils import load_yaml
+from point_vs.utils import get_regression_pearson
+from point_vs.utils import find_latest_checkpoint
+
+
+LOG = logging.get_logger('PointVS')
 
 
 def _get_progress_ctx():
@@ -107,7 +116,7 @@ class PointNeuralNetworkBase(nn.Module):
 
         pc = self.param_count
         if not silent:
-            print('Model parameters:', pc)
+            LOG.info(f'Model parameters: {pc}')
         if self.wandb_project is not None:
             wandb.log({'Parameters': pc})
 
@@ -418,8 +427,9 @@ class PointNeuralNetworkBase(nn.Module):
         loss_ = float(to_numpy(loss))
         if math.isnan(loss_):
             if hasattr(self, '_get_min_max'):
-                print(self._get_min_max())
-            raise RuntimeError('We have hit a NaN loss value.')
+                LOG.error(self._get_min_max())
+            LOG.error('We have hit a NaN loss value.')
+            exit(1)
         return loss_
 
     def record_and_display_info(
@@ -563,7 +573,7 @@ class PointNeuralNetworkBase(nn.Module):
                 pth = Path(checkpoint_file).relative_to(expand_path(Path('.')))
             except ValueError:
                 pth = Path(checkpoint_file)
-            print('Sucesfully loaded weights from', pth)
+            LOG.info(f'Sucesfully loaded weights from {pth}')
 
     @property
     def param_count(self):

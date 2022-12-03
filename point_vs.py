@@ -18,7 +18,6 @@ import torch
 import yaml
 
 from point_vs import utils
-from point_vs import log
 
 from point_vs.models.geometric.egnn_multitask import MultitaskSatorrasEGNN
 from point_vs.models.geometric.egnn_lucid import PygLucidEGNN
@@ -29,30 +28,15 @@ from point_vs.preprocessing.data_loaders import PygPointCloudDataset
 from point_vs.preprocessing.data_loaders import SynthPharmDataset
 from point_vs.utils import load_yaml
 from point_vs.utils import mkdir
+from point_vs.logging import get_logger
+
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
+
 if __name__ == '__main__':
     args = parse_args()
-
-    logging_levels = {
-        'notset': logging.NOTSET,
-        'debug': logging.DEBUG,
-        'info': logging.INFO,
-        'warning': logging.WARNING,
-        'error': logging.ERROR,
-        'critical': logging.CRITICAL
-    }
-    logger = log.create_log_obj(
-        'PointVS', level=logging_levels[args.logging_level.lower()])
-
-    try:
-        import wandb
-        logger.info('Wandb found.')
-    except ImportError:
-        logger.warning('Library wandb not available. --wandb and --run flags '
-                       'should not be used.')
-        wandb = None
+    LOG = get_logger('PointVS')
 
     if args.model_task == 'both' and args.model != 'multitask':
         raise RuntimeError(
@@ -79,12 +63,23 @@ if __name__ == '__main__':
     if args.wandb_project is None:
         save_path = Path(args.save_path).expanduser()
     elif args.wandb_run is None:
-        raise RuntimeError(
+        LOG.error(
             'wandb_run must be specified if wandb_project is specified.')
+        exit(1)
     else:
         save_path = Path(
             args.save_path, args.wandb_project, args.wandb_run).expanduser()
     save_path.mkdir(parents=True, exist_ok=True)
+    LOG = get_logger('PointVS', save_path)
+
+    try:
+        import wandb
+        LOG.info('Wandb found.')
+    except ImportError:
+        LOG.warning('Library wandb not available. --wandb and --run flags '
+                    'should not be used.')
+        wandb = None
+
     args.hostname = socket.gethostname()
     args.slurm_jobid = os.getenv('SLURM_JOBID')
 
@@ -92,24 +87,24 @@ if __name__ == '__main__':
         yaml.dump(vars(args), f)
 
     if args.model == 'egnn':
-        model_class = SartorrasEGNN
+        ModelClass = SartorrasEGNN
     elif args.model == 'lucid':
-        model_class = PygLucidEGNN
+        ModelClass = PygLucidEGNN
     elif args.model == 'multitask':
-        model_class = MultitaskSatorrasEGNN
+        ModelClass = MultitaskSatorrasEGNN
     else:
         raise NotImplementedError(
             'model must be one of multitask, egnn or lucid')
 
     if args.synthpharm:
-        dataset_class = SynthPharmDataset
+        DatasetClass = SynthPharmDataset
     else:
-        dataset_class = PygPointCloudDataset
+        DatasetClass = PygPointCloudDataset
 
-    regression_task = 'multi_regression' if args.multi_target_affinity else 'regression'
+    REGRESSION_TASK = 'multi_regression' if args.multi_target_affinity else 'regression'
     # For backwards compatibility with older trained models
     if args.model_task == 'multi_regression':
-        regression_task = 'multi_regression'
+        REGRESSION_TASK = 'multi_regression'
 
     dl_kwargs = {
         'batch_size': args.batch_size,
@@ -130,7 +125,7 @@ if __name__ == '__main__':
         # Either both or classification, need a classification dl
         train_dl_pose = get_data_loader(
             args.train_data_root_pose,
-            dataset_class,
+            DatasetClass,
             augmented_actives=args.augmented_actives,
             min_aug_angle=args.min_aug_angle,
             max_active_rms_distance=args.max_active_rmsd,
@@ -149,7 +144,7 @@ if __name__ == '__main__':
         # Need a regression dl
         train_dl_affinity = get_data_loader(
             args.train_data_root_affinity,
-            dataset_class,
+            DatasetClass,
             augmented_actives=args.augmented_actives,
             min_aug_angle=args.min_aug_angle,
             max_active_rms_distance=args.max_active_rmsd,
@@ -159,7 +154,7 @@ if __name__ == '__main__':
             mode='train',
             p_noise=args.p_noise,
             p_remove_entity=args.p_remove_entity,
-            model_task=regression_task,
+            model_task=REGRESSION_TASK,
             **dl_kwargs
         )
     else:
@@ -175,7 +170,7 @@ if __name__ == '__main__':
     if 'regression' not in args.model_task and args.test_data_root_pose is not None:
         test_dl_pose = get_data_loader(
             args.test_data_root_pose,
-            dataset_class,
+            DatasetClass,
             types_fname=args.test_types_pose,
             mode='val',
             model_task='classification',
@@ -184,10 +179,10 @@ if __name__ == '__main__':
     if args.model_task != 'classification' and args.test_data_root_affinity is not None:
         test_dl_affinity = get_data_loader(
             args.test_data_root_affinity,
-            dataset_class,
+            DatasetClass,
             types_fname=args.test_types_affinity,
             mode='val',
-            model_task=regression_task,
+            model_task=REGRESSION_TASK,
             **dl_kwargs)
 
     args_to_record = vars(args)
@@ -201,7 +196,7 @@ if __name__ == '__main__':
         'num_layers': args.layers,
         'dropout': args.dropout,
         'dim_input': dim_input,
-        'dim_output': 3 if regression_task == 'multi_regression' else 1,
+        'dim_output': 3 if REGRESSION_TASK == 'multi_regression' else 1,
         'norm_coords': args.norm_coords,
         'norm_feats': args.norm_feats,
         'thin_mlps': args.thin_mlps,
@@ -247,7 +242,7 @@ if __name__ == '__main__':
         if args.wandb_run is not None:
             wandb.run.name = args.wandb_run
 
-    model = model_class(
+    model = ModelClass(
         save_path, args.learning_rate, args.weight_decay,
         wandb_project=args.wandb_project, use_1cycle=args.use_1cycle,
         warm_restarts=args.warm_restarts,
@@ -272,12 +267,12 @@ if __name__ == '__main__':
         model.set_task('classification')
         model.val(test_dl_pose, top1_on_end=args.top1)
     if args.epochs_affinity and train_dl_affinity is not None:
-        model.set_task(regression_task)
+        model.set_task(REGRESSION_TASK)
         model.train_model(
             train_dl_affinity, epochs=args.epochs_affinity, top1_on_end=args.top1,
             epoch_end_validation_set=test_dl_affinity if args.val_on_epoch_end else None)
     if test_dl_affinity is not None:
-        model.set_task(regression_task)
+        model.set_task(REGRESSION_TASK)
         model.val(test_dl_affinity, top1_on_end=args.top1)
 
     if args.end_flag:

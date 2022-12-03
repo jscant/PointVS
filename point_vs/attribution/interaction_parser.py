@@ -25,6 +25,7 @@ from urllib.request import urlopen
 import numpy as np
 import pandas as pd
 
+from point_vs import logging
 from point_vs.dataset_generation.types_to_parquet import StructuralFileParser
 from point_vs.utils import coords_to_string, PositionSet
 
@@ -33,6 +34,8 @@ try:
 except (ModuleNotFoundError, ImportError):
     import pybel
 
+
+LOG = logging.get_logger('PointVS')
 RESIDUE_IDS = {'MET', 'ARG', 'SER', 'TRP', 'HIS', 'CYS', 'LYS', 'GLU', 'THR',
                'LEU', 'TYR', 'PRO', 'ASN', 'ASP', 'PHE', 'GLY', 'VAL', 'ALA',
                'ILE', 'GLN'}
@@ -45,10 +48,10 @@ def fetch_pdb(pdbid):
     try:
         pdbfile = urlopen(pdburl).read().decode()
         if 'sorry' in pdbfile:
-            print('No file in PDB format available from wwPDB for', pdbid)
+            LOG.warning(f'No file in PDB format available from wwPDB for {pdbid}')
             return None, None
     except HTTPError:
-        print('No file in PDB format available from wwPDB for', pdbid)
+        LOG.warning(f'No file in PDB format available from wwPDB for {pdbid}')
         return None, None
     return [pdbfile, pdbid]
 

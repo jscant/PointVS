@@ -9,11 +9,15 @@ import yaml
 from torch import nn
 from torch.nn.functional import silu
 
+from point_vs import logging
 from point_vs.global_objects import DEVICE
 from point_vs.analysis.top_n import top_n
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase
 from point_vs.models.point_neural_network_base import PointNeuralNetworkBase
 from point_vs.utils import mkdir, to_numpy
+
+
+LOG = logging.get_logger('PointVS')
 
 
 class SiameseNeuralNetwork(PNNGeometricBase, ABC):
@@ -85,7 +89,7 @@ class SiameseNeuralNetwork(PNNGeometricBase, ABC):
                 yaml.dump(model_kwargs, f)
 
         pc = self.param_count
-        print('Model parameters:', pc)
+        LOG.info('Model parameters:', pc)
         if self.wandb_project is not None:
             wandb.log({'Parameters': pc})
 

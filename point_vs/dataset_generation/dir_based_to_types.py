@@ -5,7 +5,11 @@ Convert from directory structure-based datasets to types-based datsets.
 import argparse
 from pathlib import Path
 
+from point_vs import logging
 from point_vs.utils import expand_path, load_yaml, ensure_writable
+
+
+LOG = logging.get_logger('PointVS')
 
 
 def directory_to_types(base_path):
@@ -55,8 +59,7 @@ def directory_to_types(base_path):
                 rmsd = -1
         else:
             rmsd = -1
-        print(label, rmsd, remove_base_path(rec_fname),
-              remove_base_path(lig_fname))
+        LOG.debug(f'{label} {rmsd} {remove_base_path(rec_fname)} {remove_base_path(lig_fname)}')
         types_string += '{0} {1} {2} {3}\n'.format(
             label,
             rmsd,

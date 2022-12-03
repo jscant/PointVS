@@ -11,6 +11,10 @@ from matplotlib import pyplot as plt
 
 from point_vs.analysis.ranking import Ranking
 from point_vs.utils import load_yaml
+from point_vs import logging
+
+
+LOG = logging.get_logger('PointVS')
 
 
 def parse_results(
@@ -110,7 +114,7 @@ def plot_top_n(label_to_ranking, max_n=10, threshold_rmsd=2.0):
         'Fraction of top-ranked poses within given cutoff of relaxed xtal pose')
     x_rng = range(1, max_n + 1)
     for label, ranking in label_to_ranking.items():
-        print(label)
+        LOG.debug(str(label))
         top_n = []
         for n in x_rng:
             top_n.append(ranking.get_top_n(n, threshold_rmsd))

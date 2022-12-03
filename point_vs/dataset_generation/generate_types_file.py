@@ -61,7 +61,11 @@ import pandas as pd
 from openbabel import pybel
 from pandas._libs.lib import NoDefault
 
+from point_vs import logging
 from point_vs.utils import expand_path, pretify_dict, mkdir
+
+
+LOG = logging.get_logger('PointVS')
 
 
 def extract_pdbbind_affinities(csv):
@@ -135,7 +139,7 @@ def execute_cmd(cmd, raise_exceptions=True, silent=False):
             cmd=proc_result.args,
             stderr=proc_result.stderr)
     if proc_result.stdout and not silent:
-        print(proc_result.stdout.decode('utf-8'))
+        LOG.warning(proc_result.stdout.decode('utf-8'))
 
     return res(proc_result.stdout.decode('utf-8'),
                proc_result.stderr.decode('utf-8'),
@@ -170,7 +174,7 @@ def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
         try:
             affinities[['pki', 'pkd', 'pic50'].index(metric)] = affinity
         except IndexError:
-            print('Could not find affinity data for', receptor_pdb)
+            LOG.warning(f'Could not find affinity data for {receptor_pdb}')
             return None
         affinity_str = '{0} {1} {2}'.format(*affinities)
         rec_path = Path(
@@ -178,7 +182,7 @@ def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
         lig_path = Path(
             directory.name,
             ligand_sdf.with_suffix('').name + '_0.parquet')
-        print('{0} {1} {2}\n'.format(affinity_str, rec_path, lig_path))
+        LOG.info('{0} {1} {2}\n'.format(affinity_str, rec_path, lig_path))
         return '{0} {1} {2}\n'.format(affinity_str, rec_path, lig_path)
 
     def types_line_classification(
@@ -230,11 +234,9 @@ def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
         return -1
     s = ''
     for r_idx, receptor_pdb in enumerate(pdbs):
-        # print(receptor_pdb)
         if crystal_exp is not None and docked_exp is not None:
             xtal_matches = re_glob(crystal_exp)
             docked_matches = re_glob(docked_exp)
-            # print(receptor_pdb, len(xtal_matches), len(docked_matches))
             if len(xtal_matches) * len(docked_matches):
                 types_str = None
                 if len(xtal_matches) * len(docked_matches) == 1:
@@ -290,9 +292,9 @@ def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
                             xtal_to_docked_map[
                                 xtal_match_path] = docked_match_path
                 if len(set(xtal_to_docked_map.values())) != len(xtal_matches):
-                    print(pretify_dict(xtal_to_docked_map))
-                    raise RuntimeError('Could not determine matching pattern '
-                                       'for {}'.format(directory))
+                    LOG.exception(
+                        f'Could not determine matching pattern for {directory}')
+                    exit(1)
                 for crystal_sdf, docked_sdf in xtal_to_docked_map.items():
                     types_str += types_line_classification(
                         receptor_pdb, crystal_sdf, docked_sdf)
@@ -321,8 +323,8 @@ def generate_types_str(directory, pdb_exp, crystal_exp=None, docked_exp=None,
                     pdbid = candidate_pdbid
                     break
             if pdbid is None:
-                print(
-                    'Could not find affinity data for pdb' + str(receptor_pdb))
+                LOG.warning(
+                    f'Could not find affinity data for pdb {receptor_pdb}')
                 continue
             types_line = types_line_regression(
                 receptor_pdb, crystal_match, affinity, metric)
@@ -390,7 +392,6 @@ if __name__ == '__main__':
     affinity_dict = None
     if args.affinity is not None:
         affinity_df = extract_pdbbind_affinities(args.affinity)
-        print(affinity_df)
         affinity_dict = {
             pdbid: (affinity, metric) for
             pdbid, affinity, metric in zip(
@@ -407,7 +408,8 @@ if __name__ == '__main__':
                 s += s_.strip()
                 if args.split_sdfs:
                     s += '\n'
-            print('Completed {0}/{1} targets'.format(idx, n_pdbs))
+            if not (idx + 1 % 10):
+                LOG.info(f'Completed {idx+1}/{n_pdbs} targets')
 
     s = '\n'.join([line for line in s.split('\n') if len(line.split()) > 1])
     with open(expand_path(

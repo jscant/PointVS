@@ -1,3 +1,4 @@
+"""Extract protein atom importance from fragment screening hits (for Lucy)."""
 import argparse
 from collections import defaultdict
 
@@ -5,11 +6,15 @@ import numpy as np
 import pandas as pd
 from rdkit import Chem
 
+from point_vs import logging
 from point_vs.attribution.attribution import attribute, pdb_coords_to_identifier
 from point_vs.constants import AA_TRIPLET_CODES, VDW_RADII
 from point_vs.dataset_generation.types_to_parquet import StructuralFileParser
 from point_vs.models.load_model import load_model
 from point_vs.utils import expand_path, mkdir
+
+
+LOG = logging.get_logger('PointVS')
 
 
 def get_ligand_to_hbond_map(pdb, lig_name='LIG'):
@@ -206,8 +211,8 @@ def binding_events_to_ranked_protein_atoms(
                     pass
             df.reset_index(drop=True, inplace=True)
             processed_dfs.append(df)
-        print('Completed file ', fname.name, ', with scores: ', ', '.join(
-            ['{:.3f}'.format(score) for score in scores]), sep='')
+        scores_str = ', '.join(['{:.3f}'.format(score) for score in scores])
+        LOG.info(f'Completed file {fname.name}, with scores: {scores_str}')
 
     processed_dfs = [df.set_index('protein_atom') for df in processed_dfs]
     concat_df = processed_dfs[0].join(processed_dfs[1:])
@@ -355,7 +360,7 @@ def pharmacophore_df_to_mols(
         filtered_df = filtered_df[filtered_df['score'] != -np.inf]
         if not use_rank:
             filtered_df = filtered_df[filtered_df['score'] > 0]
-        print(filtered_df)
+        LOG.info(filtered_df)
 
         smiles = atom_type * len(filtered_df)
         mol = Chem.MolFromSmiles(smiles)
@@ -418,8 +423,7 @@ if __name__ == '__main__':
         model_task=args.model_task)
     df = scores_to_pharmacophore_df(
         args.apo_protein, rank_df, use_rank=args.use_rank)
-    print(df[:10])
-    print()
+    LOG.info(df[:10])
     hba_mol, hbd_mol = pharmacophore_df_to_mols(
         df, use_rank=args.use_rank, cutoff=args.cutoff)
     output_dir = mkdir(args.output_dir)

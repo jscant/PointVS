@@ -1,3 +1,4 @@
+"""Put PDB data through model to extract attribution scores."""
 from pathlib import Path
 
 import numpy as np
@@ -8,17 +9,27 @@ from plip.plipcmd import logger
 from plip.structure.preparation import PDBComplex
 from pymol import cmd
 
-from point_vs.attribution.attribution_fns import atom_masking, cam, \
-    edge_attention, edge_embedding_attribution, node_attention, \
-    track_position_changes, track_bond_lengths, cam_wrapper, \
-    attention_wrapper, \
-    bond_masking, masking_wrapper
-from point_vs.attribution.interaction_parser import \
-    StructuralInteractionParser, \
-    StructuralInteractionParserFast
-from point_vs.attribution.plip_subclasses import \
-    PyMOLVisualizerWithBFactorColouring, VisualizerDataWithMolecularInfo
-from point_vs.utils import mkdir, expand_path
+from point_vs import logging
+from point_vs.utils import mkdir
+from point_vs.utils import expand_path
+from point_vs.attribution.attribution_fns import atom_masking
+from point_vs.attribution.attribution_fns import cam
+from point_vs.attribution.attribution_fns import edge_attention
+from point_vs.attribution.attribution_fns import edge_embedding_attribution
+from point_vs.attribution.attribution_fns import node_attention
+from point_vs.attribution.attribution_fns import track_bond_lengths
+from point_vs.attribution.attribution_fns import track_position_changes
+from point_vs.attribution.attribution_fns import cam_wrapper
+from point_vs.attribution.attribution_fns import attention_wrapper
+from point_vs.attribution.attribution_fns import masking_wrapper
+from point_vs.attribution.attribution_fns import bond_masking
+from point_vs.attribution.interaction_parser import StructuralInteractionParser
+from point_vs.attribution.interaction_parser import StructuralInteractionParserFast
+from point_vs.attribution.plip_subclasses import PyMOLVisualizerWithBFactorColouring
+from point_vs.attribution.plip_subclasses import VisualizerDataWithMolecularInfo
+
+
+LOG = logging.get_logger('PointVS')
 
 
 def visualize_in_pymol(
@@ -211,8 +222,8 @@ def visualize_in_pymol(
                         len(item.strip())]
         filename = "_".join(naming_items)
         vis.save_session(plcomplex.mol.output_path, override=filename)
-        print('Saved session as', expand_path(
-            plcomplex.mol.output_path, filename + '.pse'))
+        pth = expand_path(plcomplex.mol.output_path, filename + '.pse')
+        LOG.info(f'Saved session as {pth}')
         if config.PICS:
             vis.save_picture(config.OUTPATH, filename)
 
@@ -246,7 +257,7 @@ def score_pdb(
         ligand_outpath = str(Path(outpath, 'crystal_ligand.sdf'))
         complexes[0].ligand.molecule.write(
             format='sdf', filename=ligand_outpath, overwrite=True)
-        print('Saved ligand as sdf to', ligand_outpath)
+        LOG.info(f'Saved ligand as sdf to {ligand_outpath}.')
 
     def score_atoms(
             model, attribution_fn, plcomplex, model_args, only_process=None):
