@@ -19,7 +19,7 @@ if [[ "$OSTYPE" == "linux-gnu"* && "$ARCH" == "x86_64"* ]]; then
     INSTALLSCRIPT="environment.yml"
 elif [[ "$OSTYPE" == "darwin"* && "$ARCH" == "arm"* ]]; then
     INSTALLSCRIPT="environment_apple_silicon.yml"
-elif [[ "$OSTYPE" == "darwin"* && "$ARCH" == "x86_64*" ]]; then
+elif [[ "$OSTYPE" == "darwin"* && "$ARCH" == "x86_64"* ]]; then
     INSTALLSCRIPT="environment_macOS_inte.yml"
 else
     echo "$OSTYPE with $ARCH not supported. Abort..."
