@@ -11,36 +11,28 @@ The author's previous work on deep learning for
 virtual screening can be found 
 [here](https://pubs.acs.org/doi/10.1021/acs.jcim.0c00263).
 
-## Installation and Initialisation (Linux)
+## Installation (Linux/MacOS Bash, MacOS zsh):
+Copy and paste the following commands:
 ```
-git clone https://github.com/jscant/PointVS
-cd PointVS
+OS=$OSTYPE
+ARCH=$(arch)
+if [[ "$OSTYPE" == "linux-gnu"* && "$ARCH" == "x86_64"* ]]; then
+    INSTALLSCRIPT="environment.yml"
+elif [[ "$OSTYPE" == "darwin"* && "$ARCH" == "arm"* ]]; then
+    INSTALLSCRIPT="environment_apple_silicon.yml"
+elif [[ "$OSTYPE" == "darwin"* && "$ARCH" == "x86_64*" ]]; then
+    INSTALLSCRIPT="environment_macOS_inte.yml"
+else
+    echo "$OSTYPE with $ARCH not supported. Abort..."
+    exit
+fi
 git remote set-url origin git@github.com:jscant/PointVS.git
-conda env create -f environment.yml python=3.8
+conda env create -f $INSTALLSCRIPT
 conda activate pointvs
 pip install -e .
 ```
-
-## Installation and Initialisation (Mac OS, Intel)
-```
-git clone https://github.com/jscant/PointVS
-cd PointVS
-git remote set-url origin git@github.com:jscant/PointVS.git
-conda env create -f environment_apple_silicon.yml python=3.9
-conda activate pointvs
-pip install -e .
-```
-
-## Installation and Initialisation (Mac OS, Apple Silicon)
-```
-git clone https://github.com/jscant/PointVS
-cd PointVS
-git remote set-url origin git@github.com:jscant/PointVS.git
-conda env create -f environment_apple_silicon.yml python=3.9
-conda activate pointvs
-pip install -e .
-```
-Note: Apple Silicon MPS support will be enabled once
+Note: Windows and Linux (arm64) are not supported, and Apple
+Silicon MPS support will be enabled once
 https://github.com/pytorch/pytorch/issues/77794 is resolved.
 
 To run tests for invariance under E(3) transformations:
