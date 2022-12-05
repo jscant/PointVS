@@ -11,7 +11,7 @@ The author's previous work on deep learning for
 virtual screening can be found 
 [here](https://pubs.acs.org/doi/10.1021/acs.jcim.0c00263).
 
-## Installation (Linux/MacOS x64_86, MacOS arm64):
+## Installation (Linux/MacOS x86_64, MacOS arm64):
 Copy and paste the following commands:
 ```
 ARCH=$(arch)
