@@ -14,7 +14,6 @@ virtual screening can be found
 ## Installation (Linux/MacOS Bash, MacOS zsh):
 Copy and paste the following commands:
 ```
-OS=$OSTYPE
 ARCH=$(arch)
 if [[ "$OSTYPE" == "linux-gnu"* && "$ARCH" == "x86_64"* ]]; then
     INSTALLSCRIPT="environment.yml"
