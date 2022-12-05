@@ -320,23 +320,37 @@ The recommended way to feed data into the models is to use types files, which
 are used extensively in [GNINA 1.0](https://github.com/gnina/gnina).
 
 Types File
-Each line should follow the format:
+Each line should follow one of two formats.
 
-`<label> <n/a> <rmsd> <receptor> <ligand>`
+For classification datasets:
+`<label> <energy> <rmsd> <receptor> <ligand>`
+
+For regression datasets:
+`<pki> <pkd> <ic50> <receptor> <ligand>`
 
 where:
 
 `<label>` is a binary label (0 or 1)
 
-`<n/a>` is any value (unused, there to keep in line with the original GNINA 
-specification)
+`<energy>` is usually set to -1.0, and can be used to store the energy of
+an interaction or a docking score. It is included in the original GNINA
+specification so is retained here.
 
 `<rmsd>` is the RMSD from the original crystal structure where the ligand is a 
 docked structure and the RMSD is known, or -1 otherwise.
 
+`<pki>` The pKi, if known, else -1.0
+
+`<pkd>` The pKd, if known, else -1.0
+
+`<ic50>` The IC50, if known, else -1.0.
+
 `<receptor>` is the relative location of the receptor structure in parquet format
 
 `<ligand>` is the relative location of the ligand structure in parquet format
+
+Only one of <pKi>, <pkd> or <ic50> should have a positive  value. If multiple types
+of affinity are known, they can be given separate entries.
 
 An example
 types file can be found at `data/small_chembl_test.types`, where the `<rmsd>`
