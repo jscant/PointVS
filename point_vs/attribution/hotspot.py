@@ -415,6 +415,8 @@ if __name__ == '__main__':
                              'saved model files')
 
     args = parser.parse_args()
+    output_dir = mkdir(args.output_dir)
+    LOG = logging.get_logger('PointVS', log_path=output_dir)
     rank_df = binding_events_to_ranked_protein_atoms(
         args.filenames, args.model, args.output_dir,
         args.ligand_residue_code.upper(), attribution=args.scoring_method,
@@ -426,7 +428,7 @@ if __name__ == '__main__':
     LOG.info(df[:10])
     hba_mol, hbd_mol = pharmacophore_df_to_mols(
         df, use_rank=args.use_rank, cutoff=args.cutoff)
-    output_dir = mkdir(args.output_dir)
+    
     with Chem.SDWriter(str(output_dir / 'hba.sdf')) as w:
         w.write(hba_mol)
     with Chem.SDWriter(str(output_dir / 'hbd.sdf')) as w:
