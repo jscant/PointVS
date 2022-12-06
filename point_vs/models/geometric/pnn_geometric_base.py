@@ -101,39 +101,14 @@ class PNNGeometricBase(PointNeuralNetworkBase):
             feats, edges, coords, edge_attributes, batch = self.unpack_graph(
                 graph)
             dE, _ = None, None
-        feats, messages = self.get_embeddings(
+        feats, _ = self.get_embeddings(
             feats, edges, coords, edge_attributes, batch)
-        total_nodes, _ = feats.shape
-        row, _ = edges
-        if self.linear_gap:
-            if self.feats_linear_layers is not None:
-                feats = self.feats_linear_layers(feats)
-                feats = pooling_op(feats)
-            if self.edges_linear_layers is not None:
-                agg = unsorted_segment_sum(
-                    messages, row, num_segments=total_nodes)
-                messages = self.edges_linear_layers(agg)
-                messages = pooling_op(messages)
-        else:
-            if self.feats_linear_layers is not None:
-                feats = pooling_op(feats)  # (total_nodes, k)
-                if self.include_strain_info:
-                    feats = torch.cat((feats, dE), dim=1)
-                feats = self.feats_linear_layers(feats)  # (bs, k)
-            if self.edges_linear_layers is not None:
-                agg = unsorted_segment_sum(
-                    messages, row, num_segments=total_nodes)
-                messages = pooling_op(messages)
-                messages = self.edges_linear_layers(messages)
-        if self.feats_linear_layers is not None and \
-                self.edges_linear_layers is not None:
-            return torch.add(feats.squeeze(), messages.squeeze())
-        elif self.feats_linear_layers is not None:
-            return feats
-        elif self.edges_linear_layers is not None:
-            return messages
-        raise RuntimeError(
-            'We must either classify on feats, edges or both.')
+        if self.feats_linear_layers is not None:
+            feats = pooling_op(feats)  # (total_nodes, k)
+            if self.include_strain_info:
+                feats = torch.cat((feats, dE), dim=1)
+            feats = self.feats_linear_layers(feats)  # (bs, k)
+        return feats
 
     def process_graph(self, graph):
         y_true = graph.y

@@ -14,7 +14,7 @@ from plip.basic.supplemental import extract_pdbid
 from plip.exchange.webservices import fetch_pdb
 
 from point_vs.attribution.attribution_fns import atom_masking, cam, \
-    edge_embedding_attribution, edge_attention, node_attention, \
+    edge_attention, node_attention, \
     replace_coords, track_position_changes, track_bond_lengths, cam_wrapper, \
     attention_wrapper, bond_masking, masking_wrapper
 from point_vs.attribution.process_pdb import score_and_colour_pdb
@@ -167,7 +167,6 @@ def attribute(attribution_type, model_file, output_dir, pdbid=None,
                       'cam': cam,
                       'node_attention': node_attention,
                       'edge_attention': edge_attention,
-                      'edges': edge_embedding_attribution,
                       'displacement': track_position_changes,
                       'bond_lengths': track_bond_lengths,
                       'attention': attention_wrapper,

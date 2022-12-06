@@ -42,16 +42,10 @@ class EquivariantTransformer(PNNVanillaBase):
                   *[attention_block(dim_hidden[i], num_heads[i])
                     for i in range(num_layers)]]
 
-        if self.linear_gap:
-            layers += [
-                Pass(nn.Linear(dim_hidden[-1], dim_output), dim=1),
-                GlobalPool(mean=global_pool_mean),
-            ]
-        else:
-            layers += [
-                GlobalPool(mean=global_pool_mean),
-                nn.Linear(dim_hidden[-1], dim_output)
-            ]
+        layers += [
+            GlobalPool(mean=global_pool_mean),
+            nn.Linear(dim_hidden[-1], dim_output)
+        ]
 
         layers = nn.Sequential(*layers)
 

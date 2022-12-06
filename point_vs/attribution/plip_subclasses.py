@@ -15,7 +15,7 @@ from torch_geometric.data import Data
 from point_vs import logging
 from point_vs.global_objects import DEVICE
 from point_vs.attribution.attribution_fns import edge_attention, \
-    edge_embedding_attribution, track_bond_lengths, node_attention, \
+    track_bond_lengths, node_attention, \
     attention_wrapper, cam_wrapper, atom_masking, bond_masking, masking_wrapper
 from point_vs.attribution.interaction_parser import StructuralInteractionParser
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase
@@ -584,8 +584,7 @@ class PyMOLVisualizerWithBFactorColouring(PyMOLVisualizer):
 
 
         df['any_interaction'] = df['hba'] | df['hbd'] | df['pistacking']
-        if attribution_fn in (edge_attention, edge_embedding_attribution,
-                              track_bond_lengths, bond_masking):
+        if attribution_fn in (edge_attention, track_bond_lengths, bond_masking):
             edge_scores = model_labels
         else:
             df['attribution'] = model_labels

@@ -15,7 +15,6 @@ from point_vs.utils import expand_path
 from point_vs.attribution.attribution_fns import atom_masking
 from point_vs.attribution.attribution_fns import cam
 from point_vs.attribution.attribution_fns import edge_attention
-from point_vs.attribution.attribution_fns import edge_embedding_attribution
 from point_vs.attribution.attribution_fns import node_attention
 from point_vs.attribution.attribution_fns import track_bond_lengths
 from point_vs.attribution.attribution_fns import track_position_changes
@@ -205,7 +204,6 @@ def visualize_in_pymol(
                 cam: 'cam',
                 node_attention: 'node_attention',
                 edge_attention: 'edge_attention',
-                edge_embedding_attribution: 'edges',
                 track_position_changes: 'displacement',
                 track_bond_lengths: 'bond_lengths',
                 attention_wrapper: 'attention',

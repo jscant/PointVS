@@ -8,7 +8,6 @@ python3 point_vs.py <model> <data_root> <save_path> --train_types_pose <train_ty
 for example:
 python3 point_vs.py egnn data/small_chembl_test /tmp/test_output --train_types_pose data/small_chembl_test.types
 """
-import logging
 import os
 import socket
 import warnings
@@ -206,7 +205,6 @@ if __name__ == '__main__':
         'normalize': args.egnn_normalise,
         'residual': args.egnn_residual,
         'edge_residual': args.egnn_edge_residual,
-        'linear_gap': args.linear_gap,
         'graphnorm': args.graphnorm,
         'multi_fc': args.multi_fc,
         'update_coords': not args.static_coords,

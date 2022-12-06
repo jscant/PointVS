@@ -165,10 +165,6 @@ def parse_args():  #pylint:disable=too-many-statements
                              'radius is set at 2A, which has the effect of '
                              'putting edges where there are covalent bonds '
                              'between atoms in the same molecule.')
-    parser.add_argument('--linear_gap', action='store_true',
-                        help='Final linear layer comes after rather than '
-                             'before the global average pooling layer. This '
-                             'can improve performance significantly.')
     parser.add_argument('--prune', action='store_true',
                         help='(EGNN) Prune subgraphs which are not connected '
                              'to the ligand')

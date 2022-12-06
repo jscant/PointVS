@@ -63,7 +63,6 @@ MODEL_KWARGS = {
     'dim_output': 1,
     'dim_hidden': 32,
     'pooling_only': True,
-    'linear_gap': True,
     'graphnorm': True,
     'update_coords': True,
     'node_attention': True,

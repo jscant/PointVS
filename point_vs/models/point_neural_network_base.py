@@ -58,11 +58,8 @@ class PointNeuralNetworkBase(nn.Module):
         self.batch = 0
         self.p_epoch = 0
         self.a_epoch = 0
-        self.feats_linear_layers = None
-        self.edges_linear_layers = None
         self.transformer_encoder = None
         self.save_path = Path(save_path).expanduser()
-        self.linear_gap = model_kwargs.get('linear_gap', True)
         self.only_save_best_models = only_save_best_models
         if not silent:
             mkdir(self.save_path)

@@ -309,26 +309,6 @@ def edge_attention(
     return model.layers[gnn_layer].att_val.reshape((-1,))
 
 
-def edge_embedding_attribution(
-        model, p, v, edge_indices=None, edge_attrs=None, **kwargs):
-    assert isinstance(model, SartorrasEGNN), \
-        'Edge based attribution only compatable with SartorrasEGNN'
-    graph = get_pyg_single_graph_for_inference(Data(
-        x=v.squeeze(),
-        edge_index=edge_indices,
-        edge_attr=edge_attrs,
-        pos=p.squeeze(),
-    ))
-
-    feats, edges, coords, edge_attributes, batch = model.unpack_graph(
-        graph)
-    _, edge_embeddings = model.get_embeddings(
-        feats, edges, coords, edge_attributes, batch)
-    edge_scores = to_numpy(model.edges_linear_layers(edge_embeddings))
-
-    return edge_scores
-
-
 def cam(model, p, v, m=None, edge_indices=None, edge_attrs=None, **kwargs):
     """Perform class activation mapping (CAM) on input.
 
@@ -370,16 +350,15 @@ def cam(model, p, v, m=None, edge_indices=None, edge_attrs=None, **kwargs):
                 break
             x = layer(x)
         x = to_numpy(x[1].squeeze())
-        if not model.linear_gap:
-            # We can directly look at the contribution of each node by taking
-            # the dot product between each node's features and the final FC
-            # layer
-            final_layer_weights = to_numpy(model.layers[-1].weight).T
-            x = x @ final_layer_weights
-            if liftsamples == 1:
-                return x
-            x = [np.mean(x[n:n + liftsamples]) for n in
-                 range(len(x) // liftsamples)]
+        # We can directly look at the contribution of each node by taking
+        # the dot product between each node's features and the final FC
+        # layer
+        final_layer_weights = to_numpy(model.layers[-1].weight).T
+        x = x @ final_layer_weights
+        if liftsamples == 1:
+            return x
+        x = [np.mean(x[n:n + liftsamples]) for n in
+                range(len(x) // liftsamples)]
     return np.array(x)
 
 

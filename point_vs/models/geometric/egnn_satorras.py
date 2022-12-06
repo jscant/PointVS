@@ -127,7 +127,7 @@ class E_GCL(nn.Module):
         return out
 
     def node_model(self, x, edge_index, m_ij):
-        row, col = edge_index
+        row, _ = edge_index
 
         if self.edge_attention:
             att_val = self.att_mlp(m_ij)
@@ -218,8 +218,6 @@ class SartorrasEGNN(PNNGeometricBase):
         tanh: bool = True,
         dropout: float = 0.0,
         graphnorm: bool = True,
-        classify_on_edges: bool = False,
-        classify_on_feats: bool = True,
         multi_fc: bool = False,
         update_coords: bool = True,
         permutation_invariance: bool = False,
@@ -253,8 +251,6 @@ class SartorrasEGNN(PNNGeometricBase):
                 improves in stability but it may decrease in accuracy.
             dropout: dropout rate for edge/node/coordinate MLPs.
             graphnorm: apply graph normalisation.
-            classify_on_edges: final classification on edges.
-            classify_on_feats: final classification on features (recommended).
             multi_fc: multiple fully connected layers at the end.
             update_coords: coordinates update at each layer.
             permutation_invariance: edges embeddings are summed rather than
@@ -277,9 +273,6 @@ class SartorrasEGNN(PNNGeometricBase):
         self.model_task = model_task
         self.include_strain_info = include_strain_info
 
-        assert classify_on_feats or classify_on_edges, \
-            'We must use either or both of classify_on_feats and ' \
-            'classify_on_edges'
         assert not (gated_residual and rezero), \
             'gated_residual and rezero are incompatible'
         for _ in range(0, num_layers):
@@ -306,19 +299,13 @@ class SartorrasEGNN(PNNGeometricBase):
             fc_layer_dims = ((k, dim_output),)
 
         feats_linear_layers = []
-        edges_linear_layers = []
         for idx, (in_dim, out_dim) in enumerate(fc_layer_dims):
             feats_linear_layers.append(nn.Linear(in_dim, out_dim))
-            edges_linear_layers.append(nn.Linear(in_dim, out_dim))
             if idx < len(fc_layer_dims) - 1:
                 feats_linear_layers.append(nn.SiLU())
-                edges_linear_layers.append(nn.SiLU())
         if final_softplus:
-            feats_linear_layers.append(nn.ReLU())
-        if classify_on_feats:
-            self.feats_linear_layers = nn.Sequential(*feats_linear_layers)
-        if classify_on_edges:
-            self.edges_linear_layers = nn.Sequential(*edges_linear_layers)
+            feats_linear_layers.append(nn.Softplus())
+        self.feats_linear_layers = nn.Sequential(*feats_linear_layers)
         return nn.Sequential(*layers)
 
     def get_embeddings(self, feats, edges, coords, edge_attributes, batch):
