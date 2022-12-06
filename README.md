@@ -92,7 +92,7 @@ usage: point_vs.py [-h] [--train_data_root_pose TRAIN_DATA_ROOT_POSE]
                    [--test_types_affinity TEST_TYPES_AFFINITY] [--egnn_attention]
                    [--egnn_tanh] [--egnn_normalise] [--egnn_residual]
                    [--edge_radius EDGE_RADIUS] [--end_flag] [--wandb_dir WANDB_DIR]
-                   [--estimate_bonds] [--linear_gap] [--prune] [--top1] [--graphnorm]
+                   [--estimate_bonds] [--prune] [--top1] [--graphnorm]
                    [--multi_fc] [--lucid_node_final_act]
                    [--p_remove_entity P_REMOVE_ENTITY] [--static_coords]
                    [--permutation_invariance] [--node_attention]
@@ -238,9 +238,6 @@ optional arguments:
                         the intramolecular radius is set at 2A, which has the effect
                         of putting edges where there are covalent bonds between atoms
                         in the same molecule.
-  --linear_gap          Final linear layer comes after rather than before the global
-                        average pooling layer. This can improve performance
-                        significantly.
   --prune               (EGNN) Prune subgraphs which are not connected to the ligand
   --top1                A poorly kept secret ;)
   --graphnorm           (EGNN) add GraphNorm layers to each node MLP
