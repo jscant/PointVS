@@ -196,18 +196,6 @@ def parse_args():  #pylint:disable=too-many-statements
     parser.add_argument('--attention_activation_function', type=str,
                         default='sigmoid', help='One of sigmoid, relu, silu '
                                                 'or tanh')
-    parser.add_argument('--node_attention_final_only', action='store_true',
-                        help='Only apply attention mechanism to nodes in the '
-                             'final layer')
-    parser.add_argument('--edge_attention_final_only', action='store_true',
-                        help='Only apply attention mechanism to edges in the '
-                             'final layer')
-    parser.add_argument('--node_attention_first_only', action='store_true',
-                        help='Only apply attention mechanism to nodes in the '
-                             'first layer')
-    parser.add_argument('--edge_attention_first_only', action='store_true',
-                        help='Only apply attention mechanism to edges in the '
-                             'first layer')
     parser.add_argument('--only_save_best_models', action='store_true',
                         help='Only save models which improve upon previous '
                              'models')

@@ -225,10 +225,6 @@ class SartorrasEGNN(PNNGeometricBase):
         permutation_invariance: bool = False,
         attention_activation_fn: str = 'sigmoid',
         node_attention: bool = False,
-        node_attention_final_only: bool = False,
-        edge_attention_final_only: bool = False,
-        node_attention_first_only: bool = False,
-        edge_attention_first_only: bool = False,
         gated_residual: bool = False,
         rezero: bool = False,
         model_task: str = 'classification',
@@ -265,14 +261,6 @@ class SartorrasEGNN(PNNGeometricBase):
                 concatenated.
             attention_activation_fn: activation function for attention MLPs.
             node_attention: apply attention MLPs to node embeddings.
-            node_attention_final_only: only apply attention to nodes in final
-                layer.
-            edge_attention_final_only: only apply attention to edges in final
-                layer.
-            node_attention_first_only: only apply attention to nodes in first
-                layer.
-            edge_attention_first_only: only apply attention to nodes in first
-                layer.
             gated_residual: residual connections are gated by learnable scalar
                 value.
             rezero: apply ReZero normalisation.
@@ -294,45 +282,18 @@ class SartorrasEGNN(PNNGeometricBase):
             'classify_on_edges'
         assert not (gated_residual and rezero), \
             'gated_residual and rezero are incompatible'
-        for i in range(0, num_layers):
-            # apply node/edge attention or not?
-            if node_attention:
-                if not node_attention_first_only and not \
-                        node_attention_final_only:
-                    apply_node_attention = True
-                elif node_attention_first_only and i == 0:
-                    apply_node_attention = True
-                elif node_attention_final_only and i == num_layers - 1:
-                    apply_node_attention = True
-                else:
-                    apply_node_attention = False
-            else:
-                apply_node_attention = False
-
-            if edge_attention:
-                if not edge_attention_first_only and not \
-                        edge_attention_final_only:
-                    apply_edge_attention = True
-                elif edge_attention_first_only and i == 0:
-                    apply_edge_attention = True
-                elif edge_attention_final_only and i == num_layers - 1:
-                    apply_edge_attention = True
-                else:
-                    apply_edge_attention = False
-            else:
-                apply_edge_attention = False
-
+        for _ in range(0, num_layers):
             layers.append(E_GCL(k, k, k,
                                 edges_in_d=3,
                                 act_fn=act_fn,
                                 residual=residual,
-                                edge_attention=apply_edge_attention,
+                                edge_attention=edge_attention,
                                 normalize=normalize,
                                 graphnorm=graphnorm,
                                 tanh=tanh, update_coords=update_coords,
                                 permutation_invariance=permutation_invariance,
                                 attention_activation_fn=attention_activation_fn,
-                                node_attention=apply_node_attention,
+                                node_attention=node_attention,
                                 edge_residual=edge_residual,
                                 gated_residual=gated_residual,
                                 rezero=rezero))
