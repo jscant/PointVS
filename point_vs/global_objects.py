@@ -14,7 +14,7 @@ LOG = logging.get_logger('PointVS')
 if torch.cuda.is_available(): # Cuda (best)
     DEVICE = torch.device('cuda')
     LOG.info('Using CUDA')
-elif torch.backends.mps.is_available():
+elif hasattr(torch, 'backends') and torch.backends.mps.is_available():
     DEVICE = torch.device('mps')
     LOG.info('Using MPS')
 else: # Bog-standard CPU
