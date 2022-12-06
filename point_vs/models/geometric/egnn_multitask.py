@@ -1,4 +1,5 @@
 """Equivariant graph neural network class with two heads."""
+import torch
 from torch import nn
 from torch_geometric.nn import global_mean_pool
 
@@ -144,11 +145,17 @@ class MultitaskSatorrasEGNN(SartorrasEGNN):
 
 
     def forward(self, graph):
+        # torch.max seems to be bugged, explicitgly specify batch size to
+        # global_mean_pool (https://github.com/pytorch/pytorch/issues/90273)
+        batch_size = torch.max(graph.batch.float().long()) + 1
         feats, edges, coords, edge_attributes, batch = self.unpack_graph(  # pylint:disable=W0632
             graph)
         feats, _ = self.get_embeddings(
             feats, edges, coords, edge_attributes, batch)
-        feats = global_mean_pool(feats, batch)  # (total_nodes, k)
+        if batch_size  > 1:
+            feats = global_mean_pool(feats, batch, size=batch_size)  # (total_nodes, k)
+        else:
+            feats = torch.mean(feats, axis=0)
         if 'classification' in self.model_task:
             feats = self.feats_linear_layers_pose(feats)  # (bs, k)
         else:

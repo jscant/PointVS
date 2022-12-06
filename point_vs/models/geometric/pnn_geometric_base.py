@@ -2,7 +2,8 @@ from abc import abstractmethod
 
 import torch
 from torch import nn
-from torch_geometric.nn import global_mean_pool, global_max_pool
+
+from torch_geometric.nn import global_mean_pool
 
 from point_vs.global_objects import DEVICE
 from point_vs.models.point_neural_network_base import PointNeuralNetworkBase
@@ -82,6 +83,16 @@ class PNNGeometricBase(PointNeuralNetworkBase):
     """Base (abstract) class for all pytorch geometric point neural networks."""
 
     def forward(self, graph):
+        # torch.max seems to be bugged for integers, must specify batch size to
+        # global_mean_pool (https://github.com/pytorch/pytorch/issues/90273)
+        batch_size = torch.max(graph.batch.float().long()) + 1
+
+        def pooling_op(x):
+            """global_mean_pool bugged for size=1 on MPS."""
+            if batch_size == 1:
+                return torch.mean(x, axis=0)
+            return global_mean_pool(x, batch, size=batch_size)
+
         if self.include_strain_info:
             feats, edges, coords, edge_attributes, batch, dE, rmsd = \
                 self.unpack_graph(
@@ -89,30 +100,30 @@ class PNNGeometricBase(PointNeuralNetworkBase):
         else:
             feats, edges, coords, edge_attributes, batch = self.unpack_graph(
                 graph)
-            dE, rmsd = None, None
+            dE, _ = None, None
         feats, messages = self.get_embeddings(
             feats, edges, coords, edge_attributes, batch)
-        total_nodes, k = feats.shape
-        row, col = edges
+        total_nodes, _ = feats.shape
+        row, _ = edges
         if self.linear_gap:
             if self.feats_linear_layers is not None:
                 feats = self.feats_linear_layers(feats)
-                feats = global_mean_pool(feats, batch)
+                feats = pooling_op(feats)
             if self.edges_linear_layers is not None:
                 agg = unsorted_segment_sum(
                     messages, row, num_segments=total_nodes)
                 messages = self.edges_linear_layers(agg)
-                messages = global_mean_pool(messages, batch)
+                messages = pooling_op(messages)
         else:
             if self.feats_linear_layers is not None:
-                feats = global_mean_pool(feats, batch)  # (total_nodes, k)
+                feats = pooling_op(feats)  # (total_nodes, k)
                 if self.include_strain_info:
                     feats = torch.cat((feats, dE), dim=1)
                 feats = self.feats_linear_layers(feats)  # (bs, k)
             if self.edges_linear_layers is not None:
                 agg = unsorted_segment_sum(
                     messages, row, num_segments=total_nodes)
-                messages = global_mean_pool(agg, batch)
+                messages = pooling_op(messages)
                 messages = self.edges_linear_layers(messages)
         if self.feats_linear_layers is not None and \
                 self.edges_linear_layers is not None:

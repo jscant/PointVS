@@ -30,9 +30,8 @@ conda env create -f $INSTALLSCRIPT
 conda activate pointvs
 pip install -e .
 ```
-Note: Windows and Linux (arm64) are not supported, and Apple
-Silicon MPS support will be enabled once
-https://github.com/pytorch/pytorch/issues/77794 is resolved.
+Note: Windows and Linux (arm64) are not supported. Apple Silicon devices will
+use MPS where available, although this can harm performance on smaller models.
 
 To run tests for invariance under E(3) transformations:
 ```
