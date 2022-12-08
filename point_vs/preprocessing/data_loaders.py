@@ -393,7 +393,7 @@ class PygPointCloudDataset(PointCloudDataset):
 
 class SynthPharmDataset(PygPointCloudDataset):
 
-    def __init__(self, no_receptor=False, *args, **kwargs):
+    def __init__(self, *args, no_receptor=False, **kwargs):
         self.no_receptor = no_receptor
         super().__init__(*args, **kwargs)
 
