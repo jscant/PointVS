@@ -4,14 +4,19 @@ The E_GCL layer is modified from the code released with the original EGNN paper,
 found at https://github.com/vgsatorras/egnn.
 """
 import torch
+import torch_scatter
 from torch import nn
 from torch.nn import functional as F
 from torch_geometric.nn.norm import GraphNorm  # pylint:disable=no-name-in-module
 from torch_geometric.utils import dropout_adj
 
+from point_vs.global_objects import DEVICE
 from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase, \
     PygLinearPass, unsorted_segment_sum, unsorted_segment_mean
 from point_vs.utils import to_numpy
+
+# Softmax scatter is bugged for MPS.
+_SOFTMAX_SCATTER_DEVICE = 'cpu' if str(DEVICE) == 'mps' else DEVICE
 
 
 class E_GCL(nn.Module):
@@ -37,7 +42,8 @@ class E_GCL(nn.Module):
         node_attention: bool = False,
         attention_activation_fn: bool = 'sigmoid',
         gated_residual: bool = False,
-        rezero: bool = False
+        rezero: bool = False,
+        softmax_attention: bool = False,
     ):
         assert not (gated_residual and rezero), 'gated_residual and rezero ' \
                                                 'are incompatible'
@@ -64,8 +70,9 @@ class E_GCL(nn.Module):
             'tanh': nn.Tanh,
             'relu': nn.ReLU,
             'silu': nn.SiLU
-        }[attention_activation_fn]
+        }[attention_activation_fn] if not softmax_attention else nn.Identity
         self.attention_activation = attention_activation
+        self.softmax_attention = softmax_attention
         edge_coords_nf = 1
 
         self.edge_mlp = nn.Sequential(
@@ -131,6 +138,11 @@ class E_GCL(nn.Module):
 
         if self.edge_attention:
             att_val = self.att_mlp(m_ij)
+            if self.softmax_attention:
+                att_val = torch_scatter.composite.scatter_softmax(
+                    att_val.to(_SOFTMAX_SCATTER_DEVICE),
+                    row.to(_SOFTMAX_SCATTER_DEVICE), 0)
+                att_val = att_val.to(DEVICE)
             self.att_val = to_numpy(att_val)
             agg = unsorted_segment_sum(
                 att_val * m_ij, row, num_segments=x.size(0))
@@ -228,6 +240,7 @@ class SartorrasEGNN(PNNGeometricBase):
         model_task: str = 'classification',
         include_strain_info: bool = False,
         final_softplus: bool = False,
+        softmax_attention: bool = False,
         **kwargs
     ):
         """
@@ -272,6 +285,7 @@ class SartorrasEGNN(PNNGeometricBase):
         self.rezero = rezero
         self.model_task = model_task
         self.include_strain_info = include_strain_info
+        self.softmax_attention = softmax_attention
 
         assert not (gated_residual and rezero), \
             'gated_residual and rezero are incompatible'
@@ -289,7 +303,8 @@ class SartorrasEGNN(PNNGeometricBase):
                                 node_attention=node_attention,
                                 edge_residual=edge_residual,
                                 gated_residual=gated_residual,
-                                rezero=rezero))
+                                rezero=rezero,
+                                softmax_attention=softmax_attention))
 
         if include_strain_info:
             k += 1

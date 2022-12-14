@@ -230,4 +230,7 @@ def parse_args():  #pylint:disable=too-many-statements
                              'are pkd, pki or IC50.')
     parser.add_argument('--regression_loss', type=str, default='mse',
                         help='Either mse or huber.')
+    parser.add_argument('--softmax_attention', action='store_true',
+                        help='Attention scores go through softmax to normalise '
+                              'rather than individual sigmoids.')
     return parser.parse_args()

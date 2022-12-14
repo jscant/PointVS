@@ -217,6 +217,7 @@ if __name__ == '__main__':
         'model_task': args.model_task,
         'include_strain_info': args.include_strain_info,
         'final_softplus': args.final_softplus,
+        'softmax_attention': args.softmax_attention,
     }
 
     args_to_record.update(model_kwargs)

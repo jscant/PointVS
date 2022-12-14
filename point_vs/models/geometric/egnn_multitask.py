@@ -37,6 +37,7 @@ class MultitaskSatorrasEGNN(SartorrasEGNN):
         rezero: bool = False,
         model_task: str = 'classification',
         final_softplus: bool = False,
+        softmax_attention: bool = False,
         **kwargs
     ):
         """
@@ -88,6 +89,7 @@ class MultitaskSatorrasEGNN(SartorrasEGNN):
         self.gated_residual = gated_residual
         self.rezero = rezero
         self.model_task = model_task
+        self.softmax_attention = softmax_attention
 
         assert not (gated_residual and rezero), \
             'gated_residual and rezero are incompatible'
@@ -133,7 +135,8 @@ class MultitaskSatorrasEGNN(SartorrasEGNN):
                       node_attention=apply_node_attention,
                       edge_residual=edge_residual,
                       gated_residual=gated_residual,
-                      rezero=rezero))
+                      rezero=rezero,
+                      softmax_attention=softmax_attention))
 
         feats_linear_layers_affinity = [nn.Linear(k, dim_output)]
         feats_linear_layers_affinity.append(
