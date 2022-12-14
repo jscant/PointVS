@@ -440,7 +440,6 @@ class PointNeuralNetworkBase(nn.Module):
             f'Examples seen ({train_val}, {self.model_task_for_fnames})': 
                 epoch * len(data_loader) * data_loader.batch_size + 
                 data_loader.batch_size * self.batch,
-            
         }
         if record_type == 'train':
             wandb_update_dict.update({
@@ -452,20 +451,14 @@ class PointNeuralNetworkBase(nn.Module):
                     epoch * len(
                         data_loader) * data_loader.batch_size +
                     data_loader.batch_size * self.batch,
-                f'Learning rate (train, {self.model_task_for_fnames})': lr
+                f'Learning rate (train, {self.model_task_for_fnames})': lr,
+                f'Loss (train, {self.model_task_for_fnames})': loss
             })
-            if self.model_task == 'classification':
-                wandb_update_dict.update({
-                    'Mean active prediction (train)': self.active_mean_pred,
-                    'Mean inactive prediction (train)': self.decoy_mean_pred
-                })
-        elif self.model_task == 'classification':
-                wandb_update_dict.update({
-                    'Mean active prediction (validation)':
-                        self.active_mean_pred,
-                    'Mean decoy prediction (validation)':
-                        self.decoy_mean_pred,
-                })
+        if self.model_task == 'classification':
+            wandb_update_dict.update({
+                'Mean active prediction (train)': self.active_mean_pred,
+                'Mean inactive prediction (train)': self.decoy_mean_pred
+            })
         try:
             try:
                 wandb.log(wandb_update_dict)
