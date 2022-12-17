@@ -1,7 +1,7 @@
 # PointVS: SE(3)-equivariant point cloud networks for virtual screening
 
 Code for training and testing PoinVS models for paper (preprint at
-[doi.org/10.1101/2022.10.28.511712](doi.org/10.1101/2022.10.28.511712)).
+[doi.org/10.1101/2022.10.28.511712](https://doi.org/10.1101/2022.10.28.511712)).
 
 ## Introduction
 
