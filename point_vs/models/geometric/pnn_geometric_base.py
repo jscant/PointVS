@@ -5,27 +5,57 @@ from torch import nn
 
 from torch_geometric.nn import global_mean_pool
 
+from point_vs import logging
 from point_vs.global_objects import DEVICE
 from point_vs.models.point_neural_network_base import PointNeuralNetworkBase
 from point_vs.utils import to_numpy
 
 
-def unsorted_segment_sum(data, segment_ids, num_segments):
-    result_shape = (num_segments, data.size(1))
-    result = data.new_full(result_shape, 0)  # Init empty result tensor.
-    segment_ids = segment_ids.unsqueeze(-1).expand(-1, data.size(1))
-    result.scatter_add_(0, segment_ids, data)
-    return result
+LOG = logging.get_logger('PointVS')
 
 
-def unsorted_segment_mean(data, segment_ids, num_segments):
-    result_shape = (num_segments, data.size(1))
-    segment_ids = segment_ids.unsqueeze(-1).expand(-1, data.size(1))
-    result = data.new_full(result_shape, 0)  # Init empty result tensor.
-    count = data.new_full(result_shape, 0)
-    result.scatter_add_(0, segment_ids, data)
-    count.scatter_add_(0, segment_ids, torch.ones_like(data))
-    return result / count.clamp(min=1)
+class PNNGeometricBase(PointNeuralNetworkBase):
+    """Base (abstract) class for all pytorch geometric point neural networks."""
+
+    @abstractmethod
+    def get_embeddings(self, feats, edges, coords, edge_attributes, batch):
+        """Implement code to go from input features to final node embeddings."""
+        pass
+
+    def forward(self, graph):
+        # torch.max seems to be bugged for integers, must specify batch size to
+        # global_mean_pool (https://github.com/pytorch/pytorch/issues/90273)
+        batch_size = torch.max(graph.batch.int()).long() + 1
+
+        def pooling_op(x):
+            """global_mean_pool bugged for size=1 on MPS."""
+            if batch_size == 1:
+                return torch.mean(x, axis=0)
+            return global_mean_pool(x, batch, size=batch_size)
+
+        feats, edges, coords, edge_attributes, batch = self.unpack_graph(graph)
+        feats, _ = self.get_embeddings(
+            feats, edges, coords, edge_attributes, batch)
+        if self.feats_linear_layers is not None:
+            feats = pooling_op(feats)  # (total_nodes, k)
+            feats = self.feats_linear_layers(feats)  # (bs, k)
+        return feats
+
+    def unpack_input_data_and_predict(self, inputs):
+        y_true = inputs.y
+        try:
+            y_true = y_true.float()
+        except (AttributeError, TypeError):
+            pass
+        y_pred = self(inputs).reshape(-1, )
+        ligands = inputs.lig_fname
+        receptors = inputs.rec_fname
+        return y_pred, y_true, ligands, receptors
+
+    def unpack_graph(self, graph):
+        return (graph.x.float().to(DEVICE), graph.edge_index.to(DEVICE),
+                graph.pos.float().to(DEVICE), graph.edge_attr.to(DEVICE),
+                graph.batch.to(DEVICE))
 
 
 class PygLinearPass(nn.Module):
@@ -61,85 +91,3 @@ class PygLinearPass(nn.Module):
             return res, kwargs['coord'], kwargs['edge_attr'], kwargs.get(
                 'edge_messages', None)
         return res
-
-
-class GlobalAveragePooling(nn.Module):
-
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x, graph_sizes=None):
-        assert len(
-            x.shape) == 3, 'input to GAP should be shape (bs, max_len, k)'
-        if graph_sizes is None:
-            return torch.mean(x, dim=2)
-        output = torch.zeros(x.shape[0], x.shape[2]).to(DEVICE)
-        for i in range(x.size(0)):
-            output[i] = torch.mean(x[i, :graph_sizes[i], :], dim=0)
-        return output
-
-
-class PNNGeometricBase(PointNeuralNetworkBase):
-    """Base (abstract) class for all pytorch geometric point neural networks."""
-
-    def forward(self, graph):
-        # torch.max seems to be bugged for integers, must specify batch size to
-        # global_mean_pool (https://github.com/pytorch/pytorch/issues/90273)
-        batch_size = torch.max(graph.batch.float().long()) + 1
-
-        def pooling_op(x):
-            """global_mean_pool bugged for size=1 on MPS."""
-            if batch_size == 1:
-                return torch.mean(x, axis=0)
-            return global_mean_pool(x, batch, size=batch_size)
-
-        if self.include_strain_info:
-            feats, edges, coords, edge_attributes, batch, dE, rmsd = \
-                self.unpack_graph(
-                    graph)
-        else:
-            feats, edges, coords, edge_attributes, batch = self.unpack_graph(
-                graph)
-            dE, _ = None, None
-        feats, _ = self.get_embeddings(
-            feats, edges, coords, edge_attributes, batch)
-        if self.feats_linear_layers is not None:
-            feats = pooling_op(feats)  # (total_nodes, k)
-            if self.include_strain_info:
-                feats = torch.cat((feats, dE), dim=1)
-            feats = self.feats_linear_layers(feats)  # (bs, k)
-        return feats
-
-    def process_graph(self, graph):
-        y_true = graph.y
-        try:
-            y_true = y_true.float()
-        except (AttributeError, TypeError):
-            pass
-        y_pred = self(graph).reshape(-1, )
-        ligands = graph.lig_fname
-        receptors = graph.rec_fname
-        return y_pred, y_true, ligands, receptors
-
-    @abstractmethod
-    def get_embeddings(self, feats, edges, coords, edge_attributes, batch):
-        """Implement code to go from input features to final node embeddings."""
-        pass
-
-    def prepare_input(self, x):
-        return x.to(DEVICE)
-
-    def unpack_graph(self, graph):
-        objs = [graph.x.float().to(DEVICE), graph.edge_index.to(DEVICE),
-                graph.pos.float().to(DEVICE), graph.edge_attr.to(DEVICE),
-                graph.batch.to(DEVICE)]
-        if self.include_strain_info:
-            objs += [graph.dE.reshape(-1, 1).float().to(DEVICE),
-                     graph.rmsd.reshape(-1, 1).float().to(DEVICE)]
-        return tuple(objs)
-
-    @staticmethod
-    def init_weights(m):
-        if isinstance(m, nn.Linear):
-            torch.nn.init.xavier_uniform_(m.weight)
-            m.bias.data.fill_(0.01)

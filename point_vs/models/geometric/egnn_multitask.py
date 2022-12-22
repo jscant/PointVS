@@ -4,7 +4,7 @@ from torch import nn
 from torch_geometric.nn import global_mean_pool
 
 from point_vs.models.geometric.pnn_geometric_base import PygLinearPass
-from point_vs.models.geometric.egnn_satorras import E_GCL
+from point_vs.models.geometric.egnn_satorras import EGNNLayer
 from point_vs.models.geometric.egnn_satorras import SartorrasEGNN
 
 
@@ -122,7 +122,7 @@ class MultitaskSatorrasEGNN(SartorrasEGNN):
                 apply_edge_attention = False
 
             embedding_layers.append(
-                E_GCL(k, k, k,
+                EGNNLayer(k, k, k,
                       edges_in_d=3,
                       act_fn=act_fn,
                       residual=residual,

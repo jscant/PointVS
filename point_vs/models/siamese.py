@@ -104,7 +104,7 @@ class SiameseNeuralNetwork(PNNGeometricBase, ABC):
             x = act(linear(x))
         return x
 
-    def process_graph(self, rec_graph, lig_graph):
+    def unpack_input_data_and_predict(self, rec_graph, lig_graph):
         y_true = rec_graph.y.float()
         y_pred = self(rec_graph, lig_graph).reshape(-1, )
         ligands = lig_graph.lig_fname
@@ -130,7 +130,7 @@ class SiameseNeuralNetwork(PNNGeometricBase, ABC):
         for self.epoch in range(self.init_epoch, epochs):
             for self.batch, (rec_graph, lig_graph) in enumerate(
                     zip(rec_dl, lig_dl)):
-                y_pred, y_true, ligands, receptors = self.process_graph(
+                y_pred, y_true, ligands, receptors = self.unpack_input_data_and_predict(
                     rec_graph, lig_graph)
                 self.get_mean_preds(y_true, y_pred)
                 loss_ = self.backprop(y_true, y_pred)
@@ -170,7 +170,7 @@ class SiameseNeuralNetwork(PNNGeometricBase, ABC):
         with torch.no_grad():
             for self.batch, (rec_graph, lig_graph) in enumerate(
                     data_loader):
-                y_pred, y_true, ligands, receptors = self.process_graph(
+                y_pred, y_true, ligands, receptors = self.unpack_input_data_and_predict(
                     rec_graph, lig_graph)
 
                 y_true_np = to_numpy(y_true).reshape((-1,))

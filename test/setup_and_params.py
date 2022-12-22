@@ -66,7 +66,8 @@ MODEL_KWARGS = {
     'graphnorm': True,
     'update_coords': True,
     'node_attention': True,
-    'residual': True
+    'residual': True,
+	'softmax_attention': True,
 }
 
 N_SAMPLES = 10

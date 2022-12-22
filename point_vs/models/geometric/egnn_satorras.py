@@ -1,6 +1,6 @@
 """Equivariant graph neural network class.
 
-The E_GCL layer is modified from the code released with the original EGNN paper,
+EGNNLayer is modified from the code released with the original EGNN paper,
 found at https://github.com/vgsatorras/egnn.
 """
 import torch
@@ -11,18 +11,18 @@ from torch_geometric.nn.norm import GraphNorm  # pylint:disable=no-name-in-modul
 from torch_geometric.utils import dropout_adj
 
 from point_vs.global_objects import DEVICE
-from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase, \
-    PygLinearPass, unsorted_segment_sum, unsorted_segment_mean
+from point_vs.models.geometric.pnn_geometric_base import PNNGeometricBase
+from point_vs.models.geometric.pnn_geometric_base import PygLinearPass
 from point_vs.utils import to_numpy
+
 
 # Softmax scatter is bugged for MPS.
 _SOFTMAX_SCATTER_DEVICE = 'cpu' if str(DEVICE) == 'mps' else DEVICE
 
 
-class E_GCL(nn.Module):
+class EGNNLayer(nn.Module):
     """Modified from https://github.com/vgsatorras/egnn"""
     # pylint: disable = R, W, C
-
     def __init__(
         self,
         input_nf: int,
@@ -34,7 +34,6 @@ class E_GCL(nn.Module):
         edge_residual: bool = False,
         edge_attention: bool = False,
         normalize: bool = False,
-        coords_agg: str = 'mean',
         tanh: bool = False,
         graphnorm: bool = False,
         update_coords: bool = True,
@@ -47,7 +46,7 @@ class E_GCL(nn.Module):
     ):
         assert not (gated_residual and rezero), 'gated_residual and rezero ' \
                                                 'are incompatible'
-        super(E_GCL, self).__init__()
+        super(EGNNLayer, self).__init__()
         input_edge = input_nf if permutation_invariance else input_nf * 2
         self.gated_residual = gated_residual
         self.rezero = rezero
@@ -55,7 +54,6 @@ class E_GCL(nn.Module):
         self.edge_residual = edge_residual
         self.edge_attention = edge_attention
         self.normalize = normalize
-        self.coords_agg = coords_agg
         self.tanh = tanh
         self.epsilon = 1e-8
         self.use_coords = update_coords
@@ -172,12 +170,7 @@ class E_GCL(nn.Module):
             return coord
         row, col = edge_index
         trans = coord_diff * self.coord_mlp(edge_feat)
-        if self.coords_agg == 'sum':
-            agg = unsorted_segment_sum(trans, row, num_segments=coord.size(0))
-        elif self.coords_agg == 'mean':
-            agg = unsorted_segment_mean(trans, row, num_segments=coord.size(0))
-        else:
-            raise Exception('Wrong coords_agg parameter' % self.coords_agg)
+        agg = unsorted_segment_mean(trans, row, num_segments=coord.size(0))
         coord += agg
         self.intermediate_coords = to_numpy(coord)
         return coord
@@ -214,7 +207,7 @@ class E_GCL(nn.Module):
 
 
 class SartorrasEGNN(PNNGeometricBase):
-    """Equivariant network based on the E_GCL layer."""
+    """Equivariant network based on EGNNLayer."""
     # pylint: disable = R, W0201, W0613
     def build_net(
         self,
@@ -290,7 +283,7 @@ class SartorrasEGNN(PNNGeometricBase):
         assert not (gated_residual and rezero), \
             'gated_residual and rezero are incompatible'
         for _ in range(0, num_layers):
-            layers.append(E_GCL(k, k, k,
+            layers.append(EGNNLayer(k, k, k,
                                 edges_in_d=3,
                                 act_fn=act_fn,
                                 residual=residual,
@@ -334,3 +327,21 @@ class SartorrasEGNN(PNNGeometricBase):
                 h=feats, edge_index=edges, coord=coords,
                 edge_attr=edge_attributes, edge_messages=edge_messages)
         return feats, edge_messages
+
+
+def unsorted_segment_sum(data, segment_ids, num_segments):
+    result_shape = (num_segments, data.size(1))
+    result = data.new_full(result_shape, 0)  # Init empty result tensor.
+    segment_ids = segment_ids.unsqueeze(-1).expand(-1, data.size(1))
+    result.scatter_add_(0, segment_ids, data)
+    return result
+
+
+def unsorted_segment_mean(data, segment_ids, num_segments):
+    result_shape = (num_segments, data.size(1))
+    segment_ids = segment_ids.unsqueeze(-1).expand(-1, data.size(1))
+    result = data.new_full(result_shape, 0)  # Init empty result tensor.
+    count = data.new_full(result_shape, 0)
+    result.scatter_add_(0, segment_ids, data)
+    count.scatter_add_(0, segment_ids, torch.ones_like(data))
+    return result / count.clamp(min=1)

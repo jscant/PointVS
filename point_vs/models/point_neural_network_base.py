@@ -127,12 +127,11 @@ class PointNeuralNetworkBase(nn.Module):
         """(Abstract method) make sure inputs are in the correct format."""
 
     @abstractmethod
-    def process_graph(self, graph):
+    def unpack_input_data_and_predict(self, input_data):
         """(Abstract method) Unpack the graph into tensors."""
 
-    @abstractmethod
     def forward(self, x):
-        """(Abstract method) Forward pass for the neural network."""
+        return x.to(DEVICE)
 
     def train_model(self, data_loader, epochs=1, epoch_end_validation_set=None,
                     top1_on_end=False):
@@ -176,7 +175,7 @@ class PointNeuralNetworkBase(nn.Module):
                 progress.reset(self.epoch_progress)
                 for self.batch, graph in enumerate(data_loader):
                     progress.refresh()
-                    y_pred, y_true, _, _ = self.process_graph(graph)
+                    y_pred, y_true, _, _ = self.unpack_input_data_and_predict(graph)
                     self.get_mean_preds(y_true, y_pred)
                     loss_ = self.backprop(y_true, y_pred)
                     if self.scheduler is not None:
@@ -248,7 +247,7 @@ class PointNeuralNetworkBase(nn.Module):
                         data_loader):
 
                     self.val_iter += 1
-                    y_pred, y_true, ligands, receptors = self.process_graph(graph)
+                    y_pred, y_true, ligands, receptors = self.unpack_input_data_and_predict(graph)
 
                     if self.model_task == 'classification':
                         is_label = y_true is not None
