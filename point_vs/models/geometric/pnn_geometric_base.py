@@ -20,12 +20,11 @@ class PNNGeometricBase(PointNeuralNetworkBase):
     @abstractmethod
     def get_embeddings(self, feats, edges, coords, edge_attributes, batch):
         """Implement code to go from input features to final node embeddings."""
-        pass
 
-    def forward(self, graph):
+    def forward(self, x):
         # torch.max seems to be bugged for integers, must specify batch size to
         # global_mean_pool (https://github.com/pytorch/pytorch/issues/90273)
-        batch_size = torch.max(graph.batch.int()).long() + 1
+        batch_size = torch.max(x.batch.int()).long() + 1
 
         def pooling_op(x):
             """global_mean_pool bugged for size=1 on MPS."""
@@ -33,7 +32,7 @@ class PNNGeometricBase(PointNeuralNetworkBase):
                 return torch.mean(x, axis=0)
             return global_mean_pool(x, batch, size=batch_size)
 
-        feats, edges, coords, edge_attributes, batch = self.unpack_graph(graph)
+        feats, edges, coords, edge_attributes, batch = self.unpack_graph(x)
         feats, _ = self.get_embeddings(
             feats, edges, coords, edge_attributes, batch)
         if self.feats_linear_layers is not None:
@@ -41,15 +40,16 @@ class PNNGeometricBase(PointNeuralNetworkBase):
             feats = self.feats_linear_layers(feats)  # (bs, k)
         return feats
 
-    def unpack_input_data_and_predict(self, inputs):
-        y_true = inputs.y
+    def unpack_input_data_and_predict(self, input_data):
+        """See base class."""
+        y_true = input_data.y
         try:
             y_true = y_true.float()
         except (AttributeError, TypeError):
             pass
-        y_pred = self(inputs).reshape(-1, )
-        ligands = inputs.lig_fname
-        receptors = inputs.rec_fname
+        y_pred = self(input_data).reshape(-1, )
+        ligands = input_data.lig_fname
+        receptors = input_data.rec_fname
         return y_pred, y_true, ligands, receptors
 
     def unpack_graph(self, graph):
@@ -78,6 +78,7 @@ class PygLinearPass(nn.Module):
         self.m = module
         self.feats_appended_to_coords = feats_appended_to_coords
         self.return_coords_and_edges = return_coords_and_edges
+        self.intermediate_coords = None
 
     def forward(self, h, *args, **kwargs):
         if self.feats_appended_to_coords:

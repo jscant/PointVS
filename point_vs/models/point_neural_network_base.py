@@ -122,9 +122,9 @@ class PointNeuralNetworkBase(nn.Module):
         self.epoch_progress = None
         self.validation_progress = None
 
-    @abstractmethod
     def prepare_input(self, x):
-        """(Abstract method) make sure inputs are in the correct format."""
+        """Override this for more complex input manipulation."""
+        return x.to(DEVICE)
 
     @abstractmethod
     def unpack_input_data_and_predict(self, input_data):
