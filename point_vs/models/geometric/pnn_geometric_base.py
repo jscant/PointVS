@@ -80,7 +80,7 @@ class PygLinearPass(nn.Module):
         self.return_coords_and_edges = return_coords_and_edges
         self.intermediate_coords = None
 
-    def forward(self, h, *args, **kwargs):
+    def forward(self, h, **kwargs):
         if self.feats_appended_to_coords:
             self.intermediate_coords = to_numpy(h[:, :3])
             feats = h[:, 3:]
