@@ -12,10 +12,24 @@ from point_vs.preprocessing.pyg_single_item_dataset import get_pyg_single_graph_
 from point_vs.utils import to_numpy
 
 
-_test_dl = get_data_loader(
+_test_dl_one_item = get_data_loader(
     Path('test/resources'),
     dataset_class=PygPointCloudDataset,
     batch_size=1, compact=True, radius=4,
+    use_atomic_numbers=False, rot=False,
+    augmented_actives=0,
+    min_aug_angle=0,
+    polar_hydrogens=False, receptors=None, mode='val',
+    types_fname=Path('test/resources/test.types'),
+    fname_suffix='.parquet',
+    edge_radius=4,
+    estimate_bonds=True,
+)
+
+_test_dl_two_items = get_data_loader(
+    Path('test/resources'),
+    dataset_class=PygPointCloudDataset,
+    batch_size=2, compact=True, radius=4,
     use_atomic_numbers=False, rot=False,
     augmented_actives=0,
     min_aug_angle=0,
@@ -41,7 +55,8 @@ DATALOADER_KWARGS = {
     'prune': True
 }
 
-ORIGINAL_GRAPH = list(_test_dl)[0].to(DEVICE)
+ORIGINAL_GRAPH = next(iter(_test_dl_one_item)).to(DEVICE)
+ORIGINAL_GRAPH_TWO_ITEMS = next(iter(_test_dl_two_items)).to(DEVICE)
 
 rotated_coords = torch.from_numpy(
     uniform_random_rotation(to_numpy(ORIGINAL_GRAPH.pos)))
@@ -67,6 +82,7 @@ MODEL_KWARGS = {
     'update_coords': True,
     'node_attention': True,
     'residual': True,
+    'edge_attention': True,
 	'softmax_attention': True,
 }
 

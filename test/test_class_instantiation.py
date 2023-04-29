@@ -36,11 +36,11 @@ def test_vanilla_data_loader_instantiation():
     """Check if data_loader is instantiated."""
     with TemporaryDirectory() as tmpdir:
         test_dl = PygPointCloudDataset(Path(tmpdir), **DATALOADER_KWARGS)
-        assert len(test_dl) == 1
+        assert len(test_dl) == 2
 
 
 def test_pyg_data_loader_instantiation():
     """Check is pyg data_loader is instantiated."""
     with TemporaryDirectory() as tmpdir:
         test_dl = PointCloudDataset(Path(tmpdir), **DATALOADER_KWARGS)
-        assert len(test_dl) == 1
+        assert len(test_dl) == 2
